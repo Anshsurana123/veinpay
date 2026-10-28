@@ -70,7 +70,7 @@ export function IncomingPaymentFeed() {
                   <Activity className="h-3 w-3 text-[#E5A93C]" />
                   <span>{item.latencyMs.toFixed(2)} ms</span>
                   <Clock className="ml-1 h-3 w-3 text-[#646973]" />
-                  <span>{new Date(item.timestamp).toLocaleTimeString()}</span>
+                  <span>{item.timestamp.slice(11, 19)} UTC</span>
                 </div>
               </div>
 

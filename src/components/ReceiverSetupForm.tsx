@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Shield,
   Lock,
@@ -42,11 +42,12 @@ export function ReceiverSetupForm() {
   } = useVeilPayStore();
 
   const [copied, setCopied] = useState(false);
+  const [origin, setOrigin] = useState('https://veilpay.xyz');
 
-  const origin =
-    typeof window !== 'undefined'
-      ? window.location.origin
-      : 'https://veilpay.xyz';
+  useEffect(() => {
+    setOrigin(window.location.origin);
+  }, []);
+
   const encodedPayload = encodeLinkConfigToBase64Url(linkConfig);
   const shareableUrl = `${origin}/pay/${encodeURIComponent(linkConfig.handle || 'goa.eth')}?c=${encodedPayload}`;
 
