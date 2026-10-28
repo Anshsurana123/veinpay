@@ -38,6 +38,11 @@ export const ETHERSCAN_FREE_TIER_CHAINS = new Set<number>([
   130, // Unichain
   80094, // Berachain
   143, // Monad
+  11155111, // Ethereum Sepolia Testnet
+  84532, // Base Sepolia Testnet
+  421614, // Arbitrum Sepolia Testnet
+  11155420, // OP Sepolia Testnet
+  80002, // Polygon Amoy Testnet
 ]);
 
 interface EtherscanTxItem {

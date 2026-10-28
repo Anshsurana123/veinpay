@@ -12,7 +12,7 @@ import {
   Shuffle,
 } from 'lucide-react';
 import { useVeilPayStore } from '@/store/veilpay-store';
-import { SUPPORTED_EVM_CHAINS } from '@/lib/socket/tokens';
+import { isTestnetChain, SUPPORTED_EVM_CHAINS } from '@/lib/socket/tokens';
 import { encodeLinkConfigToBase64Url } from '@/lib/utils/link-codec';
 import { validateMultiProtocolAddress } from '@/lib/validators/address';
 import type {
@@ -186,9 +186,16 @@ export function ReceiverSetupForm() {
           </div>
 
           <div>
-            <label className="mb-1 block font-mono text-[11px] font-medium text-[#9499A3] uppercase">
-              DESTINATION CHAIN (EVM / VAULT)
-            </label>
+            <div className="mb-1 flex items-center justify-between">
+              <label className="font-mono text-[11px] font-medium text-[#9499A3] uppercase">
+                DESTINATION CHAIN (EVM / VAULT)
+              </label>
+              {isTestnetChain(linkConfig.destinationChainId) && (
+                <span className="border border-[#D99B26]/60 bg-[#2B210D] px-1.5 py-0.5 font-mono text-[9px] font-bold text-[#E5A93C]">
+                  TESTNET CHAIN
+                </span>
+              )}
+            </div>
             <select
               value={linkConfig.destinationChainId}
               disabled={linkConfig.settlementMode !== 'EVM_SOCKET'}
@@ -200,11 +207,24 @@ export function ReceiverSetupForm() {
               }
               className="w-full border border-[#262A33] bg-[#1A1D23] px-2.5 py-2 font-mono text-xs text-[#F3F1EC] focus:border-[#D97736] focus:outline-none disabled:opacity-50"
             >
-              {SUPPORTED_EVM_CHAINS.map((chain) => (
-                <option key={chain.chainId} value={chain.chainId}>
-                  {chain.name} (Chain ID: {chain.chainId})
-                </option>
-              ))}
+              <optgroup label="Mainnet Networks (SOCKET V3 Live)">
+                {SUPPORTED_EVM_CHAINS.filter((c) => !c.isTestnet).map(
+                  (chain) => (
+                    <option key={chain.chainId} value={chain.chainId}>
+                      {chain.name} (Chain ID: {chain.chainId})
+                    </option>
+                  )
+                )}
+              </optgroup>
+              <optgroup label="Testnet Networks (Sepolia / Amoy)">
+                {SUPPORTED_EVM_CHAINS.filter((c) => c.isTestnet).map(
+                  (chain) => (
+                    <option key={chain.chainId} value={chain.chainId}>
+                      [TESTNET] {chain.name} (Chain ID: {chain.chainId})
+                    </option>
+                  )
+                )}
+              </optgroup>
             </select>
           </div>
         </div>

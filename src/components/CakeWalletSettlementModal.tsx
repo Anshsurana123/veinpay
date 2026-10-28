@@ -3,6 +3,11 @@
 import React, { useEffect, useState } from 'react';
 import QRCode from 'qrcode';
 import {
+  useAccount,
+  useSendTransaction,
+  useSwitchChain,
+} from 'wagmi';
+import {
   X,
   Lock,
   ShieldCheck,
@@ -12,6 +17,7 @@ import {
   CheckCircle2,
   AlertTriangle,
   ArrowRight,
+  Wallet,
 } from 'lucide-react';
 import { useVeilPayStore } from '@/store/veilpay-store';
 import {
@@ -20,6 +26,11 @@ import {
   buildMoneroPaymentUri,
   DEFAULT_CAKE_VAULT_ADDRESSES,
 } from '@/lib/validators/address';
+import {
+  getChainDisplayName,
+  getChainExplorerUrl,
+  isTestnetChain,
+} from '@/lib/socket/tokens';
 import type { VaultSettlementMode } from '@/types/veilpay';
 
 export function CakeWalletSettlementModal() {
@@ -27,6 +38,7 @@ export function CakeWalletSettlementModal() {
     settlementModalOpen,
     setSettlementModalOpen,
     linkConfig,
+    payerChainId,
     setVaultMode,
     activeScan,
     activeQuote,
@@ -34,10 +46,20 @@ export function CakeWalletSettlementModal() {
     recordSimulatedSettlement,
   } = useVeilPayStore();
 
+  const { address: connectedWallet, isConnected, chainId: walletChainId } =
+    useAccount();
+  const { switchChainAsync } = useSwitchChain();
+  const { sendTransactionAsync, isPending: isBroadcastingTx } =
+    useSendTransaction();
+
   const [btcLegacyFormat, setBtcLegacyFormat] = useState(false);
   const [qrDataUrl, setQrDataUrl] = useState<string>('');
   const [copiedUri, setCopiedUri] = useState(false);
   const [settledConfirmed, setSettledConfirmed] = useState(false);
+  const [broadcastedTxHash, setBroadcastedTxHash] = useState<string | null>(
+    null
+  );
+  const [broadcastError, setBroadcastError] = useState<string | null>(null);
 
   const amountNum = Math.max(0.01, Number(linkConfig.amount) || 250);
   const amountBtc = (amountNum / 92000).toFixed(6);
@@ -107,8 +129,11 @@ export function CakeWalletSettlementModal() {
 
   if (!settlementModalOpen || !activeScan) return null;
 
+  const isTestnetFlow =
+    isTestnetChain(payerChainId) ||
+    isTestnetChain(linkConfig.destinationChainId);
   const isExceedingSafetyCap =
-    Number(linkConfig.amount) > crawlSettings.maxMainnetUsdCap;
+    !isTestnetFlow && Number(linkConfig.amount) > crawlSettings.maxMainnetUsdCap;
 
   const handleCopyUri = async () => {
     try {
@@ -122,13 +147,41 @@ export function CakeWalletSettlementModal() {
 
   const handleConfirmSettlement = () => {
     recordSimulatedSettlement(
-      `0x${activeScan.targetWallet.slice(2, 10)}cfe92817a001`
+      broadcastedTxHash ??
+        `0x${activeScan.targetWallet.slice(2, 10)}cfe92817a001`
     );
     setSettledConfirmed(true);
     setTimeout(() => {
       setSettledConfirmed(false);
+      setBroadcastedTxHash(null);
+      setBroadcastError(null);
       setSettlementModalOpen(false);
     }, 1800);
+  };
+
+  const handleBroadcastLiveWalletTx = async () => {
+    if (!primaryRoute?.txData?.object) return;
+    setBroadcastError(null);
+    try {
+      if (walletChainId !== payerChainId && switchChainAsync) {
+        await switchChainAsync({ chainId: payerChainId });
+      }
+      const txObj = primaryRoute.txData.object;
+      const hash = await sendTransactionAsync({
+        to: txObj.to as `0x${string}`,
+        data: txObj.data as `0x${string}`,
+        value: BigInt(txObj.value || '0'),
+        chainId: payerChainId,
+      });
+      setBroadcastedTxHash(hash);
+      recordSimulatedSettlement(hash);
+    } catch (err) {
+      setBroadcastError(
+        err instanceof Error
+          ? err.message.slice(0, 140)
+          : 'Transaction rejected or failed in wallet.'
+      );
+    }
   };
 
   const currentVaultAddr =
@@ -268,6 +321,52 @@ export function CakeWalletSettlementModal() {
               )}
             </div>
 
+            {isTestnetFlow && (
+              <div className="flex items-start justify-between gap-2.5 border border-[#1F9D68]/60 bg-[#0E291E]/50 p-3 font-mono text-xs">
+                <div>
+                  <div className="font-bold text-[#1F9D68]">
+                    TESTNET SANDBOX READY ({getChainDisplayName(payerChainId)})
+                  </div>
+                  <p className="mt-0.5 text-[11px] text-[#F3F1EC]">
+                    Mainnet USD safety caps are bypassed on Testnet. Connect a
+                    wallet via Reown AppKit to sign &amp; broadcast this
+                    transaction on {getChainDisplayName(payerChainId)}, or
+                    simulate settlement instantly below.
+                  </p>
+                </div>
+                <a
+                  href="https://faucet.circle.com/"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="shrink-0 border border-[#D97736] bg-[#261810] px-2.5 py-1 text-[10px] font-bold text-[#E5A93C] hover:bg-[#D97736] hover:text-[#0B0C0E]"
+                >
+                  USDC FAUCET ↗
+                </a>
+              </div>
+            )}
+
+            {broadcastedTxHash && (
+              <div className="flex items-center justify-between border border-[#1F9D68] bg-[#0E291E] p-3 font-mono text-xs">
+                <div className="truncate text-[#1F9D68]">
+                  ✓ ON-CHAIN TX BROADCASTED: {broadcastedTxHash.slice(0, 18)}...
+                </div>
+                <a
+                  href={`${getChainExplorerUrl(payerChainId)}/tx/${broadcastedTxHash}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex shrink-0 items-center gap-1 border border-[#1F9D68] bg-[#0B0C0E] px-2.5 py-1 text-[10px] font-bold text-[#1F9D68] hover:bg-[#1F9D68] hover:text-[#0B0C0E]"
+                >
+                  VIEW ON EXPLORER <ExternalLink className="h-3 w-3" />
+                </a>
+              </div>
+            )}
+
+            {broadcastError && (
+              <div className="border border-[#D6453A] bg-[#2D1412] p-2.5 font-mono text-[11px] text-[#D6453A]">
+                WALLET TX ERROR: {broadcastError}
+              </div>
+            )}
+
             {isExceedingSafetyCap && (
               <div className="flex items-start gap-2.5 border border-[#D99B26] bg-[#2B210D]/50 p-3 font-mono text-xs">
                 <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-[#D99B26]" />
@@ -377,30 +476,50 @@ export function CakeWalletSettlementModal() {
         )}
 
         {/* Footer Confirm Action */}
-        <div className="mt-4 flex items-center justify-between border-t border-[#262A33] pt-3">
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-[#262A33] pt-3">
           <span className="font-mono text-[11px] text-[#9499A3]">
             DESTINATION: {currentVaultAddr.slice(0, 14)}...
             {currentVaultAddr.slice(-6)}
           </span>
 
-          <button
-            type="button"
-            onClick={handleConfirmSettlement}
-            className="flex items-center gap-2 border border-[#1F9D68] bg-[#1F9D68] px-5 py-2.5 font-mono text-xs font-bold text-[#0B0C0E] transition-colors hover:bg-[#25b87b]"
-          >
-            {settledConfirmed ? (
-              <>
-                <CheckCircle2 className="h-4 w-4" />
-                SETTLEMENT LOGGED TO RECEIVER FEED!
-              </>
-            ) : (
-              <>
-                <ShieldCheck className="h-4 w-4" />
-                EXECUTE SETTLEMENT &amp; RECORD COMPLIANCE RECEIPT
-                <ArrowRight className="h-3.5 w-3.5" />
-              </>
-            )}
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            {linkConfig.settlementMode === 'EVM_SOCKET' &&
+              isConnected &&
+              connectedWallet &&
+              primaryRoute?.txData?.object &&
+              !isExceedingSafetyCap && (
+                <button
+                  type="button"
+                  disabled={isBroadcastingTx}
+                  onClick={handleBroadcastLiveWalletTx}
+                  className="flex items-center gap-1.5 border border-[#D97736] bg-[#261810] px-3.5 py-2.5 font-mono text-xs font-bold text-[#E5A93C] transition-colors hover:bg-[#D97736] hover:text-[#0B0C0E] disabled:opacity-50"
+                >
+                  <Wallet className="h-3.5 w-3.5" />
+                  {isBroadcastingTx
+                    ? 'SIGNING IN WALLET...'
+                    : `SIGN & BROADCAST ON ${getChainDisplayName(payerChainId).toUpperCase()}`}
+                </button>
+              )}
+
+            <button
+              type="button"
+              onClick={handleConfirmSettlement}
+              className="flex items-center gap-2 border border-[#1F9D68] bg-[#1F9D68] px-4 py-2.5 font-mono text-xs font-bold text-[#0B0C0E] transition-colors hover:bg-[#25b87b]"
+            >
+              {settledConfirmed ? (
+                <>
+                  <CheckCircle2 className="h-4 w-4" />
+                  SETTLEMENT LOGGED TO RECEIVER FEED!
+                </>
+              ) : (
+                <>
+                  <ShieldCheck className="h-4 w-4" />
+                  EXECUTE SETTLEMENT &amp; RECORD COMPLIANCE RECEIPT
+                  <ArrowRight className="h-3.5 w-3.5" />
+                </>
+              )}
+            </button>
+          </div>
         </div>
       </div>
     </div>

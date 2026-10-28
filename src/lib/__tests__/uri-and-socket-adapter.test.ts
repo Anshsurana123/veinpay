@@ -4,6 +4,7 @@ import {
   buildLegacySilentPaymentUri,
   buildMoneroPaymentUri,
   DEFAULT_CAKE_VAULT_ADDRESSES,
+  TESTNET_CAKE_VAULT_ADDRESSES,
   validateBip352SilentPaymentAddress,
   validateMoneroAddress,
 } from '@/lib/validators/address';
@@ -11,6 +12,7 @@ import {
   buildDeterministicFallbackQuote,
   buildSameChainDirectRoute,
 } from '@/lib/socket/client';
+import { isTestnetChain, resolveTokenMeta } from '@/lib/socket/tokens';
 
 describe('Cake Wallet BIP-352/BIP-321 & Monero URIs + SOCKET V3/V2 Adapter', () => {
   it('Validates official BIP-352 Silent Payment test vector and builds BIP-321 & legacy URIs', () => {
@@ -90,5 +92,25 @@ describe('Cake Wallet BIP-352/BIP-321 & Monero URIs + SOCKET V3/V2 Adapter', () 
     );
     expect(fallback.result.routes[0].serviceTime).toBe(3);
     expect(fallback.result.routes[0].totalGasFeesInUsd).toBe(0.003);
+  });
+
+  it('Validates BIP-352 Testnet (tsp1...) Silent Payment address and EVM Testnet chain/token registry', () => {
+    const tspValidation = validateBip352SilentPaymentAddress(
+      TESTNET_CAKE_VAULT_ADDRESSES.BTC_SILENT_PAYMENT
+    );
+    expect(tspValidation.valid).toBe(true);
+    expect(tspValidation.network).toBe('testnet');
+
+    expect(isTestnetChain(84532)).toBe(true); // Base Sepolia
+    expect(isTestnetChain(421614)).toBe(true); // Arbitrum Sepolia
+    expect(isTestnetChain(11155111)).toBe(true); // Ethereum Sepolia
+    expect(isTestnetChain(11155420)).toBe(true); // OP Sepolia
+    expect(isTestnetChain(80002)).toBe(true); // Polygon Amoy
+    expect(isTestnetChain(8453)).toBe(false); // Base Mainnet
+
+    const baseSepoliaUsdc = resolveTokenMeta(84532, 'USDC');
+    expect(baseSepoliaUsdc.address).toBe(
+      '0x036CbD53842c5426634e7929541eC2318f3dCF7e'
+    );
   });
 });

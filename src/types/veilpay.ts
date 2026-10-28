@@ -4,7 +4,17 @@ export type VaultSettlementMode = 'EVM_SOCKET' | 'BTC_SILENT_PAYMENT' | 'XMR_SUB
 
 export type HopDepth = 1 | 2 | 3 | 4 | 5;
 
-export type SupportedEvmChainId = 1 | 42161 | 8453 | 10 | 137;
+export type SupportedEvmChainId =
+  | 1
+  | 42161
+  | 8453
+  | 10
+  | 137
+  | 11155111
+  | 84532
+  | 421614
+  | 11155420
+  | 80002;
 
 export type VerdictStatus =
   | 'VERIFIED_CLEAN'
@@ -294,7 +304,11 @@ export interface NormalizedSocketRoute {
 export interface VeilPayQuoteResponse {
   success: boolean;
   statusCode: number;
-  source: 'SOCKET_V3_LIVE' | 'SAME_CHAIN_DIRECT' | 'FALLBACK_DETERMINISTIC';
+  source:
+    | 'SOCKET_V3_LIVE'
+    | 'SAME_CHAIN_DIRECT'
+    | 'TESTNET_BRIDGE_ROUTE'
+    | 'FALLBACK_DETERMINISTIC';
   fallbackReason?: string;
   executionTimeMs: number;
   result: {

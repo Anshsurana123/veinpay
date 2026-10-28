@@ -9,6 +9,8 @@ import {
   Wallet,
   Columns,
   ArrowUpRight,
+  FlaskConical,
+  Globe,
 } from 'lucide-react';
 import { useAppKit, useAppKitAccount } from '@reown/appkit/react';
 import { useVeilPayStore } from '@/store/veilpay-store';
@@ -18,6 +20,8 @@ export function TopTelemetryBar() {
   const { address, isConnected } = useAppKitAccount();
 
   const {
+    networkEnv,
+    setNetworkEnv,
     activeScan,
     lastMeasuredLatencyMs,
     totalThreatsIntercepted,
@@ -66,7 +70,7 @@ export function TopTelemetryBar() {
           </div>
 
           {/* Real-time Telemetry Strip */}
-          <div className="hidden items-center gap-2 lg:flex">
+          <div className="hidden items-center gap-2 xl:flex">
             <div className="flex items-center gap-2 border border-[#262A33] bg-[#131519] px-2.5 py-1.5 font-mono text-xs">
               <span className="h-2 w-2 rounded-full bg-[#1F9D68] animate-pulse" />
               <span className="text-[#9499A3]">ENGINE:</span>
@@ -94,8 +98,38 @@ export function TopTelemetryBar() {
           </div>
         </div>
 
-        {/* Right: View Switcher, Reown Wallet Connect & Settings */}
-        <div className="flex items-center gap-2">
+        {/* Right: Mainnet/Testnet Toggle, View Switcher, Reown Wallet Connect & Settings */}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* 1-Click Mainnet / Testnet Mode Switcher */}
+          <div className="flex items-center border border-[#262A33] bg-[#131519] p-0.5">
+            <button
+              type="button"
+              onClick={() => setNetworkEnv('MAINNET')}
+              className={`flex items-center gap-1 px-2.5 py-1 font-mono text-[11px] font-semibold transition-colors ${
+                networkEnv === 'MAINNET'
+                  ? 'bg-[#1F9D68] text-[#0B0C0E]'
+                  : 'text-[#9499A3] hover:text-[#F3F1EC]'
+              }`}
+              title="Switch to Mainnet (Base, Arbitrum, Ethereum, Optimism, Polygon + BIP-352 sp1...)"
+            >
+              <Globe className="h-3 w-3" />
+              MAINNET
+            </button>
+            <button
+              type="button"
+              onClick={() => setNetworkEnv('TESTNET')}
+              className={`flex items-center gap-1 px-2.5 py-1 font-mono text-[11px] font-semibold transition-colors ${
+                networkEnv === 'TESTNET'
+                  ? 'bg-[#E5A93C] text-[#0B0C0E]'
+                  : 'text-[#9499A3] hover:text-[#F3F1EC]'
+              }`}
+              title="Switch to Testnet (Base Sepolia, Arbitrum Sepolia, Ethereum Sepolia, OP Sepolia, Polygon Amoy + BIP-352 tsp1...)"
+            >
+              <FlaskConical className="h-3 w-3" />
+              TESTNET
+            </button>
+          </div>
+
           <div className="hidden items-center border border-[#262A33] bg-[#131519] p-0.5 md:flex">
             <button
               type="button"
@@ -107,7 +141,7 @@ export function TopTelemetryBar() {
               }`}
             >
               <Columns className="h-3 w-3" />
-              SPLIT TERMINAL
+              SPLIT
             </button>
             <button
               type="button"
@@ -118,7 +152,7 @@ export function TopTelemetryBar() {
                   : 'text-[#9499A3] hover:text-[#F3F1EC]'
               }`}
             >
-              RECEIVER CONSOLE
+              RECEIVER
             </button>
             <button
               type="button"
@@ -129,7 +163,7 @@ export function TopTelemetryBar() {
                   : 'text-[#9499A3] hover:text-[#F3F1EC]'
               }`}
             >
-              PAYER CHECKOUT
+              PAYER
             </button>
           </div>
 
@@ -156,7 +190,7 @@ export function TopTelemetryBar() {
             title="Configure Live Etherscan V2 Crawler & Mainnet Safety Cap"
           >
             <Sliders className="h-3.5 w-3.5 text-[#D97736]" />
-            <span className="hidden sm:inline">ENGINE CONFIG</span>
+            <span className="hidden sm:inline">CONFIG</span>
           </button>
         </div>
       </div>

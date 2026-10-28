@@ -17,6 +17,7 @@ import { useVeilPayStore } from '@/store/veilpay-store';
 import { WALLET_PERSONAS } from '@/lib/graph/seed-topologies';
 import {
   getChainDisplayName,
+  isTestnetChain,
   SUPPORTED_EVM_CHAINS,
 } from '@/lib/socket/tokens';
 import { TopologicalGraphCanvas } from '@/components/TopologicalGraphCanvas';
@@ -187,11 +188,20 @@ export function PayerCheckoutPanel() {
               }
               className="flex-1 border border-[#262A33] bg-[#1A1D23] px-2 py-1.5 font-mono text-xs text-[#F3F1EC] focus:border-[#D97736] focus:outline-none"
             >
-              {SUPPORTED_EVM_CHAINS.map((c) => (
-                <option key={c.chainId} value={c.chainId}>
-                  Pay from: {c.shortName}
-                </option>
-              ))}
+              <optgroup label="Mainnet Networks">
+                {SUPPORTED_EVM_CHAINS.filter((c) => !c.isTestnet).map((c) => (
+                  <option key={c.chainId} value={c.chainId}>
+                    Pay from: {c.shortName}
+                  </option>
+                ))}
+              </optgroup>
+              <optgroup label="Testnet Networks (Sepolia / Amoy)">
+                {SUPPORTED_EVM_CHAINS.filter((c) => c.isTestnet).map((c) => (
+                  <option key={c.chainId} value={c.chainId}>
+                    [TESTNET] Pay from: {c.shortName}
+                  </option>
+                ))}
+              </optgroup>
             </select>
 
             <select
@@ -210,6 +220,30 @@ export function PayerCheckoutPanel() {
             </select>
           </div>
         </div>
+
+        {/* Testnet Mode & Faucet Banner */}
+        {(isTestnetChain(payerChainId) ||
+          isTestnetChain(linkConfig.destinationChainId)) && (
+          <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2 border border-[#D99B26]/60 bg-[#2B210D]/50 px-3 py-1.5 font-mono text-[11px]">
+            <div className="flex items-center gap-2 text-[#E5A93C]">
+              <span className="h-2 w-2 rounded-full bg-[#D99B26]" />
+              <span className="font-bold">TESTNET SANDBOX ACTIVE:</span>
+              <span className="text-[#F3F1EC]">
+                {getChainDisplayName(payerChainId)} →{' '}
+                {getChainDisplayName(linkConfig.destinationChainId)} (BIP-352
+                tsp1... &amp; Sepolia/Amoy)
+              </span>
+            </div>
+            <a
+              href="https://faucet.circle.com/"
+              target="_blank"
+              rel="noreferrer"
+              className="border border-[#D97736] bg-[#261810] px-2 py-0.5 text-[10px] font-bold text-[#E5A93C] hover:bg-[#D97736] hover:text-[#0B0C0E]"
+            >
+              GET FREE TESTNET USDC (CIRCLE FAUCET) ↗
+            </a>
+          </div>
+        )}
 
         {/* Shallow Scan Advisory Banner (Case 1: when max_hops == 1) */}
         {activeScan?.shallowScanAdvisory && (

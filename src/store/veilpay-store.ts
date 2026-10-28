@@ -20,10 +20,14 @@ import {
   OUTBOUND_POISON_TEST_PRESETS,
   WALLET_PERSONAS,
 } from '@/lib/graph/seed-topologies';
-import { DEFAULT_CAKE_VAULT_ADDRESSES } from '@/lib/validators/address';
+import {
+  DEFAULT_CAKE_VAULT_ADDRESSES,
+  TESTNET_CAKE_VAULT_ADDRESSES,
+} from '@/lib/validators/address';
 import { DEFAULT_LINK_CONFIG } from '@/lib/utils/link-codec';
 import {
   EVM_TOKEN_REGISTRY,
+  isTestnetChain,
   SUPPORTED_EVM_CHAINS,
   toAtomicUnits,
 } from '@/lib/socket/tokens';
@@ -54,6 +58,7 @@ export interface FeedLogEntry {
 
 export interface VeilPayStoreState {
   // UI Navigation
+  networkEnv: 'MAINNET' | 'TESTNET';
   activeLeftTab: 'LINK_BUILDER' | 'SAFE_SEND' | 'INCOMING_FEED';
   viewLayout: 'SPLIT' | 'RECEIVER_ONLY' | 'PAYER_ONLY';
   settingsDrawerOpen: boolean;
@@ -101,6 +106,7 @@ export interface VeilPayStoreState {
   };
 
   // Actions
+  setNetworkEnv: (env: 'MAINNET' | 'TESTNET') => void;
   setActiveLeftTab: (tab: 'LINK_BUILDER' | 'SAFE_SEND' | 'INCOMING_FEED') => void;
   setViewLayout: (layout: 'SPLIT' | 'RECEIVER_ONLY' | 'PAYER_ONLY') => void;
   setSettingsDrawerOpen: (open: boolean) => void;
@@ -205,6 +211,7 @@ const INITIAL_FEED: FeedLogEntry[] = [
 ];
 
 export const useVeilPayStore = create<VeilPayStoreState>((set, get) => ({
+  networkEnv: 'MAINNET',
   activeLeftTab: 'LINK_BUILDER',
   viewLayout: 'SPLIT',
   settingsDrawerOpen: false,
@@ -248,6 +255,33 @@ export const useVeilPayStore = create<VeilPayStoreState>((set, get) => ({
     rateLimitRps: 3,
     crawlTimeoutMs: 10000,
     maxMainnetUsdCap: Number(process.env.NEXT_PUBLIC_MAX_MAINNET_USD ?? 5),
+  },
+
+  setNetworkEnv: (env) => {
+    set((state) => {
+      const nextDestChain: SupportedEvmChainId =
+        env === 'TESTNET' ? 84532 : 8453;
+      const nextPayerChain: SupportedEvmChainId =
+        env === 'TESTNET' ? 421614 : 42161;
+      const nextBtcVault =
+        env === 'TESTNET'
+          ? TESTNET_CAKE_VAULT_ADDRESSES.BTC_SILENT_PAYMENT
+          : DEFAULT_CAKE_VAULT_ADDRESSES.BTC_SILENT_PAYMENT;
+
+      return {
+        networkEnv: env,
+        payerChainId: nextPayerChain,
+        linkConfig: {
+          ...state.linkConfig,
+          destinationChainId: nextDestChain,
+          vaultAddresses: {
+            ...state.linkConfig.vaultAddresses,
+            BTC_SILENT_PAYMENT: nextBtcVault,
+          },
+        },
+      };
+    });
+    void get().runFirewallAndQuotePipeline();
   },
 
   setActiveLeftTab: (tab) => set({ activeLeftTab: tab }),
@@ -303,6 +337,7 @@ export const useVeilPayStore = create<VeilPayStoreState>((set, get) => ({
 
   setDestinationChainAndAsset: (chainId, asset) => {
     set((state) => ({
+      networkEnv: isTestnetChain(chainId) ? 'TESTNET' : 'MAINNET',
       linkConfig: {
         ...state.linkConfig,
         destinationChainId: chainId,
@@ -326,11 +361,17 @@ export const useVeilPayStore = create<VeilPayStoreState>((set, get) => ({
   },
 
   hydrateFromDecodedLink: (decoded) => {
-    set({ linkConfig: decoded });
+    set({
+      networkEnv: isTestnetChain(decoded.destinationChainId)
+        ? 'TESTNET'
+        : 'MAINNET',
+      linkConfig: decoded,
+    });
     void get().runFirewallAndQuotePipeline();
   },
 
   selectPersona: (personaId, customAddress) => {
+    const isTestnet = get().networkEnv === 'TESTNET';
     if (personaId === 'custom' && customAddress) {
       set({
         activePersonaId: 'custom',
@@ -341,10 +382,15 @@ export const useVeilPayStore = create<VeilPayStoreState>((set, get) => ({
     } else {
       const found =
         WALLET_PERSONAS.find((p) => p.id === personaId) ?? WALLET_PERSONAS[0];
+      const targetChainId: SupportedEvmChainId = isTestnet
+        ? found.defaultChainId === 1
+          ? 11155111
+          : 421614
+        : (found.defaultChainId as SupportedEvmChainId);
       set({
         activePersonaId: found.id,
         activePayerAddress: found.address,
-        payerChainId: found.defaultChainId as SupportedEvmChainId,
+        payerChainId: targetChainId,
         payerTokenSymbol: found.defaultTokenSymbol,
         selectedGraphNodeId: null,
         selectedGraphEdgeId: null,
@@ -356,7 +402,11 @@ export const useVeilPayStore = create<VeilPayStoreState>((set, get) => ({
   setCustomAddressInput: (input) => set({ customAddressInput: input }),
 
   setPayerChainAndToken: (chainId, tokenSymbol) => {
-    set({ payerChainId: chainId, payerTokenSymbol: tokenSymbol });
+    set({
+      networkEnv: isTestnetChain(chainId) ? 'TESTNET' : 'MAINNET',
+      payerChainId: chainId,
+      payerTokenSymbol: tokenSymbol,
+    });
     void get().runFirewallAndQuotePipeline();
   },
 
