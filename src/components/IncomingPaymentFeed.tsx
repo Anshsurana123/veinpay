@@ -6,7 +6,6 @@ import {
   ShieldAlert,
   Clock,
   Hash,
-  ArrowUpRight,
   Activity,
 } from 'lucide-react';
 import { useVeilPayStore } from '@/store/veilpay-store';
@@ -60,7 +59,7 @@ export function IncomingPaymentFeed() {
                     {item.verdict}
                   </span>
                   <span className="font-mono text-xs font-bold tabular-nums text-[#F3F1EC]">
-                    ${item.amountUsd} USD
+                    ${item.amount} USD ({item.asset})
                   </span>
                   <span className="font-mono text-[11px] text-[#9499A3]">
                     via {item.sourceChainName}
@@ -80,7 +79,7 @@ export function IncomingPaymentFeed() {
                   <span className="text-[#9499A3]">PAYER:</span>
                   <button
                     type="button"
-                    onClick={() => selectPersona('CUSTOM', item.payerAddress)}
+                    onClick={() => selectPersona('custom', item.payerAddress)}
                     className="text-[#E5A93C] underline-offset-2 hover:underline"
                     title="Re-run firewall scan on this wallet"
                   >

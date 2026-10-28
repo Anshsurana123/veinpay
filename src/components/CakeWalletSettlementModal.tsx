@@ -6,7 +6,6 @@ import {
   X,
   Lock,
   ShieldCheck,
-  QrCode,
   Copy,
   Check,
   ExternalLink,
@@ -16,10 +15,10 @@ import {
 } from 'lucide-react';
 import { useVeilPayStore } from '@/store/veilpay-store';
 import {
-  buildBitcoinSilentPaymentUri,
-  buildMoneroUri,
-  MERCHANT_BTC_SILENT_ADDRESS,
-  MERCHANT_XMR_SUBADDRESS,
+  buildBip321SilentPaymentUri,
+  buildLegacySilentPaymentUri,
+  buildMoneroPaymentUri,
+  DEFAULT_CAKE_VAULT_ADDRESSES,
 } from '@/lib/validators/address';
 import type { VaultSettlementMode } from '@/types/veilpay';
 
@@ -40,42 +39,51 @@ export function CakeWalletSettlementModal() {
   const [copiedUri, setCopiedUri] = useState(false);
   const [settledConfirmed, setSettledConfirmed] = useState(false);
 
-  const amountNum = Math.max(0.01, Number(linkConfig.amountUsd) || 250);
-  // Reference conversion rates for BTC / XMR URI generation
-  const amountBtc = (amountNum / 92500).toFixed(6);
-  const amountXmr = (amountNum / 215).toFixed(4);
+  const amountNum = Math.max(0.01, Number(linkConfig.amount) || 250);
+  const amountBtc = (amountNum / 92000).toFixed(6);
+  const amountXmr = (amountNum / 175).toFixed(4);
 
-  const btcUris = buildBitcoinSilentPaymentUri({
-    spAddress:
-      linkConfig.vaultMode === 'BTC_SILENT_PAYMENT'
-        ? linkConfig.receiverVaultAddress
-        : MERCHANT_BTC_SILENT_ADDRESS,
+  const spAddress =
+    linkConfig.vaultAddresses.BTC_SILENT_PAYMENT ||
+    DEFAULT_CAKE_VAULT_ADDRESSES.BTC_SILENT_PAYMENT;
+  const xmrSubaddress =
+    linkConfig.vaultAddresses.XMR_SUBADDRESS ||
+    DEFAULT_CAKE_VAULT_ADDRESSES.XMR_SUBADDRESS;
+
+  const bip321Uri = buildBip321SilentPaymentUri({
+    spAddress,
     amountBtc,
     label: `VeilPay:${linkConfig.handle}`,
-    message: `VeilPay Verified Clean Settlement ($${linkConfig.amountUsd})`,
+    message: `VeilPay Verified Clean Settlement ($${linkConfig.amount})`,
   });
 
-  const xmrUri = buildMoneroUri({
-    subaddress:
-      linkConfig.vaultMode === 'XMR_SUBADDRESS'
-        ? linkConfig.receiverVaultAddress
-        : MERCHANT_XMR_SUBADDRESS,
+  const legacyBtcUri = buildLegacySilentPaymentUri({
+    spAddress,
+    amountBtc,
+    label: `VeilPay:${linkConfig.handle}`,
+  });
+
+  const xmrUri = buildMoneroPaymentUri({
+    subaddress: xmrSubaddress,
     amountXmr,
     recipientName: `VeilPay:${linkConfig.handle}`,
-    description: `VeilPay Verified Clean Settlement ($${linkConfig.amountUsd})`,
+    description: `VeilPay Verified Clean Settlement ($${linkConfig.amount})`,
   });
 
+  const primaryRoute = activeQuote?.result.routes[0];
+
   const activeUri =
-    linkConfig.vaultMode === 'BTC_SILENT_PAYMENT'
+    linkConfig.settlementMode === 'BTC_SILENT_PAYMENT'
       ? btcLegacyFormat
-        ? btcUris.legacyUri
-        : btcUris.bip321StandardUri
-      : linkConfig.vaultMode === 'XMR_SUBADDRESS'
+        ? legacyBtcUri
+        : bip321Uri
+      : linkConfig.settlementMode === 'XMR_SUBADDRESS'
         ? xmrUri
-        : activeQuote?.routes[0]?.txData?.to ?? linkConfig.receiverVaultAddress;
+        : primaryRoute?.txData?.object?.to ??
+          linkConfig.vaultAddresses.EVM_SOCKET;
 
   useEffect(() => {
-    if (!settlementModalOpen || activeScan?.blocked) return;
+    if (!settlementModalOpen || !activeScan?.socketUnlocked) return;
     let mounted = true;
     QRCode.toDataURL(activeUri, {
       width: 220,
@@ -95,12 +103,12 @@ export function CakeWalletSettlementModal() {
     return () => {
       mounted = false;
     };
-  }, [settlementModalOpen, activeUri, activeScan?.blocked]);
+  }, [settlementModalOpen, activeUri, activeScan?.socketUnlocked]);
 
   if (!settlementModalOpen || !activeScan) return null;
 
   const isExceedingSafetyCap =
-    Number(linkConfig.amountUsd) > crawlSettings.mainnetSafetyCapUsd;
+    Number(linkConfig.amount) > crawlSettings.maxMainnetUsdCap;
 
   const handleCopyUri = async () => {
     try {
@@ -114,7 +122,7 @@ export function CakeWalletSettlementModal() {
 
   const handleConfirmSettlement = () => {
     recordSimulatedSettlement(
-      `0x${activeScan.payerAddress.slice(2, 10)}cfe92817a001`
+      `0x${activeScan.targetWallet.slice(2, 10)}cfe92817a001`
     );
     setSettledConfirmed(true);
     setTimeout(() => {
@@ -123,7 +131,8 @@ export function CakeWalletSettlementModal() {
     }, 1800);
   };
 
-  const primaryRoute = activeQuote?.routes[0];
+  const currentVaultAddr =
+    linkConfig.vaultAddresses[linkConfig.settlementMode];
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-xs">
@@ -176,7 +185,7 @@ export function CakeWalletSettlementModal() {
               type="button"
               onClick={() => setVaultMode(tab.mode)}
               className={`border py-2 font-mono text-[11px] font-bold transition-colors ${
-                linkConfig.vaultMode === tab.mode
+                linkConfig.settlementMode === tab.mode
                   ? 'border-[#D97736] bg-[#261810] text-[#E5A93C]'
                   : 'border-[#262A33] bg-[#1A1D23] text-[#9499A3] hover:text-[#F3F1EC]'
               }`}
@@ -187,16 +196,15 @@ export function CakeWalletSettlementModal() {
         </div>
 
         {/* Body by Vault Mode */}
-        {linkConfig.vaultMode === 'EVM_SOCKET' ? (
+        {linkConfig.settlementMode === 'EVM_SOCKET' ? (
           <div className="mt-4 space-y-3">
-            {/* SOCKET Route & Calldata Inspector */}
             <div className="border border-[#262A33] bg-[#0B0C0E] p-3.5 font-mono">
               <div className="mb-2 flex items-center justify-between border-b border-[#262A33] pb-2">
                 <span className="text-xs font-bold text-[#E5A93C]">
                   SOCKET SWAP V3 CALLDATA &amp; BRIDGE ROUTE
                 </span>
                 <span className="border border-[#1F9D68]/50 bg-[#0E291E] px-2 py-0.5 text-[10px] text-[#1F9D68]">
-                  {activeQuote?.sourceStatus ?? 'LIVE_SOCKET_V3'}
+                  {activeQuote?.source ?? 'SOCKET_V3_LIVE'}
                 </span>
               </div>
 
@@ -206,23 +214,22 @@ export function CakeWalletSettlementModal() {
                     <div>
                       <div className="text-[10px] text-[#9499A3]">PROTOCOL</div>
                       <div className="font-bold text-[#F3F1EC]">
-                        {primaryRoute.bridgeProtocolName}
+                        {primaryRoute.bridgeDisplayName}
                       </div>
                     </div>
                     <div>
                       <div className="text-[10px] text-[#9499A3]">
                         ESTIMATED OUTPUT
                       </div>
-                      <div className="font-bold text-[#1F9D68] tabular-nums">
-                        {primaryRoute.estimatedOutputFormatted}{' '}
-                        {linkConfig.settlementAsset}
+                      <div className="font-bold tabular-nums text-[#1F9D68]">
+                        {primaryRoute.outputAmountFormatted} {linkConfig.asset}
                       </div>
                     </div>
                     <div>
                       <div className="text-[10px] text-[#9499A3]">
                         SETTLEMENT TIME
                       </div>
-                      <div className="font-bold text-[#F3F1EC] tabular-nums">
+                      <div className="font-bold tabular-nums text-[#F3F1EC]">
                         ~{primaryRoute.serviceTime}s
                       </div>
                     </div>
@@ -230,24 +237,24 @@ export function CakeWalletSettlementModal() {
                       <div className="text-[10px] text-[#9499A3]">
                         GAS FEE ESTIMATE
                       </div>
-                      <div className="font-bold text-[#E5A93C] tabular-nums">
+                      <div className="font-bold tabular-nums text-[#E5A93C]">
                         ${primaryRoute.totalGasFeesInUsd.toFixed(4)}
                       </div>
                     </div>
                   </div>
 
-                  {primaryRoute.txData && (
+                  {primaryRoute.txData?.object && (
                     <div className="mt-2 border-t border-[#262A33] pt-2 text-[11px]">
                       <div className="text-[#9499A3]">
                         ROUTER CONTRACT (TO):{' '}
                         <span className="text-[#F3F1EC]">
-                          {primaryRoute.txData.to}
+                          {primaryRoute.txData.object.to}
                         </span>
                       </div>
                       <div className="mt-1 truncate text-[#9499A3]">
                         TX CALLDATA:{' '}
                         <span className="text-[#E5A93C]">
-                          {primaryRoute.txData.data.slice(0, 74)}...
+                          {primaryRoute.txData.object.data.slice(0, 74)}...
                         </span>
                       </div>
                     </div>
@@ -256,22 +263,21 @@ export function CakeWalletSettlementModal() {
               ) : (
                 <div className="text-xs text-[#9499A3]">
                   Direct EVM transfer to Cake Wallet vault:{' '}
-                  {linkConfig.receiverVaultAddress}
+                  {linkConfig.vaultAddresses.EVM_SOCKET}
                 </div>
               )}
             </div>
 
-            {/* Mainnet Safety Cap Guard */}
             {isExceedingSafetyCap && (
               <div className="flex items-start gap-2.5 border border-[#D99B26] bg-[#2B210D]/50 p-3 font-mono text-xs">
                 <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-[#D99B26]" />
                 <div>
                   <div className="font-bold text-[#E5A93C]">
                     MAINNET SAFETY CAP ACTIVE ($
-                    {crawlSettings.mainnetSafetyCapUsd.toFixed(2)} USD CAP)
+                    {crawlSettings.maxMainnetUsdCap.toFixed(2)} USD CAP)
                   </div>
                   <p className="mt-0.5 text-[11px] text-[#F3F1EC]">
-                    Requested amount (${linkConfig.amountUsd} USD) exceeds the
+                    Requested amount (${linkConfig.amount} USD) exceeds the
                     configured live mainnet safety cap. Clicking confirm below
                     executes a zero-risk deterministic settlement simulation and
                     appends the signed AIGI receipt to the receiver feed.
@@ -281,7 +287,6 @@ export function CakeWalletSettlementModal() {
             )}
           </div>
         ) : (
-          /* Mode 2 (BTC Silent Payment sp1...) & Mode 3 (Monero 888... Subaddress) QR + URI */
           <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-5">
             <div className="flex flex-col items-center justify-center border border-[#262A33] bg-[#0B0C0E] p-3 sm:col-span-2">
               {qrDataUrl ? (
@@ -304,11 +309,11 @@ export function CakeWalletSettlementModal() {
               <div className="space-y-2.5">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold text-[#E5A93C]">
-                    {linkConfig.vaultMode === 'BTC_SILENT_PAYMENT'
+                    {linkConfig.settlementMode === 'BTC_SILENT_PAYMENT'
                       ? 'BITCOIN SILENT PAYMENT (BIP-352 / BIP-321)'
                       : 'MONERO SUBADDRESS (888... RINGCT)'}
                   </span>
-                  {linkConfig.vaultMode === 'BTC_SILENT_PAYMENT' && (
+                  {linkConfig.settlementMode === 'BTC_SILENT_PAYMENT' && (
                     <button
                       type="button"
                       onClick={() => setBtcLegacyFormat(!btcLegacyFormat)}
@@ -324,10 +329,10 @@ export function CakeWalletSettlementModal() {
                 <div className="text-xs text-[#9499A3]">
                   AMOUNT:{' '}
                   <span className="font-bold text-[#1F9D68]">
-                    {linkConfig.vaultMode === 'BTC_SILENT_PAYMENT'
+                    {linkConfig.settlementMode === 'BTC_SILENT_PAYMENT'
                       ? `${amountBtc} BTC`
                       : `${amountXmr} XMR`}{' '}
-                    (${linkConfig.amountUsd} USD)
+                    (${linkConfig.amount} USD)
                   </span>
                 </div>
 
@@ -374,8 +379,8 @@ export function CakeWalletSettlementModal() {
         {/* Footer Confirm Action */}
         <div className="mt-4 flex items-center justify-between border-t border-[#262A33] pt-3">
           <span className="font-mono text-[11px] text-[#9499A3]">
-            DESTINATION: {linkConfig.receiverVaultAddress.slice(0, 14)}...
-            {linkConfig.receiverVaultAddress.slice(-6)}
+            DESTINATION: {currentVaultAddr.slice(0, 14)}...
+            {currentVaultAddr.slice(-6)}
           </span>
 
           <button

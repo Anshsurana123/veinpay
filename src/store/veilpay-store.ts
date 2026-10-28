@@ -3,31 +3,54 @@
 import { create } from 'zustand';
 import type {
   AigiForensicReceipt,
-  CrawlSafetySettings,
+  ExecutionEngineSource,
   FirewallPolicyConfig,
   FirewallScanResult,
   HopDepth,
+  LiveCrawlSettings,
   OutboundPoisonScanResult,
-  PaymentFeedItem,
-  PersonaType,
-  SettlementAssetSymbol,
+  PaymentAssetSymbol,
+  SupportedEvmChainId,
   VaultSettlementMode,
   VeilPayLinkConfig,
-  VeilPayQuoteResult,
+  VeilPayQuoteResponse,
+  VerdictStatus,
 } from '@/types/veilpay';
 import {
-  CANONICAL_PERSONAS,
-  MERCHANT_EVM_VAULT,
+  OUTBOUND_POISON_TEST_PRESETS,
+  WALLET_PERSONAS,
 } from '@/lib/graph/seed-topologies';
+import { DEFAULT_CAKE_VAULT_ADDRESSES } from '@/lib/validators/address';
+import { DEFAULT_LINK_CONFIG } from '@/lib/utils/link-codec';
 import {
-  MERCHANT_BTC_SILENT_ADDRESS,
-  MERCHANT_XMR_SUBADDRESS,
-} from '@/lib/validators/address';
-import {
-  EVM_CHAIN_TOKENS,
+  EVM_TOKEN_REGISTRY,
   SUPPORTED_EVM_CHAINS,
-  usdToTokenRawUnits,
+  toAtomicUnits,
 } from '@/lib/socket/tokens';
+
+export type ActivePersonaId =
+  | 'persona-1'
+  | 'persona-2'
+  | 'persona-3'
+  | 'persona-4'
+  | 'custom';
+
+export interface FeedLogEntry {
+  id: string;
+  timestamp: string;
+  payerAddress: string;
+  payerLabel: string;
+  amount: string;
+  asset: PaymentAssetSymbol;
+  sourceChainName: string;
+  status: 'INTERCEPTED' | 'SETTLED';
+  verdict: VerdictStatus;
+  hopDistance: number | null;
+  bridgeUsed?: string;
+  latencyMs: number;
+  executionSource: ExecutionEngineSource;
+  sha256Hash: string;
+}
 
 export interface VeilPayStoreState {
   // UI Navigation
@@ -41,16 +64,16 @@ export interface VeilPayStoreState {
   linkConfig: VeilPayLinkConfig;
 
   // Payer Checkout Simulator State
-  activePersonaId: PersonaType;
+  activePersonaId: ActivePersonaId;
   activePayerAddress: string;
   customAddressInput: string;
-  payerChainId: number;
+  payerChainId: SupportedEvmChainId;
   payerTokenSymbol: 'USDC' | 'USDT' | 'ETH';
 
   // Firewall Scan, AIGI Receipt & SOCKET Quote
   activeScan: FirewallScanResult | null;
   activeReceipt: AigiForensicReceipt | null;
-  activeQuote: VeilPayQuoteResult | null;
+  activeQuote: VeilPayQuoteResponse | null;
   isScanning: boolean;
   isLoadingQuote: boolean;
   isGeneratingAiNarrative: boolean;
@@ -69,10 +92,13 @@ export interface VeilPayStoreState {
   isScanningOutbound: boolean;
 
   // Telemetry & Payment Feed
-  paymentFeed: PaymentFeedItem[];
+  paymentFeed: FeedLogEntry[];
   totalThreatsIntercepted: number;
   lastMeasuredLatencyMs: number;
-  crawlSettings: CrawlSafetySettings;
+  crawlSettings: LiveCrawlSettings & {
+    liveEtherscanCrawlEnabled: boolean;
+    preferLiveTigerGraphRestpp: boolean;
+  };
 
   // Actions
   setActiveLeftTab: (tab: 'LINK_BUILDER' | 'SAFE_SEND' | 'INCOMING_FEED') => void;
@@ -87,18 +113,19 @@ export interface VeilPayStoreState {
   // Link Config Updaters
   updateLinkConfig: (partial: Partial<VeilPayLinkConfig>) => void;
   setVaultMode: (mode: VaultSettlementMode) => void;
+  setVaultAddress: (mode: VaultSettlementMode, address: string) => void;
   setDestinationChainAndAsset: (
-    chainId: number,
-    asset: SettlementAssetSymbol
+    chainId: SupportedEvmChainId,
+    asset: PaymentAssetSymbol
   ) => void;
   updateFirewallPolicy: (partial: Partial<FirewallPolicyConfig>) => void;
   hydrateFromDecodedLink: (decoded: VeilPayLinkConfig) => void;
 
   // Payer Actions
-  selectPersona: (personaId: PersonaType, customAddress?: string) => void;
+  selectPersona: (personaId: ActivePersonaId, customAddress?: string) => void;
   setCustomAddressInput: (input: string) => void;
   setPayerChainAndToken: (
-    chainId: number,
+    chainId: SupportedEvmChainId,
     tokenSymbol: 'USDC' | 'USDT' | 'ETH'
   ) => void;
   runFirewallAndQuotePipeline: () => Promise<void>;
@@ -108,51 +135,70 @@ export interface VeilPayStoreState {
   // Module E Outbound Guard Actions
   setOutboundCandidateInput: (input: string) => void;
   setOutboundExpectedMode: (mode: VaultSettlementMode) => void;
-  runOutboundPoisonScan: (overrideCandidate?: string, overrideMode?: VaultSettlementMode) => Promise<void>;
+  runOutboundPoisonScan: (
+    overrideCandidate?: string,
+    overrideMode?: VaultSettlementMode
+  ) => Promise<void>;
   swapToVerifiedContactAddress: () => Promise<void>;
 
   // Crawl & Safety Settings
-  updateCrawlSettings: (partial: Partial<CrawlSafetySettings>) => void;
+  updateCrawlSettings: (
+    partial: Partial<
+      LiveCrawlSettings & {
+        liveEtherscanCrawlEnabled: boolean;
+        preferLiveTigerGraphRestpp: boolean;
+      }
+    >
+  ) => void;
 }
 
-const INITIAL_PAYMENT_FEED: PaymentFeedItem[] = [
+const INITIAL_FEED: FeedLogEntry[] = [
   {
     id: 'feed-01',
     timestamp: '2026-10-28T13:02:14.000Z',
-    payerAddress: '0x99B1D84E7c5A2310f8629aBCdEf0123456789FC2',
-    amountUsd: '250.00',
+    payerAddress: WALLET_PERSONAS[1].address,
+    payerLabel: WALLET_PERSONAS[1].shortTitle,
+    amount: '250.00',
+    asset: 'USDC',
     sourceChainName: 'Arbitrum',
     status: 'INTERCEPTED',
     verdict: 'INTERCEPTED_TAINT',
     hopDistance: 2,
-    latencyMs: 3.42,
+    latencyMs: 2.94,
+    executionSource: 'IN_MEMORY_GSQL_ENGINE',
     sha256Hash:
       '9f4a8d2c7e1b60395f82c1d4a70e3b98126c5d4f8a90b1e23c4d5f6a7b8c9d0e',
   },
   {
     id: 'feed-02',
     timestamp: '2026-10-28T12:58:40.000Z',
-    payerAddress: '0x88F01b2C3D4e5F6a7B8c9d0E1f2A3B4C5D6e7441',
-    amountUsd: '250.00',
-    sourceChainName: 'Optimism',
+    payerAddress: WALLET_PERSONAS[2].address,
+    payerLabel: WALLET_PERSONAS[2].shortTitle,
+    amount: '250.00',
+    asset: 'USDC',
+    sourceChainName: 'Arbitrum',
     status: 'INTERCEPTED',
     verdict: 'INTERCEPTED_SYBIL',
     hopDistance: 2,
-    latencyMs: 4.18,
+    latencyMs: 3.62,
+    executionSource: 'IN_MEMORY_GSQL_ENGINE',
     sha256Hash:
       '3c1e7b9a4d20f8561e3c9b7a4d2f80156e3c9b7a4d20f8561e3c9b7a4d2f8015',
   },
   {
     id: 'feed-03',
     timestamp: '2026-10-28T12:49:11.000Z',
-    payerAddress: '0x4F92a81d6002E93b1a74C88912E3B4f01928374A',
-    amountUsd: '250.00',
+    payerAddress: WALLET_PERSONAS[0].address,
+    payerLabel: WALLET_PERSONAS[0].shortTitle,
+    amount: '250.00',
+    asset: 'USDC',
     sourceChainName: 'Arbitrum',
     status: 'SETTLED',
     verdict: 'VERIFIED_CLEAN',
     hopDistance: null,
     bridgeUsed: 'Across Protocol (SOCKET V3)',
-    latencyMs: 2.15,
+    latencyMs: 1.85,
+    executionSource: 'IN_MEMORY_GSQL_ENGINE',
     sha256Hash:
       '7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b',
   },
@@ -165,29 +211,10 @@ export const useVeilPayStore = create<VeilPayStoreState>((set, get) => ({
   settlementModalOpen: false,
   showRawGsqlInspector: false,
 
-  linkConfig: {
-    handle: 'goa.eth',
-    amountUsd: '250.00',
-    settlementAsset: 'USDC',
-    destinationChainId: 8453,
-    destinationChainName: 'Base',
-    destinationTokenAddress: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
-    vaultMode: 'EVM_SOCKET',
-    receiverVaultAddress: MERCHANT_EVM_VAULT,
-    firewallPolicy: {
-      masterEnabled: true,
-      maxHops: 3,
-      cleanLinkEnabled: true,
-      unbundleEnabled: true,
-      poisonGraphEnabled: true,
-      sybilBlockThreshold: 10,
-      socketAutoBridgeEnabled: true,
-    },
-    createdAt: 1730120000000,
-  },
+  linkConfig: DEFAULT_LINK_CONFIG,
 
-  activePersonaId: 'CLEAN_PAYER',
-  activePayerAddress: CANONICAL_PERSONAS[0].address,
+  activePersonaId: 'persona-1',
+  activePayerAddress: WALLET_PERSONAS[0].address,
   customAddressInput: '',
   payerChainId: 42161,
   payerTokenSymbol: 'USDC',
@@ -205,20 +232,22 @@ export const useVeilPayStore = create<VeilPayStoreState>((set, get) => ({
   selectedGraphEdgeId: null,
   sybilClusterExpanded: false,
 
-  outboundCandidateInput: '0x71C894a1B2c3D4e5F6A7b8C9d0e1F2a30000489B',
+  outboundCandidateInput: OUTBOUND_POISON_TEST_PRESETS[0].address,
   outboundExpectedMode: 'EVM_SOCKET',
   outboundScanResult: null,
   isScanningOutbound: false,
 
-  paymentFeed: INITIAL_PAYMENT_FEED,
+  paymentFeed: INITIAL_FEED,
   totalThreatsIntercepted: 14,
-  lastMeasuredLatencyMs: 2.84,
+  lastMeasuredLatencyMs: 2.41,
   crawlSettings: {
     liveEtherscanCrawlEnabled: true,
+    preferLiveTigerGraphRestpp: true,
     topFundersPerVertex: 5,
     maxApiCallsPerScan: 40,
-    mainnetSafetyCapUsd: Number(process.env.NEXT_PUBLIC_MAX_MAINNET_USD ?? 5),
-    preferLiveTigerGraphRestpp: true,
+    rateLimitRps: 3,
+    crawlTimeoutMs: 10000,
+    maxMainnetUsdCap: Number(process.env.NEXT_PUBLIC_MAX_MAINNET_USD ?? 5),
   },
 
   setActiveLeftTab: (tab) => set({ activeLeftTab: tab }),
@@ -241,45 +270,43 @@ export const useVeilPayStore = create<VeilPayStoreState>((set, get) => ({
 
   setVaultMode: (mode) => {
     set((state) => {
-      let receiverVaultAddress = MERCHANT_EVM_VAULT;
-      let settlementAsset: SettlementAssetSymbol = state.linkConfig.settlementAsset;
+      let asset = state.linkConfig.asset;
       if (mode === 'BTC_SILENT_PAYMENT') {
-        receiverVaultAddress = MERCHANT_BTC_SILENT_ADDRESS;
-        settlementAsset = 'BTC';
+        asset = 'BTC';
       } else if (mode === 'XMR_SUBADDRESS') {
-        receiverVaultAddress = MERCHANT_XMR_SUBADDRESS;
-        settlementAsset = 'XMR';
-      } else if (settlementAsset === 'BTC' || settlementAsset === 'XMR') {
-        settlementAsset = 'USDC';
+        asset = 'XMR';
+      } else if (asset === 'BTC' || asset === 'XMR') {
+        asset = 'USDC';
       }
 
       return {
         linkConfig: {
           ...state.linkConfig,
-          vaultMode: mode,
-          receiverVaultAddress,
-          settlementAsset,
+          settlementMode: mode,
+          asset,
         },
       };
     });
   },
 
-  setDestinationChainAndAsset: (chainId, asset) => {
-    const chainObj =
-      SUPPORTED_EVM_CHAINS.find((c) => c.chainId === chainId) ??
-      SUPPORTED_EVM_CHAINS[0];
-    const tokenKey = asset === 'ETH' || asset === 'USDT' ? asset : 'USDC';
-    const tokenMeta =
-      EVM_CHAIN_TOKENS[chainObj.chainId]?.[tokenKey] ??
-      EVM_CHAIN_TOKENS[8453].USDC;
-
+  setVaultAddress: (mode, address) => {
     set((state) => ({
       linkConfig: {
         ...state.linkConfig,
-        destinationChainId: chainObj.chainId,
-        destinationChainName: chainObj.name,
-        settlementAsset: asset,
-        destinationTokenAddress: tokenMeta.address,
+        vaultAddresses: {
+          ...state.linkConfig.vaultAddresses,
+          [mode]: address,
+        },
+      },
+    }));
+  },
+
+  setDestinationChainAndAsset: (chainId, asset) => {
+    set((state) => ({
+      linkConfig: {
+        ...state.linkConfig,
+        destinationChainId: chainId,
+        asset,
       },
     }));
     void get().runFirewallAndQuotePipeline();
@@ -289,8 +316,8 @@ export const useVeilPayStore = create<VeilPayStoreState>((set, get) => ({
     set((state) => ({
       linkConfig: {
         ...state.linkConfig,
-        firewallPolicy: {
-          ...state.linkConfig.firewallPolicy,
+        policy: {
+          ...state.linkConfig.policy,
           ...partial,
         },
       },
@@ -304,20 +331,21 @@ export const useVeilPayStore = create<VeilPayStoreState>((set, get) => ({
   },
 
   selectPersona: (personaId, customAddress) => {
-    if (personaId === 'CUSTOM' && customAddress) {
+    if (personaId === 'custom' && customAddress) {
       set({
-        activePersonaId: 'CUSTOM',
+        activePersonaId: 'custom',
         activePayerAddress: customAddress.trim(),
         selectedGraphNodeId: null,
         selectedGraphEdgeId: null,
       });
     } else {
       const found =
-        CANONICAL_PERSONAS.find((p) => p.id === personaId) ??
-        CANONICAL_PERSONAS[0];
+        WALLET_PERSONAS.find((p) => p.id === personaId) ?? WALLET_PERSONAS[0];
       set({
         activePersonaId: found.id,
         activePayerAddress: found.address,
+        payerChainId: found.defaultChainId as SupportedEvmChainId,
+        payerTokenSymbol: found.defaultTokenSymbol,
         selectedGraphNodeId: null,
         selectedGraphEdgeId: null,
       });
@@ -334,7 +362,7 @@ export const useVeilPayStore = create<VeilPayStoreState>((set, get) => ({
 
   runFirewallAndQuotePipeline: async () => {
     const state = get();
-    const payerAddress = state.activePayerAddress;
+    const targetWallet = state.activePayerAddress;
     const { linkConfig, payerChainId, payerTokenSymbol, crawlSettings } = state;
 
     set({
@@ -345,18 +373,17 @@ export const useVeilPayStore = create<VeilPayStoreState>((set, get) => ({
     });
 
     try {
-      // Step 2: Execute TigerGraph 3-in-1 Pre-Flight Firewall Scan + AIGI Receipt
       set({ scannerStep: 2 });
       const scanRes = await fetch('/api/firewall/scan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          payerAddress,
-          receiverAddress: linkConfig.receiverVaultAddress,
+          targetWallet,
+          merchantWallet: linkConfig.vaultAddresses.EVM_SOCKET,
           chainId: payerChainId,
-          policy: linkConfig.firewallPolicy,
+          policy: linkConfig.policy,
           crawlSettings,
-          includeGeminiNarrative: false,
+          includeGemini: false,
         }),
       });
 
@@ -374,58 +401,50 @@ export const useVeilPayStore = create<VeilPayStoreState>((set, get) => ({
         isScanning: false,
         scannerStep: 3,
         lastMeasuredLatencyMs: scan.executionTimeMs,
-        totalThreatsIntercepted: scan.blocked
+        totalThreatsIntercepted: !scan.socketUnlocked
           ? prev.totalThreatsIntercepted + 1
           : prev.totalThreatsIntercepted,
       }));
 
-      // Step 3: ONLY IF firewall did NOT block AND socketAutoBridgeEnabled is true, fetch SOCKET V3 Quote
-      if (!scan.blocked && linkConfig.firewallPolicy.socketAutoBridgeEnabled) {
+      // Step 3: ONLY IF firewall unlocked SOCKET AND socketAutoBridgeEnabled is true, fetch SOCKET V3 Quote
+      if (scan.socketUnlocked && linkConfig.policy.socketAutoBridgeEnabled) {
         set({ isLoadingQuote: true });
 
-        const fromTokenMeta =
-          EVM_CHAIN_TOKENS[payerChainId]?.[payerTokenSymbol] ??
-          EVM_CHAIN_TOKENS[42161].USDC;
+        const fromTokenCfg = EVM_TOKEN_REGISTRY[payerTokenSymbol];
         const destAssetKey =
-          linkConfig.settlementAsset === 'ETH' ||
-          linkConfig.settlementAsset === 'USDT'
-            ? linkConfig.settlementAsset
+          linkConfig.asset === 'ETH' || linkConfig.asset === 'USDT'
+            ? linkConfig.asset
             : 'USDC';
-        const toTokenMeta =
-          EVM_CHAIN_TOKENS[linkConfig.destinationChainId]?.[destAssetKey] ??
-          EVM_CHAIN_TOKENS[8453].USDC;
+        const toTokenCfg = EVM_TOKEN_REGISTRY[destAssetKey];
 
-        const fromAmountRaw = usdToTokenRawUnits(
-          linkConfig.amountUsd,
-          fromTokenMeta
+        const usdVal = Math.max(1, Number(linkConfig.amount) || 250);
+        const tokenHumanAmount = usdVal / fromTokenCfg.approxUsdPrice;
+        const inputAmountAtomic = toAtomicUnits(
+          tokenHumanAmount,
+          fromTokenCfg.decimals
         );
 
         const qs = new URLSearchParams({
-          fromChainId: String(payerChainId),
-          fromTokenAddress: fromTokenMeta.address,
-          toChainId: String(linkConfig.destinationChainId),
-          toTokenAddress: toTokenMeta.address,
-          fromAmount: fromAmountRaw,
-          userAddress: payerAddress,
-          recipient:
-            linkConfig.vaultMode === 'EVM_SOCKET'
-              ? linkConfig.receiverVaultAddress
-              : MERCHANT_EVM_VAULT,
-          maxHops: String(linkConfig.firewallPolicy.maxHops),
-          masterEnabled: String(linkConfig.firewallPolicy.masterEnabled),
-          cleanLinkEnabled: String(linkConfig.firewallPolicy.cleanLinkEnabled),
-          unbundleEnabled: String(linkConfig.firewallPolicy.unbundleEnabled),
-          poisonGraphEnabled: String(
-            linkConfig.firewallPolicy.poisonGraphEnabled
-          ),
-          sybilBlockThreshold: String(
-            linkConfig.firewallPolicy.sybilBlockThreshold
-          ),
+          originChainId: String(payerChainId),
+          destinationChainId: String(linkConfig.destinationChainId),
+          inputToken: fromTokenCfg.addressesByChain[payerChainId],
+          outputToken:
+            toTokenCfg.addressesByChain[linkConfig.destinationChainId],
+          inputAmount: inputAmountAtomic,
+          userAddress: targetWallet,
+          receiverAddress:
+            linkConfig.vaultAddresses.EVM_SOCKET ||
+            DEFAULT_CAKE_VAULT_ADDRESSES.EVM_SOCKET,
+          firewallEnabled: String(linkConfig.policy.firewallEnabled),
+          maxHops: String(linkConfig.policy.maxHops),
+          cleanLinkEnabled: String(linkConfig.policy.cleanLinkEnabled),
+          unbundleEnabled: String(linkConfig.policy.unbundleEnabled),
+          sybilBlockThreshold: String(linkConfig.policy.sybilBlockThreshold),
         });
 
         const quoteRes = await fetch(`/api/socket/quote?${qs.toString()}`);
         if (quoteRes.ok) {
-          const quoteData: VeilPayQuoteResult = await quoteRes.json();
+          const quoteData: VeilPayQuoteResponse = await quoteRes.json();
           set({ activeQuote: quoteData, isLoadingQuote: false });
         } else {
           set({ isLoadingQuote: false });
@@ -452,8 +471,8 @@ export const useVeilPayStore = create<VeilPayStoreState>((set, get) => ({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          scanResult: activeScan,
-          includeGeminiNarrative: true,
+          scan: activeScan,
+          includeGemini: true,
         }),
       });
       if (res.ok) {
@@ -475,22 +494,32 @@ export const useVeilPayStore = create<VeilPayStoreState>((set, get) => ({
     if (!state.activeScan || !state.activeReceipt) return;
     const sourceChain =
       SUPPORTED_EVM_CHAINS.find((c) => c.chainId === state.payerChainId)
-        ?.name ?? 'Arbitrum';
+        ?.shortName ?? 'Arbitrum';
     const bridgeName =
-      state.activeQuote?.routes[0]?.usedBridgeNames[0] ?? 'Cake Wallet Vault';
+      state.activeQuote?.result.routes[0]?.bridgeDisplayName ??
+      'Cake Wallet Vault';
 
-    const newItem: PaymentFeedItem = {
+    const newItem: FeedLogEntry = {
       id: `feed-${Date.now()}`,
       timestamp: new Date().toISOString(),
       payerAddress: state.activePayerAddress,
-      amountUsd: state.linkConfig.amountUsd,
+      payerLabel:
+        WALLET_PERSONAS.find(
+          (p) =>
+            p.address.toLowerCase() === state.activePayerAddress.toLowerCase()
+        )?.shortTitle ?? 'Custom Wallet',
+      amount: state.linkConfig.amount,
+      asset: state.linkConfig.asset,
       sourceChainName: sourceChain,
-      status: state.activeScan.blocked ? 'INTERCEPTED' : 'SETTLED',
+      status: state.activeScan.socketUnlocked ? 'SETTLED' : 'INTERCEPTED',
       verdict: state.activeScan.verdict,
-      hopDistance: state.activeScan.hopDistance,
-      bridgeUsed: txHash ? `${bridgeName} (${txHash.slice(0, 10)}...)` : bridgeName,
+      hopDistance: state.activeScan.minTaintHop,
+      bridgeUsed: txHash
+        ? `${bridgeName} (${txHash.slice(0, 10)}...)`
+        : bridgeName,
       latencyMs: state.activeScan.executionTimeMs,
-      sha256Hash: state.activeReceipt.sha256CommitmentHash,
+      executionSource: state.activeScan.executionSource,
+      sha256Hash: state.activeReceipt.cryptographicAuditHash,
     };
 
     set((prev) => ({
@@ -528,7 +557,8 @@ export const useVeilPayStore = create<VeilPayStoreState>((set, get) => ({
           expectedMode,
         }),
       });
-      const data: OutboundPoisonScanResult = await res.json();
+      const json = await res.json();
+      const data: OutboundPoisonScanResult = json.result ?? json;
       set({ outboundScanResult: data, isScanningOutbound: false });
     } catch {
       set({ isScanningOutbound: false });

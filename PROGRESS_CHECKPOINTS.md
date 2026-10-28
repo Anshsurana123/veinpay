@@ -1,6 +1,6 @@
 # VeilPay — Live Execution Checkpoints & Handoff Log (`PROGRESS_CHECKPOINTS.md`)
 
-> **FOR ANY CONTINUING AGENT:** Read this file and run `git status` + `git log -n 5 --oneline` first. Every completed phase below is committed to git and verified before moving to the next phase.
+> **FOR ANY CONTINUING AGENT:** Read this file and run `git status` + `git log -n 5 --oneline` first. Every completed phase below is committed to git and verified.
 
 ---
 
@@ -16,31 +16,22 @@
 | **CP-5** | Phase 3: AIGI Forensic Engine (SHA-256 + Gemini Narration), SOCKET Swap V3 Adapter & All 4 API Routes | ✅ COMPLETED | `c144905` |
 | **CP-6** | Phase 4A: Vitest Unit & Edge-Case Verification Suite (All 5 Test Files — 14/14 Pass) | ✅ COMPLETED | `c144905` |
 | **CP-7** | Phase 4B: Reown AppKit SSR Context, Shared Zustand Store & Core UI Modules (TopBar, Module A, Module E, Settings, Feed) | ✅ COMPLETED | `cfc88ad` |
-| **CP-8** | Phase 4C: Module B (Payer Checkout), Module C (Interactive 2D SVG Graph Canvas + Raw GSQL/RESTPP Inspector), Module D (AIGI Receipt) & Cake Wallet Modal | ✅ COMPLETED | `TopologicalGraphCanvas.tsx`, `AigiForensicReceiptCard.tsx`, `CakeWalletSettlementModal.tsx`, `PayerCheckoutPanel.tsx` |
-| **CP-9** | Phase 4D: Unified `/` Command Center Page, Stateless `/pay/[handle]` Route, `README.md` & `vercel.json` | 🔄 IN PROGRESS | End-to-end application wiring |
-| **CP-10** | Phase 5: Mandatory Verification Loop (Zero-Purple Audit, `tsc --noEmit`, `vitest`, `npm run build`, Live API Smoke Tests) | ⏳ PENDING | Final sign-off |
+| **CP-8** | Phase 4C: Module B (Payer Checkout), Module C (Interactive 2D SVG Graph Canvas + Raw GSQL/RESTPP Inspector), Module D (AIGI Receipt) & Cake Wallet Modal | ✅ COMPLETED | `a72c07d` |
+| **CP-9** | Phase 4D: Unified `/` Command Center Page, Stateless `/pay/[handle]` Route, `README.md` & `vercel.json` | ✅ COMPLETED | `5a00d11` |
+| **CP-10** | Phase 5: Mandatory Verification Loop (Zero-Purple Audit, `tsc --noEmit`, `vitest`, `npm run build`, Live API Smoke Tests) | ✅ COMPLETED | All 5 verification gates passed (`0` purple matches, `0` TS errors, `14/14` Vitest pass, `next build` pass, live `http://localhost:3000` smoke tests pass) |
 
 ---
 
-## Detailed Checkpoint Log
-
-### [CP-0] Architecture, Specs, `.env.local`, Reown Skill & Docs — ✅ COMPLETED
-- Created `AGENTS.md`, `CLAUDE.md`, `IMPLEMENTATION_PLAN.md`, `docs/*`, `.env.local`, `.env.example`, `.gitignore`.
-
-### [CP-1, CP-2, CP-3] Scaffold, GSQL Artifact, Validators & Core Graph Engine — ✅ COMPLETED
-- Installed all 382 npm packages (`next@16.4.3`, `@reown/appkit@1.8.24`, `wagmi@3.7.9`, `viem@2.57.13`, `vitest@5.0.5`, `@google/genai@2.31.0`, `qrcode`, `zustand`, `zod`).
-- Created `/tigergraph/veilpay_firewall.gsql`, `src/lib/validators/address.ts`, `src/lib/graph/seed-topologies.ts`, `src/lib/graph/engine.ts`, and `src/lib/graph/poison-guard.ts`.
-
-### [CP-4, CP-5, CP-6] Live Crawlers, AIGI Verdict Engine, SOCKET V3 Client, API Routes & Vitest Suite — ✅ COMPLETED
-- Created `src/lib/graph/tigergraph-client.ts`, `src/lib/graph/live-crawler.ts`, `src/lib/aigi/verdict.ts`, `src/lib/socket/tokens.ts`, `src/lib/socket/client.ts`.
-- Created `/api/firewall/scan`, `/api/firewall/poison`, `/api/aigi/verdict`, `/api/socket/quote`.
-- Passed all 5 Vitest test suites (`14/14` tests passing).
-
-### [CP-7] Reown AppKit SSR Context, Shared Zustand Store & Receiver UI Modules — ✅ COMPLETED
-- Created `src/config/wagmi.ts`, `src/context/web3-provider.tsx`, `src/store/veilpay-store.ts`, `TopTelemetryBar.tsx`, `ReceiverSetupForm.tsx`, `SafeSendOutboundGuard.tsx`, `IncomingPaymentFeed.tsx`, and `SettingsDrawer.tsx`.
-
-### [CP-8] Module B (Payer Checkout), Module C (Interactive 2D SVG Graph Canvas), Module D (AIGI Receipt) & Cake Wallet Modal — ✅ COMPLETED
-- Created `TopologicalGraphCanvas.tsx` (Module C: Interactive 2D SVG topological subgraph, expandable 24-wallet Sybil cluster, cyclic loop indicator, vertex/edge click inspector, and Raw TigerGraph RESTPP JSON & GSQL drawer).
-- Created `AigiForensicReceiptCard.tsx` (Module D: Verdict banner, telemetry strip, hop-by-hop evidence chain, optional Gemini 2.5 Flash executive summary button, SHA-256 commitment hash, and 1-click `.json` export).
-- Created `CakeWalletSettlementModal.tsx` (Real QR code generator via `qrcode` for BIP-321 `bitcoin:?sp=sp1...`, legacy `bitcoin:sp1...` toggle, and `monero:888...` RingCT URI, plus SOCKET V3 calldata inspector and Mainnet Safety Cap guard).
-- Created `PayerCheckoutPanel.tsx` (Module B: 4-Persona simulator bar, custom Etherscan V2 address crawl input, source chain/token selector, and hard-locked vs unlocked SOCKET V3 quote & Cake Wallet settlement gate).
+## Final Verification Summary (`CP-10`)
+1. **Zero-Purple Audit:** `0` matches across all files in `src/`.
+2. **TypeScript Strict Check (`npx tsc --noEmit`):** Exited with code `0` (`0` errors).
+3. **Vitest Algorithmic Unit & Edge-Case Suite (`npm run test -- --run`):** `5/5` test files (`14/14` tests) passed.
+4. **Next.js 16 Production Build (`npm run build`):** Exited with code `0`; compiled all static & dynamic routes cleanly.
+5. **Live HTTP Smoke Tests (`http://localhost:3000`):**
+   - `/api/firewall/scan?targetWallet=0x99B1...Dead&maxHops=1` → `VERIFIED_CLEAN` (with shallow-scan advisory)
+   - `/api/firewall/scan?targetWallet=0x99B1...Dead&maxHops=3` → `INTERCEPTED_TAINT`
+   - `/api/firewall/scan?targetWallet=0x33C0...40b0&maxHops=4` → `INTERCEPTED_TAINT`
+   - `POST /api/firewall/poison` (`0x71C894a1...489B`) → `INTERCEPTED_POISONING` (`dustOutDegree: 4210`, `forgedMiddleChars: 32`)
+   - `/api/aigi/verdict` → `66`-char (`0x` + 64 hex) SHA-256 commitment hash
+   - `/api/socket/quote` → `SOCKET_V3_LIVE` (`249.481374 USDC` via Across Protocol)
+   - `GET /` → `200 OK`

@@ -7,10 +7,8 @@ import {
   Activity,
   Sliders,
   Wallet,
-  Terminal,
   Columns,
   ArrowUpRight,
-  Cpu,
 } from 'lucide-react';
 import { useAppKit, useAppKitAccount } from '@reown/appkit/react';
 import { useVeilPayStore } from '@/store/veilpay-store';
@@ -30,10 +28,9 @@ export function TopTelemetryBar() {
     linkConfig,
   } = useVeilPayStore();
 
-  // Automatically sync connected Reown wallet into Payer simulator when connected
   useEffect(() => {
     if (isConnected && address) {
-      selectPersona('CUSTOM', address);
+      selectPersona('custom', address);
     }
   }, [isConnected, address, selectPersona]);
 
@@ -83,7 +80,7 @@ export function TopTelemetryBar() {
                 {lastMeasuredLatencyMs.toFixed(2)} ms
               </span>
               <span className="text-[#646973]">
-                ({linkConfig.firewallPolicy.maxHops}-HOP)
+                ({linkConfig.policy.maxHops}-HOP)
               </span>
             </div>
 
@@ -99,7 +96,6 @@ export function TopTelemetryBar() {
 
         {/* Right: View Switcher, Reown Wallet Connect & Settings */}
         <div className="flex items-center gap-2">
-          {/* Layout Mode Selector */}
           <div className="hidden items-center border border-[#262A33] bg-[#131519] p-0.5 md:flex">
             <button
               type="button"
@@ -137,7 +133,6 @@ export function TopTelemetryBar() {
             </button>
           </div>
 
-          {/* Reown AppKit Wallet Trigger */}
           <button
             type="button"
             onClick={() => open()}
@@ -154,7 +149,6 @@ export function TopTelemetryBar() {
             <ArrowUpRight className="h-3 w-3 text-[#9499A3]" />
           </button>
 
-          {/* Crawl & Safety Settings Button */}
           <button
             type="button"
             onClick={() => setSettingsDrawerOpen(true)}

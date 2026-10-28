@@ -2,7 +2,6 @@
 
 import React, { useState } from 'react';
 import {
-  FileCheck2,
   ShieldAlert,
   ShieldCheck,
   AlertTriangle,
@@ -28,13 +27,13 @@ export function AigiForensicReceiptCard() {
     return null;
   }
 
+  const verdict = activeReceipt.verdictStatus;
   const isBlocked =
-    activeReceipt.verdict === 'INTERCEPTED_TAINT' ||
-    activeReceipt.verdict === 'INTERCEPTED_SYBIL' ||
-    activeReceipt.verdict === 'INTERCEPTED_POISONING';
+    verdict === 'INTERCEPTED_TAINT' ||
+    verdict === 'INTERCEPTED_SYBIL' ||
+    verdict === 'INTERCEPTED_POISONING';
   const isWarning =
-    activeReceipt.verdict === 'WARNING_SYBIL' ||
-    activeReceipt.verdict === 'ADVISORY_BYPASSED';
+    verdict === 'WARNING_SYBIL' || verdict === 'ADVISORY_BYPASSED';
 
   const handleDownloadJson = () => {
     const blob = new Blob([JSON.stringify(activeReceipt, null, 2)], {
@@ -43,7 +42,7 @@ export function AigiForensicReceiptCard() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `veilpay-aigi-receipt-${activeReceipt.sha256CommitmentHash.slice(0, 12)}.json`;
+    a.download = `veilpay-aigi-receipt-${activeReceipt.cryptographicAuditHash.slice(0, 12)}.json`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -70,7 +69,6 @@ export function AigiForensicReceiptCard() {
             : 'border-[#1F9D68] bg-[#0E291E]/30'
       }`}
     >
-      {/* Top Header */}
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#262A33] pb-3">
         <div className="flex items-center gap-2.5">
           {isBlocked ? (
@@ -94,14 +92,12 @@ export function AigiForensicReceiptCard() {
                       : 'border-[#1F9D68] bg-[#0E291E] text-[#1F9D68]'
                 }`}
               >
-                {activeReceipt.verdict}
+                {activeReceipt.verdictStatus}
               </span>
             </div>
             <p className="mt-0.5 font-mono text-[11px] text-[#9499A3]">
-              RECEIPT ID: {activeReceipt.receiptId} · RISK SCORE:{' '}
-              <span className="font-bold text-[#F3F1EC] tabular-nums">
-                {activeReceipt.riskScore}/100
-              </span>
+              RECEIPT ID: {activeReceipt.receiptId} ·{' '}
+              <span className="text-[#F3F1EC]">{activeReceipt.badgeTitle}</span>
             </p>
           </div>
         </div>
@@ -137,7 +133,7 @@ export function AigiForensicReceiptCard() {
       </div>
 
       {/* Telemetry Metrics Strip */}
-      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4 font-mono">
+      <div className="mt-3 grid grid-cols-2 gap-2 font-mono sm:grid-cols-4">
         <div className="border border-[#262A33] bg-[#0B0C0E] p-2">
           <div className="text-[10px] text-[#9499A3]">NODES SCANNED</div>
           <div className="mt-0.5 text-xs font-bold tabular-nums text-[#F3F1EC]">
@@ -160,7 +156,7 @@ export function AigiForensicReceiptCard() {
         <div className="border border-[#262A33] bg-[#0B0C0E] p-2">
           <div className="text-[10px] text-[#9499A3]">EXECUTION LATENCY</div>
           <div className="mt-0.5 text-xs font-bold tabular-nums text-[#1F9D68]">
-            {activeReceipt.telemetry.executionLatencyMs.toFixed(2)} ms
+            {activeReceipt.telemetry.executionTimeMs.toFixed(2)} ms
           </div>
         </div>
       </div>
@@ -168,7 +164,7 @@ export function AigiForensicReceiptCard() {
       {/* Deterministic Hop-by-Hop Evidence Narrative */}
       <div className="mt-3 border border-[#262A33] bg-[#0B0C0E] p-3">
         <div className="mb-1.5 flex items-center justify-between">
-          <span className="font-mono text-[10px] font-semibold tracking-wider text-[#E5A93C] uppercase">
+          <span className="font-mono text-[10px] font-semibold tracking-wider uppercase text-[#E5A93C]">
             DETERMINISTIC HOP-BY-HOP EVIDENCE CHAIN (ZERO-HALLUCINATION)
           </span>
           <button
@@ -190,11 +186,11 @@ export function AigiForensicReceiptCard() {
           {activeReceipt.deterministicNarrative}
         </p>
 
-        {/* Optional Gemini Structured Executive Summary */}
         {activeReceipt.geminiExecutiveSummary && (
           <div className="mt-2.5 border-t border-[#262A33] pt-2.5">
             <div className="mb-1 font-mono text-[10px] font-semibold text-[#D97736]">
-              GEMINI 2.5 FLASH EXECUTIVE COMPLIANCE SUMMARY:
+              GEMINI EXECUTIVE COMPLIANCE SUMMARY (
+              {activeReceipt.geminiModelUsed ?? 'gemini-2.5-flash'}):
             </div>
             <p className="text-xs leading-relaxed text-[#9499A3]">
               {activeReceipt.geminiExecutiveSummary}
@@ -202,7 +198,6 @@ export function AigiForensicReceiptCard() {
           </div>
         )}
 
-        {/* Evidence Hop Table */}
         {activeReceipt.evidenceChain.length > 0 && (
           <div className="mt-2.5 space-y-1.5 border-t border-[#262A33] pt-2.5">
             {activeReceipt.evidenceChain.map((item, idx) => (
@@ -238,8 +233,8 @@ export function AigiForensicReceiptCard() {
           <Hash className="h-3.5 w-3.5 text-[#D97736]" />
           <span>SHA-256 COMMITMENT HASH:</span>
         </div>
-        <span className="break-all font-semibold text-[#E5A93C] tabular-nums">
-          {activeReceipt.sha256CommitmentHash}
+        <span className="break-all font-semibold tabular-nums text-[#E5A93C]">
+          {activeReceipt.cryptographicAuditHash}
         </span>
       </div>
     </div>

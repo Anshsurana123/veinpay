@@ -5,19 +5,11 @@ import {
   ShieldAlert,
   ShieldCheck,
   Search,
-  RefreshCw,
   AlertTriangle,
-  CheckCircle2,
-  Flame,
   ArrowRightLeft,
 } from 'lucide-react';
 import { useVeilPayStore } from '@/store/veilpay-store';
-import {
-  FRESH_LEGITIMATE_RECIPIENT_ADDRESS,
-  POISON_ATTACKER_CLONE_ADDRESS,
-  TRUSTED_CONTACT_GOA_CONTRIBUTOR,
-} from '@/lib/graph/seed-topologies';
-import { MERCHANT_BTC_SILENT_ADDRESS } from '@/lib/validators/address';
+import { OUTBOUND_POISON_TEST_PRESETS } from '@/lib/graph/seed-topologies';
 import type { VaultSettlementMode } from '@/types/veilpay';
 
 export function SafeSendOutboundGuard() {
@@ -42,7 +34,6 @@ export function SafeSendOutboundGuard() {
 
   return (
     <div className="space-y-4">
-      {/* Header & 1-Click Edge-Case Test Bar */}
       <div className="border border-[#262A33] bg-[#131519] p-4">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2 border-b border-[#262A33] pb-2.5">
           <div>
@@ -65,61 +56,44 @@ export function SafeSendOutboundGuard() {
             1-CLICK EDGE-CASE SIMULATOR PRESETS:
           </div>
           <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
-            <button
-              type="button"
-              onClick={() =>
-                void runOutboundPoisonScan(
-                  POISON_ATTACKER_CLONE_ADDRESS,
-                  'EVM_SOCKET'
-                )
-              }
-              className="flex items-center justify-between border border-[#D6453A]/50 bg-[#2D1412]/60 px-2.5 py-2 text-left font-mono text-[11px] text-[#F3F1EC] transition-colors hover:border-[#D6453A]"
-            >
-              <span>Sub-Case 4A: Poisoned Vanity Clone</span>
-              <span className="text-[10px] text-[#D6453A]">0x71C894...489B</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() =>
-                void runOutboundPoisonScan(
-                  TRUSTED_CONTACT_GOA_CONTRIBUTOR,
-                  'EVM_SOCKET'
-                )
-              }
-              className="flex items-center justify-between border border-[#1F9D68]/50 bg-[#0E291E]/60 px-2.5 py-2 text-left font-mono text-[11px] text-[#F3F1EC] transition-colors hover:border-[#1F9D68]"
-            >
-              <span>Verified Contact: Goa Core Dev</span>
-              <span className="text-[10px] text-[#1F9D68]">0x71C8f3...489B</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() =>
-                void runOutboundPoisonScan(
-                  FRESH_LEGITIMATE_RECIPIENT_ADDRESS,
-                  'EVM_SOCKET'
-                )
-              }
-              className="flex items-center justify-between border border-[#262A33] bg-[#1A1D23] px-2.5 py-2 text-left font-mono text-[11px] text-[#F3F1EC] transition-colors hover:border-[#363B47]"
-            >
-              <span>Sub-Case 4B: Fresh Unrelated Wallet</span>
-              <span className="text-[10px] text-[#9499A3]">0x22A9c0...771C</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() =>
-                void runOutboundPoisonScan(
-                  MERCHANT_BTC_SILENT_ADDRESS,
-                  'EVM_SOCKET'
-                )
-              }
-              className="flex items-center justify-between border border-[#D99B26]/50 bg-[#2B210D]/60 px-2.5 py-2 text-left font-mono text-[11px] text-[#F3F1EC] transition-colors hover:border-[#D99B26]"
-            >
-              <span>Sub-Case 4C: Wrong-Network Paste</span>
-              <span className="text-[10px] text-[#D99B26]">sp1qqg... in EVM</span>
-            </button>
+            {OUTBOUND_POISON_TEST_PRESETS.map((preset) => {
+              const isDanger = preset.id === 'poison-clone';
+              const isSafe = preset.id === 'trusted-contact';
+              const isMismatch = preset.id === 'wrong-network-sp1';
+              return (
+                <button
+                  key={preset.id}
+                  type="button"
+                  onClick={() =>
+                    void runOutboundPoisonScan(preset.address, 'EVM_SOCKET')
+                  }
+                  className={`flex items-center justify-between border px-2.5 py-2 text-left font-mono text-[11px] text-[#F3F1EC] transition-colors ${
+                    isDanger
+                      ? 'border-[#D6453A]/50 bg-[#2D1412]/60 hover:border-[#D6453A]'
+                      : isSafe
+                        ? 'border-[#1F9D68]/50 bg-[#0E291E]/60 hover:border-[#1F9D68]'
+                        : isMismatch
+                          ? 'border-[#D99B26]/50 bg-[#2B210D]/60 hover:border-[#D99B26]'
+                          : 'border-[#262A33] bg-[#1A1D23] hover:border-[#363B47]'
+                  }`}
+                >
+                  <span className="truncate pr-2">{preset.label}</span>
+                  <span
+                    className={`shrink-0 text-[9px] ${
+                      isDanger
+                        ? 'text-[#D6453A]'
+                        : isSafe
+                          ? 'text-[#1F9D68]'
+                          : isMismatch
+                            ? 'text-[#D99B26]'
+                            : 'text-[#9499A3]'
+                    }`}
+                  >
+                    {preset.badge}
+                  </span>
+                </button>
+              );
+            })}
           </div>
         </div>
 
@@ -162,7 +136,6 @@ export function SafeSendOutboundGuard() {
         </div>
       </div>
 
-      {/* Outbound Scan Verdict Card */}
       {outboundScanResult && (
         <div
           className={`border p-4 ${
@@ -173,7 +146,6 @@ export function SafeSendOutboundGuard() {
                 : 'border-[#1F9D68] bg-[#0E291E]/40'
           }`}
         >
-          {/* Verdict Banner */}
           <div className="flex flex-wrap items-start justify-between gap-2 border-b border-[#262A33] pb-3">
             <div className="flex items-center gap-2.5">
               {verdict === 'INTERCEPTED_POISONING' ? (
@@ -205,7 +177,6 @@ export function SafeSendOutboundGuard() {
             </span>
           </div>
 
-          {/* 42-Character Visual Diff Grid (when comparing two EVM addresses) */}
           {outboundScanResult.charDiffGrid.length > 0 &&
             outboundScanResult.matchedTrustedContact && (
               <div className="mt-4 border border-[#262A33] bg-[#0B0C0E] p-3">
@@ -228,7 +199,6 @@ export function SafeSendOutboundGuard() {
                   </div>
                 </div>
 
-                {/* Candidate Row */}
                 <div className="mb-2">
                   <div className="mb-1 flex items-center justify-between font-mono text-[10px] text-[#9499A3]">
                     <span>PASTED CANDIDATE ADDRESS:</span>
@@ -262,11 +232,11 @@ export function SafeSendOutboundGuard() {
                   </div>
                 </div>
 
-                {/* Trusted Contact Row */}
                 <div>
                   <div className="mb-1 flex items-center justify-between font-mono text-[10px] text-[#9499A3]">
                     <span>
-                      TRUSTED CONTACT ({outboundScanResult.matchedTrustedContact.label}):
+                      TRUSTED CONTACT (
+                      {outboundScanResult.matchedTrustedContact.label}):
                     </span>
                     <span className="text-[#1F9D68]">
                       {
@@ -296,7 +266,6 @@ export function SafeSendOutboundGuard() {
               </div>
             )}
 
-          {/* Telemetry Metrics Grid & Dust-Factory Out-Degree */}
           <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
             <div className="border border-[#262A33] bg-[#0B0C0E] p-2.5">
               <div className="font-mono text-[10px] text-[#9499A3]">
@@ -345,7 +314,6 @@ export function SafeSendOutboundGuard() {
             </div>
           </div>
 
-          {/* 1-Click Remediation Button when Poisoning is Intercepted */}
           {verdict === 'INTERCEPTED_POISONING' &&
             outboundScanResult.matchedTrustedContact && (
               <div className="mt-3 flex flex-col items-stretch justify-between gap-2 border border-[#1F9D68] bg-[#0E291E] p-3 sm:flex-row sm:items-center">
@@ -380,7 +348,6 @@ export function SafeSendOutboundGuard() {
               </div>
             )}
 
-          {/* Checksum Fix Suggestion (if Sub-Case 4C EIP-55 mismatch) */}
           {verdict === 'INVALID_ADDRESS_OR_NETWORK_MISMATCH' &&
             outboundScanResult.checksumFixSuggestion && (
               <div className="mt-3 flex items-center justify-between border border-[#D99B26] bg-[#2B210D] p-3">

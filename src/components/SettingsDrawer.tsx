@@ -8,7 +8,6 @@ import {
   Database,
   Cpu,
   CheckCircle2,
-  AlertCircle,
 } from 'lucide-react';
 import { useVeilPayStore } from '@/store/veilpay-store';
 
@@ -25,9 +24,8 @@ export function SettingsDrawer() {
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-black/75 backdrop-blur-xs">
-      <div className="flex h-full w-full max-w-md flex-col justify-between border-l border-[#262A33] bg-[#131519] p-5 overflow-y-auto">
+      <div className="flex h-full w-full max-w-md flex-col justify-between overflow-y-auto border-l border-[#262A33] bg-[#131519] p-5">
         <div className="space-y-5">
-          {/* Header */}
           <div className="flex items-center justify-between border-b border-[#262A33] pb-3">
             <div className="flex items-center gap-2">
               <Sliders className="h-4 w-4 text-[#D97736]" />
@@ -44,8 +42,7 @@ export function SettingsDrawer() {
             </button>
           </div>
 
-          {/* Live Etherscan V2 + GoPlus Crawler Budget */}
-          <div className="border border-[#262A33] bg-[#1A1D23] p-3.5 space-y-3">
+          <div className="space-y-3 border border-[#262A33] bg-[#1A1D23] p-3.5">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Database className="h-4 w-4 text-[#E5A93C]" />
@@ -71,11 +68,10 @@ export function SettingsDrawer() {
               GoPlus Address Security API.
             </p>
 
-            {/* Top Funders per Vertex */}
             <div>
               <div className="mb-1 flex justify-between font-mono text-[11px]">
                 <span className="text-[#9499A3]">TOP FUNDERS PER VERTEX:</span>
-                <span className="font-bold text-[#E5A93C] tabular-nums">
+                <span className="font-bold tabular-nums text-[#E5A93C]">
                   {crawlSettings.topFundersPerVertex} funders
                 </span>
               </div>
@@ -93,11 +89,10 @@ export function SettingsDrawer() {
               />
             </div>
 
-            {/* Max API Calls per Scan */}
             <div>
               <div className="mb-1 flex justify-between font-mono text-[11px]">
                 <span className="text-[#9499A3]">MAX API CALLS / SCAN:</span>
-                <span className="font-bold text-[#E5A93C] tabular-nums">
+                <span className="font-bold tabular-nums text-[#E5A93C]">
                   {crawlSettings.maxApiCallsPerScan} calls
                 </span>
               </div>
@@ -117,8 +112,7 @@ export function SettingsDrawer() {
             </div>
           </div>
 
-          {/* Mainnet Safety Cap */}
-          <div className="border border-[#262A33] bg-[#1A1D23] p-3.5 space-y-2.5">
+          <div className="space-y-2.5 border border-[#262A33] bg-[#1A1D23] p-3.5">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Shield className="h-4 w-4 text-[#1F9D68]" />
@@ -126,8 +120,8 @@ export function SettingsDrawer() {
                   MAINNET TRANSACTION SAFETY CAP
                 </span>
               </div>
-              <span className="font-mono text-xs font-bold text-[#1F9D68] tabular-nums">
-                ${crawlSettings.mainnetSafetyCapUsd.toFixed(2)} USD
+              <span className="font-mono text-xs font-bold tabular-nums text-[#1F9D68]">
+                ${crawlSettings.maxMainnetUsdCap.toFixed(2)} USD
               </span>
             </div>
             <p className="text-xs text-[#9499A3]">
@@ -140,19 +134,18 @@ export function SettingsDrawer() {
               min={1}
               max={100}
               step={1}
-              value={crawlSettings.mainnetSafetyCapUsd}
+              value={crawlSettings.maxMainnetUsdCap}
               onChange={(e) =>
                 updateCrawlSettings({
-                  mainnetSafetyCapUsd: Number(e.target.value),
+                  maxMainnetUsdCap: Number(e.target.value),
                 })
               }
               className="w-full accent-[#1F9D68]"
             />
           </div>
 
-          {/* TigerGraph 4.x RESTPP Preference */}
-          <div className="border border-[#262A33] bg-[#1A1D23] p-3.5 space-y-2">
-            <label className="flex items-center justify-between cursor-pointer">
+          <div className="space-y-2 border border-[#262A33] bg-[#1A1D23] p-3.5">
+            <label className="flex cursor-pointer items-center justify-between">
               <div className="flex items-center gap-2">
                 <Cpu className="h-4 w-4 text-[#D97736]" />
                 <span className="font-mono text-xs font-semibold text-[#F3F1EC]">
@@ -177,41 +170,35 @@ export function SettingsDrawer() {
             </p>
           </div>
 
-          {/* Active Integration Diagnostics */}
-          <div className="border border-[#262A33] bg-[#0B0C0E] p-3.5 space-y-2">
-            <div className="font-mono text-[11px] font-semibold text-[#E5A93C] uppercase">
+          <div className="space-y-2 border border-[#262A33] bg-[#0B0C0E] p-3.5">
+            <div className="font-mono text-[11px] font-semibold uppercase text-[#E5A93C]">
               INTEGRATION STACK DIAGNOSTICS
             </div>
             {[
               {
                 name: 'SOCKET Swap V3 Public API',
                 status: 'ACTIVE (200 OK + 3.5s Fallback)',
-                ok: true,
               },
               {
                 name: 'TigerGraph GSQL-Mirror & RESTPP v2',
                 status: 'ONLINE (<5ms In-Process / RESTPP Ready)',
-                ok: true,
               },
               {
                 name: 'Etherscan V2 Multichain Crawler',
                 status: 'CONFIGURED (60+ Chains + GoPlus)',
-                ok: true,
               },
               {
                 name: 'AIGI SHA-256 + Gemini Narration',
                 status: 'DETERMINISTIC + GEMINI 2.5 FLASH',
-                ok: true,
               },
               {
                 name: 'Reown AppKit + Cake Wallet Vaults',
                 status: 'EIP-55 / BIP-352 sp1 / Monero 888',
-                ok: true,
               },
             ].map((diag) => (
               <div
                 key={diag.name}
-                className="flex items-center justify-between border-b border-[#262A33]/60 pb-1.5 last:border-none last:pb-0 font-mono text-[11px]"
+                className="flex items-center justify-between border-b border-[#262A33]/60 pb-1.5 font-mono text-[11px] last:border-none last:pb-0"
               >
                 <span className="text-[#9499A3]">{diag.name}</span>
                 <span className="flex items-center gap-1 text-[#1F9D68]">
@@ -223,7 +210,6 @@ export function SettingsDrawer() {
           </div>
         </div>
 
-        {/* Footer Action */}
         <div className="mt-4 flex gap-2 border-t border-[#262A33] pt-3">
           <button
             type="button"

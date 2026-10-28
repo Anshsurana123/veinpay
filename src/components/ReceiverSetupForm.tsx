@@ -10,16 +10,15 @@ import {
   Layers,
   GitBranch,
   Shuffle,
-  AlertTriangle,
-  Sparkles,
 } from 'lucide-react';
 import { useVeilPayStore } from '@/store/veilpay-store';
 import { SUPPORTED_EVM_CHAINS } from '@/lib/socket/tokens';
-import { buildShareablePaymentUrl } from '@/lib/utils/link-codec';
+import { encodeLinkConfigToBase64Url } from '@/lib/utils/link-codec';
 import { validateMultiProtocolAddress } from '@/lib/validators/address';
 import type {
   HopDepth,
-  SettlementAssetSymbol,
+  PaymentAssetSymbol,
+  SupportedEvmChainId,
   VaultSettlementMode,
 } from '@/types/veilpay';
 
@@ -36,6 +35,7 @@ export function ReceiverSetupForm() {
     linkConfig,
     updateLinkConfig,
     setVaultMode,
+    setVaultAddress,
     setDestinationChainAndAsset,
     updateFirewallPolicy,
     runFirewallAndQuotePipeline,
@@ -47,11 +47,14 @@ export function ReceiverSetupForm() {
     typeof window !== 'undefined'
       ? window.location.origin
       : 'https://veilpay.xyz';
-  const shareableUrl = buildShareablePaymentUrl(origin, linkConfig);
+  const encodedPayload = encodeLinkConfigToBase64Url(linkConfig);
+  const shareableUrl = `${origin}/pay/${encodeURIComponent(linkConfig.handle || 'goa.eth')}?c=${encodedPayload}`;
 
+  const activeVaultAddress =
+    linkConfig.vaultAddresses[linkConfig.settlementMode];
   const addressValidation = validateMultiProtocolAddress(
-    linkConfig.receiverVaultAddress,
-    linkConfig.vaultMode
+    activeVaultAddress,
+    linkConfig.settlementMode
   );
 
   const handleCopyLink = async () => {
@@ -69,18 +72,15 @@ export function ReceiverSetupForm() {
       {/* Section 1: Payment Link Handle, Amount & Target Settlement */}
       <div className="border border-[#262A33] bg-[#131519] p-4">
         <div className="mb-3 flex items-center justify-between border-b border-[#262A33] pb-2.5">
-          <div className="flex items-center gap-2">
-            <span className="font-mono text-xs font-semibold tracking-wider text-[#D97736] uppercase">
-              01 // PAYMENT LINK & ASSET TARGET
-            </span>
-          </div>
+          <span className="font-mono text-xs font-semibold tracking-wider text-[#D97736] uppercase">
+            01 // PAYMENT LINK &amp; ASSET TARGET
+          </span>
           <span className="border border-[#262A33] bg-[#1A1D23] px-2 py-0.5 font-mono text-[10px] text-[#9499A3]">
             STATELESS ZERO-DOXX CONFIG
           </span>
         </div>
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          {/* Payment Handle */}
           <div>
             <label className="mb-1 block font-mono text-[11px] font-medium text-[#9499A3] uppercase">
               RECEIVER HANDLE
@@ -103,7 +103,6 @@ export function ReceiverSetupForm() {
             </div>
           </div>
 
-          {/* Requested Amount USD */}
           <div>
             <label className="mb-1 block font-mono text-[11px] font-medium text-[#9499A3] uppercase">
               REQUESTED AMOUNT (USD EQUIVALENT)
@@ -114,10 +113,8 @@ export function ReceiverSetupForm() {
               </span>
               <input
                 type="text"
-                value={linkConfig.amountUsd}
-                onChange={(e) => {
-                  updateLinkConfig({ amountUsd: e.target.value });
-                }}
+                value={linkConfig.amount}
+                onChange={(e) => updateLinkConfig({ amount: e.target.value })}
                 onBlur={() => void runFirewallAndQuotePipeline()}
                 className="w-full bg-transparent font-mono text-xs font-semibold tabular-nums text-[#F3F1EC] focus:outline-none"
                 placeholder="250.00"
@@ -130,11 +127,11 @@ export function ReceiverSetupForm() {
                   key={preset}
                   type="button"
                   onClick={() => {
-                    updateLinkConfig({ amountUsd: preset });
+                    updateLinkConfig({ amount: preset });
                     void runFirewallAndQuotePipeline();
                   }}
                   className={`border px-2 py-0.5 font-mono text-[10px] tabular-nums transition-colors ${
-                    linkConfig.amountUsd === preset
+                    linkConfig.amount === preset
                       ? 'border-[#D97736] bg-[#261810] text-[#E5A93C]'
                       : 'border-[#262A33] bg-[#1A1D23] text-[#9499A3] hover:text-[#F3F1EC]'
                   }`}
@@ -154,9 +151,9 @@ export function ReceiverSetupForm() {
             </label>
             <div className="grid grid-cols-5 gap-1">
               {(
-                ['USDC', 'USDT', 'ETH', 'BTC', 'XMR'] as SettlementAssetSymbol[]
+                ['USDC', 'USDT', 'ETH', 'BTC', 'XMR'] as PaymentAssetSymbol[]
               ).map((asset) => {
-                const isSelected = linkConfig.settlementAsset === asset;
+                const isSelected = linkConfig.asset === asset;
                 return (
                   <button
                     key={asset}
@@ -193,11 +190,11 @@ export function ReceiverSetupForm() {
             </label>
             <select
               value={linkConfig.destinationChainId}
-              disabled={linkConfig.vaultMode !== 'EVM_SOCKET'}
+              disabled={linkConfig.settlementMode !== 'EVM_SOCKET'}
               onChange={(e) =>
                 setDestinationChainAndAsset(
-                  Number(e.target.value),
-                  linkConfig.settlementAsset
+                  Number(e.target.value) as SupportedEvmChainId,
+                  linkConfig.asset
                 )
               }
               className="w-full border border-[#262A33] bg-[#1A1D23] px-2.5 py-2 font-mono text-xs text-[#F3F1EC] focus:border-[#D97736] focus:outline-none disabled:opacity-50"
@@ -226,7 +223,6 @@ export function ReceiverSetupForm() {
           </span>
         </div>
 
-        {/* 3 Settlement Vault Modes */}
         <div className="space-y-2">
           {(
             [
@@ -255,7 +251,7 @@ export function ReceiverSetupForm() {
               },
             ] as const
           ).map((item) => {
-            const active = linkConfig.vaultMode === item.mode;
+            const active = linkConfig.settlementMode === item.mode;
             return (
               <button
                 key={item.mode}
@@ -291,7 +287,7 @@ export function ReceiverSetupForm() {
         <div className="mt-3">
           <div className="mb-1 flex items-center justify-between">
             <label className="font-mono text-[11px] font-medium text-[#9499A3] uppercase">
-              CAKE WALLET RECEIVING ADDRESS ({linkConfig.vaultMode})
+              CAKE WALLET RECEIVING ADDRESS ({linkConfig.settlementMode})
             </label>
             <span
               className={`font-mono text-[10px] ${
@@ -305,9 +301,9 @@ export function ReceiverSetupForm() {
           </div>
           <input
             type="text"
-            value={linkConfig.receiverVaultAddress}
+            value={activeVaultAddress}
             onChange={(e) =>
-              updateLinkConfig({ receiverVaultAddress: e.target.value.trim() })
+              setVaultAddress(linkConfig.settlementMode, e.target.value.trim())
             }
             className="w-full border border-[#262A33] bg-[#0B0C0E] px-2.5 py-2 font-mono text-[11px] text-[#F3F1EC] focus:border-[#D97736] focus:outline-none"
           />
@@ -330,12 +326,12 @@ export function ReceiverSetupForm() {
           </div>
           <span
             className={`border px-2 py-0.5 font-mono text-[10px] font-semibold uppercase ${
-              linkConfig.firewallPolicy.masterEnabled
+              linkConfig.policy.firewallEnabled
                 ? 'border-[#1F9D68]/60 bg-[#0E291E] text-[#1F9D68]'
                 : 'border-[#D99B26]/60 bg-[#2B210D] text-[#D99B26]'
             }`}
           >
-            {linkConfig.firewallPolicy.masterEnabled
+            {linkConfig.policy.firewallEnabled
               ? 'FIREWALL ENFORCING'
               : 'POLICY BYPASSED (ADVISORY)'}
           </span>
@@ -345,9 +341,8 @@ export function ReceiverSetupForm() {
         <div className="flex items-center justify-between border border-[#262A33] bg-[#1A1D23] p-3">
           <div>
             <div className="font-mono text-xs font-semibold text-[#F3F1EC]">
-              Block wallets within {linkConfig.firewallPolicy.maxHops} hop
-              {linkConfig.firewallPolicy.maxHops > 1 ? 's' : ''} of a drainer /
-              exploit
+              Block wallets within {linkConfig.policy.maxHops} hop
+              {linkConfig.policy.maxHops > 1 ? 's' : ''} of a drainer / exploit
             </div>
             <p className="mt-0.5 text-xs text-[#9499A3]">
               Executes pre-sign multi-hop backward graph traversal before SOCKET
@@ -357,21 +352,21 @@ export function ReceiverSetupForm() {
           <button
             type="button"
             role="switch"
-            aria-checked={linkConfig.firewallPolicy.masterEnabled}
+            aria-checked={linkConfig.policy.firewallEnabled}
             onClick={() =>
               updateFirewallPolicy({
-                masterEnabled: !linkConfig.firewallPolicy.masterEnabled,
+                firewallEnabled: !linkConfig.policy.firewallEnabled,
               })
             }
             className={`relative inline-flex h-6 w-12 shrink-0 cursor-pointer items-center border transition-colors ${
-              linkConfig.firewallPolicy.masterEnabled
+              linkConfig.policy.firewallEnabled
                 ? 'border-[#1F9D68] bg-[#0E291E]'
                 : 'border-[#262A33] bg-[#0B0C0E]'
             }`}
           >
             <span
               className={`inline-block h-4 w-4 transform transition-transform ${
-                linkConfig.firewallPolicy.masterEnabled
+                linkConfig.policy.firewallEnabled
                   ? 'translate-x-6 bg-[#1F9D68]'
                   : 'translate-x-1 bg-[#646973]'
               }`}
@@ -386,13 +381,13 @@ export function ReceiverSetupForm() {
               BACKWARD LINEAGE TRAVERSAL DEPTH (MAX_HOPS)
             </label>
             <span className="font-mono text-[11px] text-[#E5A93C]">
-              ACTIVE: {linkConfig.firewallPolicy.maxHops} HOP
-              {linkConfig.firewallPolicy.maxHops > 1 ? 'S' : ''}
+              ACTIVE: {linkConfig.policy.maxHops} HOP
+              {linkConfig.policy.maxHops > 1 ? 'S' : ''}
             </span>
           </div>
           <div className="grid grid-cols-5 gap-1.5">
             {HOP_OPTIONS.map((hop) => {
-              const active = linkConfig.firewallPolicy.maxHops === hop.value;
+              const active = linkConfig.policy.maxHops === hop.value;
               return (
                 <button
                   key={hop.value}
@@ -418,12 +413,11 @@ export function ReceiverSetupForm() {
 
         {/* 3 Sub-Engine Checkboxes */}
         <div className="mt-3 space-y-2">
-          {/* CleanLink */}
           <label className="flex cursor-pointer items-start justify-between gap-3 border border-[#262A33] bg-[#1A1D23] p-2.5 hover:border-[#363B47]">
             <div className="flex items-start gap-2.5">
               <input
                 type="checkbox"
-                checked={linkConfig.firewallPolicy.cleanLinkEnabled}
+                checked={linkConfig.policy.cleanLinkEnabled}
                 onChange={(e) =>
                   updateFirewallPolicy({ cleanLinkEnabled: e.target.checked })
                 }
@@ -435,21 +429,20 @@ export function ReceiverSetupForm() {
                   CleanLink Taint Scan (OFAC / Drainer / Mixer Lineage)
                 </div>
                 <p className="text-[11px] text-[#9499A3]">
-                  Traverses 1–{linkConfig.firewallPolicy.maxHops} hops upstream
-                  for Pink/Inferno Drainers, Tornado Cash, and Lazarus exploits.
+                  Traverses 1–{linkConfig.policy.maxHops} hops upstream for
+                  Pink/Inferno Drainers, Tornado Cash, and Lazarus exploits.
                 </p>
               </div>
             </div>
             <span className="font-mono text-[10px] text-[#1F9D68]">ACTIVE</span>
           </label>
 
-          {/* Unbundle Sybil Guard */}
           <div className="border border-[#262A33] bg-[#1A1D23] p-2.5">
             <label className="flex cursor-pointer items-start justify-between gap-3">
               <div className="flex items-start gap-2.5">
                 <input
                   type="checkbox"
-                  checked={linkConfig.firewallPolicy.unbundleEnabled}
+                  checked={linkConfig.policy.unbundleEnabled}
                   onChange={(e) =>
                     updateFirewallPolicy({ unbundleEnabled: e.target.checked })
                   }
@@ -458,7 +451,7 @@ export function ReceiverSetupForm() {
                 <div>
                   <div className="flex items-center gap-1.5 font-mono text-xs font-semibold text-[#F3F1EC]">
                     <Layers className="h-3.5 w-3.5 text-[#D99B26]" />
-                    Unbundle Sybil Guard (Shared Ancestor & Cyclic Wash-Ring)
+                    Unbundle Sybil Guard (Shared Ancestor &amp; Cyclic Wash-Ring)
                   </div>
                   <p className="text-[11px] text-[#9499A3]">
                     Collapses sibling wallets funded by the same root mother
@@ -467,11 +460,11 @@ export function ReceiverSetupForm() {
                 </div>
               </div>
               <span className="font-mono text-[10px] text-[#E5A93C] tabular-nums">
-                BLOCK &ge; {linkConfig.firewallPolicy.sybilBlockThreshold}
+                BLOCK &ge; {linkConfig.policy.sybilBlockThreshold}
               </span>
             </label>
 
-            {linkConfig.firewallPolicy.unbundleEnabled && (
+            {linkConfig.policy.unbundleEnabled && (
               <div className="mt-2 flex items-center gap-3 border-t border-[#262A33] pt-2 pl-6">
                 <span className="font-mono text-[10px] text-[#9499A3]">
                   SYBIL CLUSTER BLOCK THRESHOLD:
@@ -480,7 +473,7 @@ export function ReceiverSetupForm() {
                   type="range"
                   min={3}
                   max={30}
-                  value={linkConfig.firewallPolicy.sybilBlockThreshold}
+                  value={linkConfig.policy.sybilBlockThreshold}
                   onChange={(e) =>
                     updateFirewallPolicy({
                       sybilBlockThreshold: Number(e.target.value),
@@ -489,18 +482,17 @@ export function ReceiverSetupForm() {
                   className="h-1.5 flex-1 cursor-pointer accent-[#D97736]"
                 />
                 <span className="font-mono text-xs font-semibold tabular-nums text-[#E5A93C]">
-                  {linkConfig.firewallPolicy.sybilBlockThreshold} Wallets
+                  {linkConfig.policy.sybilBlockThreshold} Wallets
                 </span>
               </div>
             )}
           </div>
 
-          {/* SOCKET Auto-Bridge */}
           <label className="flex cursor-pointer items-start justify-between gap-3 border border-[#262A33] bg-[#1A1D23] p-2.5 hover:border-[#363B47]">
             <div className="flex items-start gap-2.5">
               <input
                 type="checkbox"
-                checked={linkConfig.firewallPolicy.socketAutoBridgeEnabled}
+                checked={linkConfig.policy.socketAutoBridgeEnabled}
                 onChange={(e) =>
                   updateFirewallPolicy({
                     socketAutoBridgeEnabled: e.target.checked,

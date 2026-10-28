@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { ArrowLeft, ShieldCheck } from 'lucide-react';
 import { useVeilPayStore } from '@/store/veilpay-store';
-import { decodePaymentLinkPayload } from '@/lib/utils/link-codec';
+import { decodeLinkConfigFromBase64Url } from '@/lib/utils/link-codec';
 import { TopTelemetryBar } from '@/components/TopTelemetryBar';
 import { PayerCheckoutPanel } from '@/components/PayerCheckoutPanel';
 import { SettingsDrawer } from '@/components/SettingsDrawer';
@@ -15,20 +15,15 @@ function StandalonePayContent({ handle }: { handle: string }) {
   const searchParams = useSearchParams();
   const encodedPayload = searchParams.get('c');
 
-  const { hydrateFromDecodedLink, updateLinkConfig } = useVeilPayStore();
+  const { hydrateFromDecodedLink } = useVeilPayStore();
 
   useEffect(() => {
-    if (encodedPayload) {
-      const decoded = decodePaymentLinkPayload(encodedPayload);
-      if (decoded) {
-        hydrateFromDecodedLink(decoded);
-        return;
-      }
-    }
-    if (handle) {
-      updateLinkConfig({ handle: decodeURIComponent(handle) });
-    }
-  }, [encodedPayload, handle, hydrateFromDecodedLink, updateLinkConfig]);
+    const decoded = decodeLinkConfigFromBase64Url(
+      encodedPayload,
+      decodeURIComponent(handle)
+    );
+    hydrateFromDecodedLink(decoded);
+  }, [encodedPayload, handle, hydrateFromDecodedLink]);
 
   return (
     <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-5">

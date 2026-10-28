@@ -5,17 +5,14 @@ import {
   Network,
   Code2,
   Layers,
-  ShieldAlert,
-  ShieldCheck,
-  AlertTriangle,
   RotateCcw,
-  Eye,
 } from 'lucide-react';
 import { useVeilPayStore } from '@/store/veilpay-store';
-import type { TigerGraphEdge, TigerGraphVertex } from '@/types/veilpay';
+import { getChainDisplayName } from '@/lib/socket/tokens';
+import type { GraphEdge, GraphVertex } from '@/types/veilpay';
 
 interface PositionedNode {
-  vertex: TigerGraphVertex;
+  vertex: GraphVertex;
   x: number;
   y: number;
   hop: number;
@@ -40,32 +37,27 @@ export function TopologicalGraphCanvas() {
       return {
         nodes: [] as PositionedNode[],
         nodeById: new Map<string, PositionedNode>(),
-        edges: [] as TigerGraphEdge[],
-        gateX: 600,
-        vaultX: 730,
+        edges: [] as GraphEdge[],
+        gateX: 605,
+        vaultX: 735,
       };
     }
 
-    const { vertices, edges } = activeScan.subgraph;
-    const payerLower = activeScan.payerAddress.toLowerCase();
+    const { vertices, edges } = activeScan;
+    const payerLower = activeScan.targetWallet.toLowerCase();
 
-    // Group vertices by hop distance (0 = payer, 1..5 = upstream ancestors/dust)
-    const byHop = new Map<number, TigerGraphVertex[]>();
+    const byHop = new Map<number, GraphVertex[]>();
+    let sybilSiblingShownCount = 0;
+
     for (const v of vertices) {
-      let hop = v.attributes.hop_distance ?? 1;
-      if (v.v_id.toLowerCase() === payerLower) {
+      if (v.riskTag === 'MERCHANT_VAULT') continue;
+      let hop = Math.max(0, v.hopDistance ?? 1);
+      if (v.id.toLowerCase() === payerLower) {
         hop = 0;
       }
-      // If sybil cluster is collapsed, limit displayed sybil siblings at hop 1 to 3 representative nodes
-      if (
-        !sybilClusterExpanded &&
-        hop === 1 &&
-        v.attributes.label.startsWith('Sybil Child #')
-      ) {
-        const childNum = Number(
-          v.attributes.label.replace('Sybil Child #', '')
-        );
-        if (childNum > 3) continue;
+      if (!sybilClusterExpanded && v.isSybilSibling && hop > 0) {
+        sybilSiblingShownCount++;
+        if (sybilSiblingShownCount > 3) continue;
       }
 
       const list = byHop.get(hop) ?? [];
@@ -77,27 +69,19 @@ export function TopologicalGraphCanvas() {
     const positionedNodes: PositionedNode[] = [];
     const nodeById = new Map<string, PositionedNode>();
 
-    // Left-to-right coordinate assignment:
-    // Upstream Hop N is on the left (x = 85), Hop 0 (Payer) is at x = 470, Firewall Gate at x = 605, Vault at x = 735
     for (const [hop, hopVertices] of byHop.entries()) {
       const x =
         hop === 0
           ? 470
-          : Math.max(
-              85,
-              470 - (hop / Math.max(maxHopPresent, 2)) * 375
-            );
+          : Math.max(85, 470 - (hop / Math.max(maxHopPresent, 2)) * 375);
 
       const count = hopVertices.length;
       hopVertices.forEach((v, idx) => {
         const usableHeight = 220;
-        const y =
-          count === 1
-            ? 145
-            : 35 + (idx / (count - 1)) * usableHeight;
+        const y = count === 1 ? 145 : 35 + (idx / (count - 1)) * usableHeight;
         const pNode: PositionedNode = { vertex: v, x, y, hop };
         positionedNodes.push(pNode);
-        nodeById.set(v.v_id.toLowerCase(), pNode);
+        nodeById.set(v.id.toLowerCase(), pNode);
       });
     }
 
@@ -124,15 +108,17 @@ export function TopologicalGraphCanvas() {
     );
   }
 
-  const contagionSet = new Set(activeScan.contagionPathEdgeIds);
-  const selectedVertex = activeScan.subgraph.vertices.find(
-    (v) => v.v_id.toLowerCase() === selectedGraphNodeId?.toLowerCase()
+  const evidenceSet = new Set(
+    activeScan.evidenceEdges.map((e) => e.attributes.tx_hash)
   );
-  const selectedEdge = activeScan.subgraph.edges.find(
+  const selectedVertex = activeScan.vertices.find(
+    (v) => v.id.toLowerCase() === selectedGraphNodeId?.toLowerCase()
+  );
+  const selectedEdge = activeScan.edges.find(
     (e) => e.attributes.tx_hash === selectedGraphEdgeId
   );
 
-  const isBlocked = activeScan.blocked;
+  const isBlocked = !activeScan.socketUnlocked;
   const isWarningOrBypass =
     activeScan.verdict === 'WARNING_SYBIL' ||
     activeScan.verdict === 'ADVISORY_BYPASSED';
@@ -147,9 +133,8 @@ export function TopologicalGraphCanvas() {
             MODULE C // TIGERGRAPH 2D TOPOLOGICAL SUBGRAPH
           </span>
           <span className="border border-[#262A33] bg-[#0B0C0E] px-2 py-0.5 font-mono text-[10px] tabular-nums text-[#E5A93C]">
-            {activeScan.subgraph.vertices.length} VERTICES ·{' '}
-            {activeScan.subgraph.edges.length} EDGES · DEPTH{' '}
-            {activeScan.evaluatedMaxHops}
+            {activeScan.nodesScanned} VERTICES · {activeScan.edgesTraversed}{' '}
+            EDGES · DEPTH {activeScan.maxHopsQueried}
           </span>
         </div>
 
@@ -239,16 +224,15 @@ export function TopologicalGraphCanvas() {
             </marker>
           </defs>
 
-          {/* Column Guide Labels */}
           <text
-            x="95"
+            x="110"
             y="18"
             fill="#646973"
             fontSize="9"
             fontFamily="monospace"
             textAnchor="middle"
           >
-            UPSTREAM LINEAGE (HOPS 1–{activeScan.evaluatedMaxHops})
+            UPSTREAM LINEAGE (HOPS 1–{activeScan.maxHopsQueried})
           </text>
           <text
             x="470"
@@ -288,9 +272,12 @@ export function TopologicalGraphCanvas() {
             if (!fromNode || !toNode) return null;
 
             const isSelfLoop =
-              fromNode.vertex.v_id.toLowerCase() ===
-              toNode.vertex.v_id.toLowerCase();
-            const isContagion = contagionSet.has(edge.attributes.tx_hash);
+              fromNode.vertex.id.toLowerCase() ===
+              toNode.vertex.id.toLowerCase();
+            const isContagion =
+              evidenceSet.has(edge.attributes.tx_hash) ||
+              edge.attributes.is_taint_path ||
+              edge.attributes.is_sybil_fanout;
             const isSelected = selectedGraphEdgeId === edge.attributes.tx_hash;
 
             const strokeColor = isContagion
@@ -482,23 +469,28 @@ export function TopologicalGraphCanvas() {
               fontFamily="monospace"
               textAnchor="middle"
             >
-              {linkConfig.settlementAsset} ({linkConfig.destinationChainName})
+              {linkConfig.asset} (
+              {getChainDisplayName(linkConfig.destinationChainId)})
             </text>
           </g>
 
           {/* Subgraph Vertices */}
           {layout.nodes.map(({ vertex, x, y, hop }) => {
-            const cat = vertex.attributes.risk_category;
+            const cat = vertex.riskTag;
             const isFlagged =
-              vertex.attributes.is_flagged ||
-              cat === 'DRAINER' ||
+              vertex.isTainted ||
+              cat === 'APPROVAL_DRAINER' ||
               cat === 'SANCTIONED_MIXER' ||
-              cat === 'EXPLOIT' ||
-              cat === 'POISON_FACTORY';
-            const isSybil = cat === 'SYBIL_ROOT' || cat === 'MULE';
+              cat === 'EXPLOIT_CONTRACT' ||
+              cat === 'POISON_DUST_FACTORY';
+            const isSybil =
+              cat === 'SYBIL_ROOT_FUNDER' ||
+              cat === 'SYBIL_SIBLING' ||
+              cat === 'WASH_CYCLE_NODE' ||
+              cat === 'INTERMEDIATE_MULE';
             const isPayer = hop === 0;
             const isSelected =
-              selectedGraphNodeId?.toLowerCase() === vertex.v_id.toLowerCase();
+              selectedGraphNodeId?.toLowerCase() === vertex.id.toLowerCase();
 
             const fill = isFlagged
               ? '#2D1412'
@@ -519,10 +511,10 @@ export function TopologicalGraphCanvas() {
 
             return (
               <g
-                key={vertex.v_id}
+                key={vertex.id}
                 transform={`translate(${x}, ${y})`}
                 onClick={() => {
-                  setSelectedGraphNodeId(vertex.v_id);
+                  setSelectedGraphNodeId(vertex.id);
                   setSelectedGraphEdgeId(null);
                 }}
                 className="cursor-pointer"
@@ -545,7 +537,7 @@ export function TopologicalGraphCanvas() {
                   fontWeight="bold"
                   textAnchor="middle"
                 >
-                  {vertex.attributes.label.slice(0, 13)}
+                  {vertex.label.slice(0, 13)}
                 </text>
                 <text
                   x="0"
@@ -555,9 +547,8 @@ export function TopologicalGraphCanvas() {
                   fontFamily="monospace"
                   textAnchor="middle"
                 >
-                  {vertex.v_id.slice(0, 6)}..{vertex.v_id.slice(-4)}
+                  {vertex.id.slice(0, 6)}..{vertex.id.slice(-4)}
                 </text>
-                {/* Hop Badge */}
                 <rect
                   x="-38"
                   y="-27"
@@ -594,10 +585,11 @@ export function TopologicalGraphCanvas() {
             <span className="flex items-center gap-1.5 text-[#D99B26]">
               <span className="h-2 w-2 bg-[#D99B26]" /> SYBIL CLUSTER / MULE
             </span>
-            {activeScan.cyclesDetected > 0 && (
+            {(activeScan.cyclicLoopDetected ||
+              activeScan.selfTransferDetected) && (
               <span className="flex items-center gap-1 border border-[#D99B26]/50 bg-[#2B210D] px-1.5 py-0.5 text-[#D99B26]">
                 <RotateCcw className="h-2.5 w-2.5" />
-                {activeScan.cyclesDetected} CYCLIC WASH LOOP(S) GUARDED
+                CYCLIC WASH LOOP / SELF-TRANSFER GUARDED
               </span>
             )}
           </div>
@@ -615,19 +607,18 @@ export function TopologicalGraphCanvas() {
               <div>
                 <div className="flex items-center gap-2">
                   <span className="font-bold text-[#E5A93C]">
-                    VERTEX INSPECTOR // {selectedVertex.attributes.label}
+                    VERTEX INSPECTOR // {selectedVertex.label}
                   </span>
                   <span className="border border-[#262A33] bg-[#0B0C0E] px-1.5 py-0.5 text-[10px] text-[#F3F1EC]">
-                    {selectedVertex.attributes.risk_category} (SCORE:{' '}
-                    {selectedVertex.attributes.risk_score}/100)
+                    {selectedVertex.riskTag}
                   </span>
                 </div>
                 <div className="mt-1 text-[11px] text-[#9499A3]">
                   ADDRESS:{' '}
-                  <span className="text-[#F3F1EC]">{selectedVertex.v_id}</span>{' '}
-                  · HOP DISTANCE:{' '}
+                  <span className="text-[#F3F1EC]">{selectedVertex.id}</span> ·
+                  HOP DISTANCE:{' '}
                   <span className="text-[#E5A93C]">
-                    {selectedVertex.attributes.hop_distance ?? 0}
+                    {selectedVertex.hopDistance}
                   </span>
                 </div>
               </div>
@@ -675,18 +666,29 @@ export function TopologicalGraphCanvas() {
 
       {/* Raw TigerGraph RESTPP JSON & GSQL Query Drawer */}
       {showRawGsqlInspector && (
-        <div className="border-t border-[#262A33] bg-[#0B0C0E] p-3.5">
-          <div className="mb-2 flex items-center justify-between font-mono text-[11px]">
-            <span className="font-semibold text-[#E5A93C]">
-              RAW TIGERGRAPH RESTPP v2 PAYLOAD &amp; GSQL ACCUMULATOR OUTPUT
-            </span>
-            <span className="text-[#9499A3]">
-              /restpp/query/VeilPayGraph/veilpay_firewall_check
-            </span>
+        <div className="border-t border-[#262A33] bg-[#0B0C0E] p-3.5 space-y-3">
+          <div>
+            <div className="mb-1.5 flex items-center justify-between font-mono text-[11px]">
+              <span className="font-semibold text-[#E5A93C]">
+                RAW TIGERGRAPH RESTPP v2 PAYLOAD &amp; GSQL ACCUMULATOR OUTPUT
+              </span>
+              <span className="text-[#9499A3]">
+                /restpp/query/VeilPayGraph/veilpay_firewall_check
+              </span>
+            </div>
+            <pre className="max-h-48 overflow-auto border border-[#262A33] bg-[#131519] p-3 font-mono text-[10px] leading-relaxed text-[#F3F1EC]">
+              {JSON.stringify(activeScan.restppEnvelope, null, 2)}
+            </pre>
           </div>
-          <pre className="max-h-56 overflow-auto border border-[#262A33] bg-[#131519] p-3 font-mono text-[10px] leading-relaxed text-[#F3F1EC]">
-            {JSON.stringify(activeScan.rawRestppPayload, null, 2)}
-          </pre>
+
+          <div>
+            <div className="mb-1 font-mono text-[11px] font-semibold text-[#D97736]">
+              EXECUTED GSQL QUERY SNIPPET (/tigergraph/veilpay_firewall.gsql):
+            </div>
+            <pre className="max-h-36 overflow-auto border border-[#262A33] bg-[#131519] p-3 font-mono text-[10px] leading-relaxed text-[#9499A3]">
+              {activeScan.gsqlQuerySnippet}
+            </pre>
+          </div>
         </div>
       )}
     </div>
