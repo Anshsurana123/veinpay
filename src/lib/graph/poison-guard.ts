@@ -66,12 +66,8 @@ export function buildCharacterDiffGrid(
       status = 'MATCH_PREFIX_SUFFIX';
     } else {
       zone = 'MIDDLE';
-      if (!matches) {
-        forgedMiddleChars += 1;
-        status = 'FORGED_MIDDLE';
-      } else {
-        status = 'NEUTRAL';
-      }
+      forgedMiddleChars += 1;
+      status = 'FORGED_MIDDLE';
     }
 
     grid.push({
