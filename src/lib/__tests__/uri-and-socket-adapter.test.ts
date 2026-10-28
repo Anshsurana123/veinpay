@@ -12,7 +12,10 @@ import {
   buildDeterministicFallbackQuote,
   buildSameChainDirectRoute,
 } from '@/lib/socket/client';
-import { isTestnetChain, resolveTokenMeta } from '@/lib/socket/tokens';
+import {
+  isTestnetChain,
+  resolveTokenByAddressOrSymbol,
+} from '@/lib/socket/tokens';
 
 describe('Cake Wallet BIP-352/BIP-321 & Monero URIs + SOCKET V3/V2 Adapter', () => {
   it('Validates official BIP-352 Silent Payment test vector and builds BIP-321 & legacy URIs', () => {
@@ -108,7 +111,7 @@ describe('Cake Wallet BIP-352/BIP-321 & Monero URIs + SOCKET V3/V2 Adapter', () 
     expect(isTestnetChain(80002)).toBe(true); // Polygon Amoy
     expect(isTestnetChain(8453)).toBe(false); // Base Mainnet
 
-    const baseSepoliaUsdc = resolveTokenMeta(84532, 'USDC');
+    const baseSepoliaUsdc = resolveTokenByAddressOrSymbol(84532, 'USDC');
     expect(baseSepoliaUsdc.address).toBe(
       '0x036CbD53842c5426634e7929541eC2318f3dCF7e'
     );
