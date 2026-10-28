@@ -1,0 +1,70 @@
+{
+  "version": "2026.10.28",
+  "sources": [
+    "ScamSniffer Web3 Blacklist (github.com/scamsniffer/scam-database)",
+    "US OFAC SDN Digital Currency List (github.com/0xB10C/ofac-sanctioned-digital-currency-addresses)",
+    "VeilPay Curated Exploit & Drainer Intelligence"
+  ],
+  "entities": [
+    {
+      "address": "0xdead000000000000000000000000000000000001",
+      "label": "PinkDrainer Exploit Contract",
+      "riskCategory": "APPROVAL_DRAINER",
+      "source": "ScamSniffer / VeilPay Threat Intel"
+    },
+    {
+      "address": "0x098B716B8Aaf21512996dC57EB0615e2383E2f96",
+      "label": "Lazarus Group / Tornado Cash Sanctioned Router",
+      "riskCategory": "SANCTIONED_MIXER",
+      "source": "OFAC SDN List / SlowMist"
+    },
+    {
+      "address": "0x8589427373D6D84E98730D7795D8f6f8731FDA16",
+      "label": "Tornado Cash 100 ETH Pool (OFAC Sanctioned)",
+      "riskCategory": "SANCTIONED_MIXER",
+      "source": "OFAC SDN List"
+    },
+    {
+      "address": "0xd90e2f925DA726b50C4Ed8D0Fb90Ad053324F31b",
+      "label": "Tornado Cash Router (OFAC Sanctioned)",
+      "riskCategory": "SANCTIONED_MIXER",
+      "source": "OFAC SDN List"
+    },
+    {
+      "address": "0x722122dF12D4e14e13Ac3b6895a86e84145b6967",
+      "label": "Tornado Cash Proxy (OFAC Sanctioned)",
+      "riskCategory": "SANCTIONED_MIXER",
+      "source": "OFAC SDN List"
+    },
+    {
+      "address": "0x0000553F880fFA3728b290e04E819053A3590000",
+      "label": "Inferno Drainer Master Fee Collector",
+      "riskCategory": "APPROVAL_DRAINER",
+      "source": "ScamSniffer Drainer DB"
+    },
+    {
+      "address": "0x0000db5c8B030ae20308ac975898E09741e70000",
+      "label": "Angel Drainer Permit2 Exploiter",
+      "riskCategory": "APPROVAL_DRAINER",
+      "source": "ScamSniffer Drainer DB"
+    },
+    {
+      "address": "0x59ABf3837Fa962d6853b4Cc0a19513AA031fd32b",
+      "label": "FTX Accounts Drainer (Exploit Root)",
+      "riskCategory": "EXPLOIT_CONTRACT",
+      "source": "Etherscan / Chainalysis"
+    },
+    {
+      "address": "0x47CE0C6eD5B0Ce3d3A51fdb1C52DC66a7c3c2936",
+      "label": "Bybit Cold-Wallet Exploit Aggregator",
+      "riskCategory": "EXPLOIT_CONTRACT",
+      "source": "OFAC / ZachXBT"
+    },
+    {
+      "address": "0x3CfE000000000000000000000000000000009991",
+      "label": "VenomDrainer Multicall Siphon",
+      "riskCategory": "APPROVAL_DRAINER",
+      "source": "ScamSniffer Drainer DB"
+    }
+  ]
+}

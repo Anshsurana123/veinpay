@@ -1,0 +1,234 @@
+// ============================================================================
+// VeilPay — Production TigerGraph GSQL Schema & 3-in-1 Firewall Query
+// File: /tigergraph/veilpay_firewall.gsql
+// Compatible with: TigerGraph 3.x / 4.x (Savanna Cloud & Enterprise Self-Hosted)
+// ============================================================================
+// Modules Implemented:
+//   1. CleanLink:   1..N Hop Backward Lineage Traversal for Drainers, Mixers & Exploits
+//   2. Unbundle:    Shared Root-Funder, Sybil Sibling Cluster & Cyclic Wash-Ring Collapse
+//   3. PoisonGraph: Outbound Zero/Micro-Value Dust-Factory Out-Degree & Lookalike Detection
+// ============================================================================
+
+// ----------------------------------------------------------------------------
+// 1. VERTEX & DIRECTED EDGE SCHEMA DEFINITIONS
+// ----------------------------------------------------------------------------
+
+CREATE VERTEX Wallet (
+  PRIMARY_ID address STRING,
+  label STRING,
+  risk_tag STRING,
+  chain_id INT,
+  is_flagged_threat BOOL,
+  first_seen DATETIME
+) WITH STATS="OUTDEGREE_BY_EDGETYPE", PRIMARY_ID_AS_ATTRIBUTE="true";
+
+CREATE VERTEX Merchant (
+  PRIMARY_ID address STRING,
+  handle STRING,
+  vault_type STRING,
+  default_chain_id INT,
+  created_at DATETIME
+) WITH STATS="OUTDEGREE_BY_EDGETYPE", PRIMARY_ID_AS_ATTRIBUTE="true";
+
+CREATE VERTEX ThreatEntity (
+  PRIMARY_ID address STRING,
+  entity_name STRING,
+  risk_category STRING,
+  threat_source STRING,
+  severity_score INT,
+  reported_at DATETIME
+) WITH STATS="OUTDEGREE_BY_EDGETYPE", PRIMARY_ID_AS_ATTRIBUTE="true";
+
+CREATE DIRECTED EDGE TRANSFERRED_TO (
+  FROM Wallet | ThreatEntity | Merchant,
+  TO Wallet | Merchant | ThreatEntity,
+  amount DOUBLE,
+  amount_usd DOUBLE,
+  token STRING,
+  tx_hash STRING,
+  block_number INT,
+  tx_timestamp DATETIME
+) WITH REVERSE_EDGE="REVERSE_TRANSFERRED_TO";
+
+CREATE DIRECTED EDGE DUSTED (
+  FROM Wallet | ThreatEntity,
+  TO Wallet | Merchant,
+  amount DOUBLE,
+  amount_usd DOUBLE,
+  token STRING,
+  tx_hash STRING,
+  block_number INT,
+  tx_timestamp DATETIME
+) WITH REVERSE_EDGE="REVERSE_DUSTED";
+
+CREATE GRAPH VeilPayGraph (
+  Wallet,
+  Merchant,
+  ThreatEntity,
+  TRANSFERRED_TO,
+  REVERSE_TRANSFERRED_TO,
+  DUSTED,
+  REVERSE_DUSTED
+);
+
+USE GRAPH VeilPayGraph;
+
+// ----------------------------------------------------------------------------
+// 2. 3-IN-1 PRE-SIGN GRAPH FIREWALL QUERY: veilpay_firewall_check
+// ----------------------------------------------------------------------------
+
+CREATE OR REPLACE DISTRIBUTED QUERY veilpay_firewall_check(
+  VERTEX<Wallet> target_wallet,
+  VERTEX<Wallet> merchant_wallet,
+  INT max_hops = 3,
+  INT sybil_threshold = 10
+) FOR GRAPH VeilPayGraph SYNTAX v2 {
+
+  // --- Vertex-Attached & Global Accumulators ---
+  OrAccum  @visited = false;
+  OrAccum  @on_frontier = false;
+  OrAccum  @is_tainted = false;
+  MinAccum<INT> @min_hop = 999999;
+  SetAccum<VERTEX> @funded_children;
+
+  MinAccum<INT> @@min_taint_hop = 999999;
+  SumAccum<INT> @@taint_hits = 0;
+  SumAccum<INT> @@sybil_cluster_size = 1;
+  SumAccum<INT> @@dust_out_degree = 0;
+  SumAccum<INT> @@prior_merchant_transfers = 0;
+  SumAccum<INT> @@nodes_scanned = 0;
+  SumAccum<INT> @@edges_traversed = 0;
+
+  OrAccum @@cyclic_loop_detected = false;
+  OrAccum @@self_transfer_detected = false;
+
+  SetAccum<EDGE> @@evidence_edges;
+  SetAccum<VERTEX> @@visited_vertices;
+  SetAccum<STRING> @@sybil_root_funders;
+
+  STRING verdict = "VERIFIED_CLEAN";
+  STRING primary_sybil_root = "";
+  INT current_hop = 0;
+
+  // --- Initialize Seed Frontier at Payer Target Wallet (Hop 0) ---
+  Frontier = {target_wallet};
+  Frontier = SELECT s
+             FROM Frontier:s
+             POST-ACCUM
+               s.@visited += true,
+               s.@min_hop += 0,
+               @@visited_vertices += s,
+               @@nodes_scanned += 1;
+
+  // ==========================================================================
+  // MODULE 1 & 2: CleanLink (1..max_hops Backward Lineage) & Cycle Detection
+  // ==========================================================================
+  WHILE (Frontier.size() > 0 AND current_hop < max_hops) DO
+    current_hop = current_hop + 1;
+
+    NextFrontier = SELECT u
+                   FROM Frontier:v -(REVERSE_TRANSFERRED_TO:e)- (Wallet|ThreatEntity|Merchant):u
+                   ACCUM
+                     @@edges_traversed += 1,
+                     u.@funded_children += v,
+                     // Self-transfer check (Case 2: Wallet A -> Wallet A)
+                     IF u == v THEN
+                       @@self_transfer_detected += true,
+                       @@cyclic_loop_detected += true,
+                       @@evidence_edges += e
+                     END,
+                     // Cyclic wash-ring check (Case 2: A -> B -> C -> A)
+                     IF u.@visited == true AND u != v THEN
+                       @@cyclic_loop_detected += true,
+                       @@evidence_edges += e
+                     END,
+                     // CleanLink Threat Detection (Drainers, Sanctions, Exploits)
+                     IF u.type == "ThreatEntity" OR u.is_flagged_threat == true THEN
+                       u.@is_tainted += true,
+                       @@taint_hits += 1,
+                       @@min_taint_hop += current_hop,
+                       @@evidence_edges += e
+                     END,
+                     // Record shortest hop distance & lineage evidence
+                     u.@min_hop += current_hop,
+                     @@evidence_edges += e
+                   POST-ACCUM (u)
+                     IF u.@visited == false THEN
+                       u.@visited += true,
+                       u.@on_frontier += true,
+                       @@visited_vertices += u,
+                       @@nodes_scanned += 1
+                     ELSE
+                       u.@on_frontier = false
+                     END
+                   HAVING u.@on_frontier == true;
+
+    Frontier = NextFrontier;
+  END;
+
+  // ==========================================================================
+  // MODULE 2: Unbundle Shared Root-Funder & Sybil Fan-Out Collapse (Case 3)
+  // ==========================================================================
+  Ancestors = {@@visited_vertices};
+  SybilRoots = SELECT r
+               FROM Ancestors:r -(TRANSFERRED_TO:e)- Wallet:child
+               WHERE r != target_wallet
+                 AND r.risk_tag != "CLEAN_INSTITUTIONAL"
+               ACCUM
+                 r.@funded_children += child
+               POST-ACCUM (r)
+                 IF r.@funded_children.size() >= 3 THEN
+                   @@sybil_cluster_size += (r.@funded_children.size() - 1),
+                   @@sybil_root_funders += to_string(r.address)
+                 END;
+
+  // ==========================================================================
+  // MODULE 3: PoisonGraph Outbound Dust-Factory & Merchant History (Case 4)
+  // ==========================================================================
+  TargetSet = {target_wallet};
+
+  DustCheck = SELECT s
+              FROM TargetSet:s -(DUSTED:e)- (Wallet|Merchant):victim
+              WHERE e.amount_usd <= 0.01
+              ACCUM
+                @@dust_out_degree += 1,
+                @@evidence_edges += e;
+
+  MerchantHistory = SELECT m
+                    FROM {merchant_wallet}:m -(TRANSFERRED_TO:e)- TargetSet:t
+                    WHERE e.amount_usd > 0.01
+                    ACCUM
+                      @@prior_merchant_transfers += 1;
+
+  // ==========================================================================
+  // DETERMINISTIC VERDICT RESOLUTION
+  // ==========================================================================
+  IF @@taint_hits > 0 THEN
+    verdict = "INTERCEPTED_TAINT";
+  ELSE IF @@dust_out_degree >= 50 AND @@prior_merchant_transfers == 0 THEN
+    verdict = "INTERCEPTED_POISONING";
+  ELSE IF @@sybil_cluster_size >= sybil_threshold THEN
+    verdict = "INTERCEPTED_SYBIL";
+  ELSE IF @@sybil_cluster_size >= 3 OR @@cyclic_loop_detected == true THEN
+    verdict = "WARNING_SYBIL";
+  ELSE
+    verdict = "VERIFIED_CLEAN";
+  END;
+
+  PRINT verdict,
+        target_wallet AS target_wallet,
+        merchant_wallet AS merchant_wallet,
+        max_hops AS max_hops_queried,
+        @@min_taint_hop AS min_taint_hop,
+        @@taint_hits AS taint_hits,
+        @@sybil_cluster_size AS sybil_cluster_size,
+        @@sybil_root_funders AS sybil_root_funders,
+        @@cyclic_loop_detected AS cyclic_loop_detected,
+        @@self_transfer_detected AS self_transfer_detected,
+        @@dust_out_degree AS dust_out_degree,
+        @@nodes_scanned AS nodes_scanned,
+        @@edges_traversed AS edges_traversed,
+        @@evidence_edges;
+}
+
+INSTALL QUERY veilpay_firewall_check;
