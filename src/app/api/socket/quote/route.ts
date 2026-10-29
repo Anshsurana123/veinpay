@@ -3,7 +3,16 @@ import { runFullScan } from '@/lib/graph/full-scan';
 import { resolveVerifiedLinkAuthority } from '@/lib/links';
 import { verifyScanAttestation } from '@/lib/security/attestation';
 import { fetchSocketCrossChainQuote } from '@/lib/socket/client';
-import { EVM_TOKEN_REGISTRY } from '@/lib/socket/tokens';
+import { EVM_TOKEN_REGISTRY, isTestnetChain } from '@/lib/socket/tokens';
+
+function isUsdtInput(tokenStr: string): boolean {
+  const t = tokenStr.trim().toUpperCase();
+  if (t === 'USDT') return true;
+  const lower = tokenStr.trim().toLowerCase();
+  return Object.values(EVM_TOKEN_REGISTRY.USDT.addressesByChain).some(
+    (a) => a && a.toLowerCase() === lower
+  );
+}
 
 async function executeGatedQuoteRequest(params: {
   originChainId: number;
@@ -42,6 +51,23 @@ async function executeGatedQuoteRequest(params: {
 
   const authoritativePolicy = authority.policy;
   const authoritativeReceiver = authority.vaultAddress;
+
+  // Reject USDT on testnet chains per Issue 10
+  if (
+    (isTestnetChain(params.originChainId) && isUsdtInput(params.inputToken)) ||
+    (isTestnetChain(params.destinationChainId) && isUsdtInput(params.outputToken))
+  ) {
+    return NextResponse.json(
+      {
+        success: false,
+        statusCode: 400,
+        error: 'USDT_UNSUPPORTED_ON_TESTNET',
+        message:
+          'USDT is not supported on testnet chains. Only USDC and ETH are supported on testnet.',
+      },
+      { status: 400 }
+    );
+  }
 
   // 2. Verify short-lived server scanAttestation & require proofOfControl === true
   const attestationCheck = verifyScanAttestation(params.scanAttestation, {
@@ -117,11 +143,11 @@ export async function GET(request: NextRequest) {
   const inputToken =
     sp.get('inputToken') ||
     sp.get('fromTokenAddress') ||
-    EVM_TOKEN_REGISTRY.USDC.addressesByChain[42161];
+    EVM_TOKEN_REGISTRY.USDC.addressesByChain[42161]!;
   const outputToken =
     sp.get('outputToken') ||
     sp.get('toTokenAddress') ||
-    EVM_TOKEN_REGISTRY.USDC.addressesByChain[8453];
+    EVM_TOKEN_REGISTRY.USDC.addressesByChain[8453]!;
   const inputAmount =
     sp.get('inputAmount') || sp.get('fromAmount') || '250000000';
   const userAddress =

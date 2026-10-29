@@ -289,11 +289,21 @@ export function ReceiverSetupForm() {
                 ['USDC', 'USDT', 'ETH', 'BTC', 'XMR'] as PaymentAssetSymbol[]
               ).map((asset) => {
                 const isSelected = linkConfig.asset === asset;
+                const isDisallowedOnTestnet =
+                  asset === 'USDT' &&
+                  isTestnetChain(linkConfig.destinationChainId);
                 return (
                   <button
                     key={asset}
                     type="button"
+                    disabled={isDisallowedOnTestnet}
+                    title={
+                      isDisallowedOnTestnet
+                        ? 'USDT is not supported on testnet chains'
+                        : undefined
+                    }
                     onClick={() => {
+                      if (isDisallowedOnTestnet) return;
                       if (asset === 'BTC') {
                         setVaultMode('BTC_SILENT_PAYMENT');
                       } else if (asset === 'XMR') {
@@ -307,7 +317,9 @@ export function ReceiverSetupForm() {
                       }
                     }}
                     className={`border py-1.5 font-mono text-xs font-semibold transition-colors ${
-                      isSelected
+                      isDisallowedOnTestnet
+                        ? 'cursor-not-allowed border-[#262A33] bg-[#131519] text-[#9499A3]/40 opacity-50'
+                        : isSelected
                         ? 'border-[#D97736] bg-[#261810] text-[#E5A93C]'
                         : 'border-[#262A33] bg-[#1A1D23] text-[#9499A3] hover:text-[#F3F1EC]'
                     }`}

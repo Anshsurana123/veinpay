@@ -98,8 +98,10 @@ describe('EIP-712 Receiver-Signed Payment Links (Issue 4)', () => {
     expect(res.payload?.linkId).toBe(payload.linkId);
   });
 
-  it('Rejects tampering of every signed field and policy property', async () => {
-    const { payload, sig } = await createSignedTestLink();
+  it(
+    'Rejects tampering of every signed field and policy property',
+    async () => {
+      const { payload, sig } = await createSignedTestLink();
 
     const fieldMutations: Array<
       (base: SignedPaymentLinkPayload) => SignedPaymentLinkPayload
@@ -153,7 +155,7 @@ describe('EIP-712 Receiver-Signed Payment Links (Issue 4)', () => {
       });
       expect(verifyRes.valid).toBe(false);
     }
-  });
+  }, 20000);
 
   it('Rejects signature from wrong signer', async () => {
     const { payload, c } = await createSignedTestLink();

@@ -333,7 +333,9 @@ export function PayerCheckoutPanel() {
               className="border border-[#262A33] bg-[#1A1D23] px-2 py-1.5 font-mono text-xs font-bold text-[#E5A93C] focus:border-[#D97736] focus:outline-none"
             >
               <option value="USDC">USDC</option>
-              <option value="USDT">USDT</option>
+              {!isTestnetChain(payerChainId) && (
+                <option value="USDT">USDT</option>
+              )}
               <option value="ETH">ETH</option>
             </select>
           </div>

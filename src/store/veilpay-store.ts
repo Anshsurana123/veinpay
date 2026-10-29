@@ -343,13 +343,15 @@ export const useVeilPayStore = create<VeilPayStoreState>((set, get) => ({
   },
 
   setDestinationChainAndAsset: (chainId, asset) => {
+    const isTestnet = isTestnetChain(chainId);
+    const effectiveAsset = isTestnet && asset === 'USDT' ? 'USDC' : asset;
     set((state) => ({
-      networkEnv: isTestnetChain(chainId) ? 'TESTNET' : 'MAINNET',
+      networkEnv: isTestnet ? 'TESTNET' : 'MAINNET',
       activeSignedLink: null,
       linkConfig: {
         ...state.linkConfig,
         destinationChainId: chainId,
-        asset,
+        asset: effectiveAsset,
       },
     }));
     void get().runFirewallAndQuotePipeline();
@@ -480,13 +482,22 @@ export const useVeilPayStore = create<VeilPayStoreState>((set, get) => ({
   },
 
   setPayerChainAndToken: (chainId, tokenSymbol) => {
+    const isTestnet = isTestnetChain(chainId);
+    let effectiveSymbol = tokenSymbol;
+    let scanError: string | null = null;
+    if (isTestnet && tokenSymbol === 'USDT') {
+      effectiveSymbol = 'USDC';
+      scanError =
+        'USDT is not supported on testnet chains. Switched to USDC.';
+    }
     set({
-      networkEnv: isTestnetChain(chainId) ? 'TESTNET' : 'MAINNET',
+      networkEnv: isTestnet ? 'TESTNET' : 'MAINNET',
       payerChainId: chainId,
-      payerTokenSymbol: tokenSymbol,
+      payerTokenSymbol: effectiveSymbol,
       proofOfControlToken: null,
       proofOfControlVerifiedFor: null,
       activeQuote: null,
+      scanError,
     });
     void get().runFirewallAndQuotePipeline();
   },
@@ -583,12 +594,45 @@ export const useVeilPayStore = create<VeilPayStoreState>((set, get) => ({
       ) {
         set({ isLoadingQuote: true });
 
+        if (isTestnetChain(payerChainId) && payerTokenSymbol === 'USDT') {
+          set({
+            isLoadingQuote: false,
+            scanError:
+              'USDT is not supported on testnet chains. Please select USDC or ETH.',
+          });
+          return;
+        }
+
+        if (
+          isTestnetChain(signedLink.payload.destinationChainId) &&
+          signedLink.payload.asset === 'USDT'
+        ) {
+          set({
+            isLoadingQuote: false,
+            scanError:
+              'USDT is not supported on testnet chains. Destination asset must be USDC or ETH.',
+          });
+          return;
+        }
+
         const fromTokenCfg = EVM_TOKEN_REGISTRY[payerTokenSymbol];
         const destAssetKey =
           signedLink.payload.asset === 'ETH' || signedLink.payload.asset === 'USDT'
             ? signedLink.payload.asset
             : 'USDC';
         const toTokenCfg = EVM_TOKEN_REGISTRY[destAssetKey];
+
+        const fromAddress = fromTokenCfg.addressesByChain[payerChainId];
+        const toAddress =
+          toTokenCfg.addressesByChain[signedLink.payload.destinationChainId];
+
+        if (!fromAddress || !toAddress) {
+          set({
+            isLoadingQuote: false,
+            scanError: `Selected token is not deployed or supported on chain (${payerChainId} -> ${signedLink.payload.destinationChainId}).`,
+          });
+          return;
+        }
 
         const usdVal = Math.max(1, Number(signedLink.payload.amount) || 250);
         let tokenPrice = 1.0;
@@ -620,9 +664,8 @@ export const useVeilPayStore = create<VeilPayStoreState>((set, get) => ({
         const qs = new URLSearchParams({
           originChainId: String(payerChainId),
           destinationChainId: String(signedLink.payload.destinationChainId),
-          inputToken: fromTokenCfg.addressesByChain[payerChainId],
-          outputToken:
-            toTokenCfg.addressesByChain[signedLink.payload.destinationChainId],
+          inputToken: fromAddress,
+          outputToken: toAddress,
           inputAmount: inputAmountAtomic,
           userAddress: targetWallet,
           linkId: activeLinkId,

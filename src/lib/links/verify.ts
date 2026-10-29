@@ -22,6 +22,7 @@ import {
 } from '@/lib/links/eip712';
 import { getStoredLinkRecord, isLinkRevoked } from '@/lib/links/store';
 import { validateMultiProtocolAddress } from '@/lib/validators/address';
+import { isTestnetChain } from '@/lib/socket/tokens';
 
 export type LinkVerificationErrorCode =
   | 'UNSIGNED_LEGACY_LINK_REJECTED'
@@ -257,6 +258,19 @@ export async function verifySignedPaymentLink(
       valid: false,
       errorCode: 'POLICY_HASH_MISMATCH',
       reason: `Policy tampering detected: payload policy keccak256 (${computedPolicyHash}) does not match signed policyHash (${candidatePayload.policyHash}).`,
+    };
+  }
+
+  // Reject USDT on testnet chains per Issue 10
+  if (
+    isTestnetChain(candidatePayload.destinationChainId) &&
+    candidatePayload.asset === 'USDT'
+  ) {
+    return {
+      valid: false,
+      errorCode: 'MALFORMED_LINK_PAYLOAD',
+      reason:
+        'USDT is not supported on testnet chains. Only USDC and ETH are supported on testnet.',
     };
   }
 

@@ -158,6 +158,21 @@ export async function GET(request: NextRequest) {
     );
   }
 
+  if (
+    inputToken.trim().toUpperCase() === 'USDT' ||
+    outputToken.trim().toUpperCase() === 'USDT'
+  ) {
+    const elapsedMs = Number((performance.now() - startPerf).toFixed(2));
+    return NextResponse.json(
+      buildUnsupportedTestnetQuote(
+        baseParams,
+        'USDT is not supported on testnet chains. Circle CCTP V2 supports USDC only.',
+        elapsedMs
+      ),
+      { status: 400 }
+    );
+  }
+
   let inMeta;
   let outMeta;
   try {

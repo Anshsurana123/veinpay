@@ -131,7 +131,7 @@ export interface TokenConfig {
   name: string;
   decimals: number;
   approxUsdPrice?: number;
-  addressesByChain: Record<SupportedEvmChainId, string>;
+  addressesByChain: Partial<Record<SupportedEvmChainId, string>>;
 }
 
 export const EVM_TOKEN_REGISTRY: Record<'USDC' | 'ETH' | 'USDT', TokenConfig> = {
@@ -161,18 +161,12 @@ export const EVM_TOKEN_REGISTRY: Record<'USDC' | 'ETH' | 'USDT', TokenConfig> = 
     decimals: 6,
     approxUsdPrice: 1.0,
     addressesByChain: {
-      // Mainnets
+      // Mainnets only — testnet USDT entries removed per Issue 10
       1: '0xdAC17F958D2ee523a2206206994597C13D831ec7',
       42161: '0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9',
       8453: '0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2',
       10: '0x94b008aA00579c1307B0EF2c499aD98a8ce58e58',
       137: '0xc2132D05D31c914a87C6611C10748AEb04B58e8F',
-      // Testnet USDT Equivalents
-      11155111: '0xaA8E23Fb1079EA71e0a56F48a2aA51851D8433D0',
-      84532: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
-      421614: '0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d',
-      11155420: '0x5fd84259d66Cd46123540766Be93DFE6D43130D7',
-      80002: '0x41E94Eb019C0762f9Bfcf9Fb1E58725BfB0e7582',
     },
   },
   ETH: {
@@ -194,6 +188,30 @@ export const EVM_TOKEN_REGISTRY: Record<'USDC' | 'ETH' | 'USDT', TokenConfig> = 
   },
 };
 
+export function isTokenSupportedOnChain(
+  symbol: string,
+  chainId: number
+): boolean {
+  const upper = symbol.trim().toUpperCase();
+  if (upper === 'USDT') {
+    return (
+      !isTestnetChain(chainId) &&
+      Boolean(EVM_TOKEN_REGISTRY.USDT.addressesByChain[chainId as SupportedEvmChainId])
+    );
+  }
+  if (upper === 'USDC') {
+    return Boolean(
+      EVM_TOKEN_REGISTRY.USDC.addressesByChain[chainId as SupportedEvmChainId]
+    );
+  }
+  if (upper === 'ETH') {
+    return Boolean(
+      EVM_TOKEN_REGISTRY.ETH.addressesByChain[chainId as SupportedEvmChainId]
+    );
+  }
+  return false;
+}
+
 export function resolveTokenByAddressOrSymbol(
   chainId: number,
   tokenInput: string
@@ -209,9 +227,20 @@ export function resolveTokenByAddressOrSymbol(
 
   const upper = tokenInput.trim().toUpperCase();
   if (upper === 'USDC' || upper === 'USDT' || upper === 'ETH') {
+    if (upper === 'USDT' && isTestnetChain(cId)) {
+      throw new Error(
+        `USDT is not supported on testnet chain ${cId}. Only USDC and ETH are supported on testnet.`
+      );
+    }
     const cfg = EVM_TOKEN_REGISTRY[upper];
+    const addr = cfg.addressesByChain[cId];
+    if (!addr) {
+      throw new Error(
+        `Token ${upper} is not deployed or supported on chain ${cId}.`
+      );
+    }
     return {
-      address: cfg.addressesByChain[cId],
+      address: addr,
       symbol: cfg.symbol,
       decimals: cfg.decimals,
       approxUsdPrice: cfg.approxUsdPrice,
@@ -221,7 +250,12 @@ export function resolveTokenByAddressOrSymbol(
   const lowerAddr = tokenInput.trim().toLowerCase();
   for (const cfg of Object.values(EVM_TOKEN_REGISTRY)) {
     for (const addr of Object.values(cfg.addressesByChain)) {
-      if (addr.toLowerCase() === lowerAddr) {
+      if (addr && addr.toLowerCase() === lowerAddr) {
+        if (cfg.symbol === 'USDT' && isTestnetChain(cId)) {
+          throw new Error(
+            `USDT is not supported on testnet chain ${cId}. Only USDC and ETH are supported on testnet.`
+          );
+        }
         return {
           address: addr,
           symbol: cfg.symbol,
@@ -232,8 +266,23 @@ export function resolveTokenByAddressOrSymbol(
     }
   }
 
+  if (isTestnetChain(cId)) {
+    const usdcAddr = EVM_TOKEN_REGISTRY.USDC.addressesByChain[cId];
+    if (!usdcAddr) {
+      throw new Error(`No default token available for testnet chain ${cId}.`);
+    }
+    return {
+      address: usdcAddr,
+      symbol: 'USDC',
+      decimals: 6,
+      approxUsdPrice: 1.0,
+    };
+  }
+
   return {
-    address: EVM_TOKEN_REGISTRY.USDC.addressesByChain[cId],
+    address:
+      EVM_TOKEN_REGISTRY.USDC.addressesByChain[cId] ??
+      EVM_TOKEN_REGISTRY.USDC.addressesByChain[8453]!,
     symbol: 'USDC',
     decimals: 6,
     approxUsdPrice: 1.0,
