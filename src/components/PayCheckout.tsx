@@ -64,11 +64,13 @@ export function PayCheckout() {
   }, [isConnected, wagmiAddress, syncConnectedWallet]);
 
   // Initial trigger to run scan & quote pipeline on mount
+  const initialScanAttemptedRef = React.useRef(false);
   useEffect(() => {
-    if (!activeScan && !isScanning) {
+    if (!activeScan && !isScanning && !scanError && !initialScanAttemptedRef.current) {
+      initialScanAttemptedRef.current = true;
       void runFirewallAndQuotePipeline();
     }
-  }, [activeScan, isScanning, runFirewallAndQuotePipeline]);
+  }, [activeScan, isScanning, scanError, runFirewallAndQuotePipeline]);
 
   const isTestnet = networkEnv === 'TESTNET';
   const availableChains = SUPPORTED_EVM_CHAINS.filter(

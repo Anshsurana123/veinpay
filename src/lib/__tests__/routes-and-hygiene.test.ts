@@ -8,6 +8,8 @@ import { POST as postAigiVerify } from '@/app/api/aigi/verify/route';
 import { GET as getHealth } from '@/app/api/health/route';
 import { GET as getRates } from '@/app/api/rates/route';
 import { GET as getReceiptKey } from '@/app/.well-known/veilpay-receipt-key/route';
+import { GET as getGoPlusSecurity, POST as postGoPlusSecurity } from '@/app/api/goplus/security/route';
+import { GET as getTigerGraphMcp, POST as postTigerGraphMcp } from '@/app/api/mcp/tigergraph/route';
 import {
   strictBooleanSchema,
   hopDepthSchema,
@@ -119,6 +121,31 @@ describe('Issue 14: API Route Handlers & Zod Validation Hygiene', () => {
       expect(res.status).toBe(200);
       const json = await res.json();
       expect(json.algorithm).toBe('Ed25519');
+    });
+
+    it('GET /api/goplus/security validates address input', async () => {
+      const req = new NextRequest('http://localhost:3000/api/goplus/security?type=address');
+      const res = await getGoPlusSecurity(req);
+      expect(res.status).toBe(400);
+    });
+
+    it('GET /api/mcp/tigergraph lists supported MCP tools', async () => {
+      const res = await getTigerGraphMcp();
+      expect(res.status).toBe(200);
+      const json = await res.json();
+      expect(json.server).toBe('TigerGraph-MCP-VeilPay');
+      expect(json.tools.length).toBeGreaterThan(0);
+    });
+
+    it('POST /api/mcp/tigergraph responds to tools/list JSON-RPC', async () => {
+      const req = new NextRequest('http://localhost:3000/api/mcp/tigergraph', {
+        method: 'POST',
+        body: JSON.stringify({ jsonrpc: '2.0', id: 42, method: 'tools/list' }),
+      });
+      const res = await postTigerGraphMcp(req);
+      expect(res.status).toBe(200);
+      const json = await res.json();
+      expect(json.result.tools.length).toBeGreaterThan(0);
     });
   });
 

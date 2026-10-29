@@ -26,11 +26,13 @@ export function SafeSend() {
     setTimeout(() => setToastMessage(null), 2000);
   };
 
+  const initialOutboundScanAttemptedRef = React.useRef(false);
   useEffect(() => {
-    if (!outboundScanResult) {
+    if (!outboundScanResult && !isScanningOutbound && !initialOutboundScanAttemptedRef.current) {
+      initialOutboundScanAttemptedRef.current = true;
       void runOutboundPoisonScan();
     }
-  }, [outboundScanResult, runOutboundPoisonScan]);
+  }, [outboundScanResult, isScanningOutbound, runOutboundPoisonScan]);
 
   const verdict = outboundScanResult?.verdict;
 

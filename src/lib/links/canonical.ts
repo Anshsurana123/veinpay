@@ -141,32 +141,42 @@ export function serializeCanonicalLinkPayloadJson(
   return canonicalJsonStringify(canonical);
 }
 
+export function base64ToBase64Url(base64: string): string {
+  return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+export function base64UrlToBase64(base64url: string): string {
+  const base64 = base64url.trim().replace(/-/g, '+').replace(/_/g, '/');
+  const pad = base64.length % 4 === 0 ? '' : '='.repeat(4 - (base64.length % 4));
+  return base64 + pad;
+}
+
 export function encodeSignedLinkPayloadToBase64Url(
   payload: SignedPaymentLinkPayload
 ): string {
   const json = serializeCanonicalLinkPayloadJson(payload);
+  // Use standard base64 encoding followed by RFC 4648 character replacement so browser Buffer
+  // polyfills (which lack 'base64url' encoding support) never throw 'Unknown encoding: base64url'.
   if (typeof Buffer !== 'undefined') {
-    return Buffer.from(json, 'utf8').toString('base64url');
+    return base64ToBase64Url(Buffer.from(json, 'utf8').toString('base64'));
   }
-  const base64 = btoa(
-    encodeURIComponent(json).replace(/%([0-9A-F]{2})/g, (_, p1) =>
-      String.fromCharCode(parseInt(p1, 16))
-    )
-  );
-  return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  const bytes = new TextEncoder().encode(json);
+  let binary = '';
+  for (let i = 0; i < bytes.byteLength; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return base64ToBase64Url(btoa(binary));
 }
 
 export function decodeBase64UrlToUtf8(encoded: string): string {
-  const base64 = encoded.trim().replace(/-/g, '+').replace(/_/g, '/');
-  const pad =
-    base64.length % 4 === 0 ? '' : '='.repeat(4 - (base64.length % 4));
+  const fullBase64 = base64UrlToBase64(encoded);
   if (typeof Buffer !== 'undefined') {
-    return Buffer.from(base64 + pad, 'base64').toString('utf8');
+    return Buffer.from(fullBase64, 'base64').toString('utf8');
   }
-  const bin = atob(base64 + pad);
-  return decodeURIComponent(
-    Array.from(bin)
-      .map((c) => '%' + c.charCodeAt(0).toString(16).padStart(2, '0'))
-      .join('')
-  );
+  const bin = atob(fullBase64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) {
+    bytes[i] = bin.charCodeAt(i);
+  }
+  return new TextDecoder().decode(bytes);
 }

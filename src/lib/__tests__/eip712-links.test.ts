@@ -291,9 +291,11 @@ describe('EIP-712 Receiver-Signed Payment Links (Issue 4)', () => {
       vaultAddresses: DEMO_CAKE_VAULT_ADDRESSES,
       policy: BASE_POLICY,
     });
-    const legacyC = Buffer.from(legacyUnsignedJson, 'utf-8').toString(
-      'base64url'
-    );
+    const legacyC = Buffer.from(legacyUnsignedJson, 'utf-8')
+      .toString('base64')
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=+$/, '');
 
     const missingSigRes = await verifySignedPaymentLink({
       encodedPayload: legacyC,

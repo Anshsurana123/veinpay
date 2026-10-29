@@ -146,7 +146,11 @@ export function getReceiptPublicKeyInfo(): {
   const rawPub = spkiDer.subarray(spkiDer.length - 32);
 
   const pem = publicKey.export({ type: 'spki', format: 'pem' }).toString();
-  const base64UrlX = rawPub.toString('base64url');
+  const base64UrlX = rawPub
+    .toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
 
   return {
     keyId,

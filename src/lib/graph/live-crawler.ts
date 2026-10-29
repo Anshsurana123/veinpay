@@ -13,6 +13,7 @@ import {
   type SeedGraphDataset,
 } from '@/lib/graph/seed-topologies';
 import { runVeilPayFirewallTraversal } from '@/lib/graph/engine';
+import { checkGoPlusAddress } from '@/lib/security/goplus';
 
 export const DEFAULT_LIVE_CRAWL_SETTINGS: LiveCrawlSettings = {
   topFundersPerVertex: 5,
@@ -104,101 +105,26 @@ async function checkGoPlusAddressSecurity(
     return res;
   }
 
-  try {
-    const url = `https://api.gopluslabs.io/api/v1/address_security/${address}?chain_id=${chainId}`;
-    const response = await fetch(url, { signal: AbortSignal.timeout(2200) });
-    if (!response.ok) {
-      return {
-        isThreat: false,
-        riskCategory: 'CLEAN',
-        label: '',
-        source: '',
-        failed: true,
-        failureReason: `GoPlus API responded with HTTP status ${response.status}`,
-      };
-    }
-    const json = (await response.json()) as {
-      code?: number;
-      result?: Record<string, string>;
-      message?: string;
-    };
-    const r = json.result;
-    if (!r) {
-      if (json.code !== undefined && json.code !== 1) {
-        return {
-          isThreat: false,
-          riskCategory: 'CLEAN',
-          label: '',
-          source: '',
-          failed: true,
-          failureReason: json.message || `GoPlus code ${json.code}`,
-        };
-      }
-      return { isThreat: false, riskCategory: 'CLEAN', label: '', source: '' };
-    }
-
-    if (r.sanctioned === '1' || r.money_laundering === '1' || r.mixer === '1') {
-      const hit = {
-        isThreat: true,
-        riskCategory: 'SANCTIONED_MIXER' as RiskCategory,
-        label: `GoPlus Flagged Sanctioned/Mixer (${address.slice(0, 6)}...${address.slice(-4)})`,
-        source: `GoPlus Security (${r.data_source || 'On-Chain Feed'})`,
-      };
-      goPlusLruCache.set(key, hit);
-      return hit;
-    }
-
-    if (
-      r.stealing_attack === '1' ||
-      r.phishing_activities === '1' ||
-      r.blacklist_doubt === '1'
-    ) {
-      const hit = {
-        isThreat: true,
-        riskCategory: 'APPROVAL_DRAINER' as RiskCategory,
-        label: `GoPlus Flagged Drainer/Phishing (${address.slice(0, 6)}...${address.slice(-4)})`,
-        source: `GoPlus Security (${r.data_source || 'ScamSniffer/SlowMist'})`,
-      };
-      goPlusLruCache.set(key, hit);
-      return hit;
-    }
-
-    if (
-      r.cybercrime === '1' ||
-      r.financial_crime === '1' ||
-      r.darkweb_transactions === '1'
-    ) {
-      const hit = {
-        isThreat: true,
-        riskCategory: 'EXPLOIT_CONTRACT' as RiskCategory,
-        label: `GoPlus Flagged Exploit/Cybercrime (${address.slice(0, 6)}...${address.slice(-4)})`,
-        source: `GoPlus Security (${r.data_source || 'BlockSec'})`,
-      };
-      goPlusLruCache.set(key, hit);
-      return hit;
-    }
-
-    const cleanRes = {
-      isThreat: false,
-      riskCategory: 'CLEAN' as RiskCategory,
-      label: '',
-      source: '',
-    };
-    goPlusLruCache.set(key, cleanRes);
-    return cleanRes;
-  } catch (err) {
+  const liveVerdict = await checkGoPlusAddress(address, chainId, 2500);
+  if (liveVerdict.failed) {
     return {
       isThreat: false,
       riskCategory: 'CLEAN',
       label: '',
       source: '',
       failed: true,
-      failureReason:
-        err instanceof Error
-          ? err.message
-          : 'GoPlus API request failed or timed out',
+      failureReason: liveVerdict.failureReason || 'GoPlus API request failed or timed out',
     };
   }
+
+  const res = {
+    isThreat: liveVerdict.isThreat,
+    riskCategory: liveVerdict.riskCategory,
+    label: liveVerdict.label,
+    source: liveVerdict.source,
+  };
+  goPlusLruCache.set(key, res);
+  return res;
 }
 
 async function fetchEtherscanInboundTransactions(params: {

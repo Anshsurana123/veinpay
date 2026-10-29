@@ -124,10 +124,17 @@ export function signProofOfControlToken(
     scannedAddress: payload.scannedAddress.toLowerCase(),
     vaultAddress: (payload.vaultAddress || '').toLowerCase(),
   });
-  const encoded = Buffer.from(canonicalJson, 'utf8').toString('base64url');
+  const encoded = Buffer.from(canonicalJson, 'utf8')
+    .toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
   const mac = createHmac('sha256', getSessionSecret())
     .update(encoded)
-    .digest('base64url');
+    .digest('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
   return `${encoded}.${mac}`;
 }
 
@@ -156,7 +163,10 @@ export function verifyProofOfControlToken(
 
   const expectedMac = createHmac('sha256', getSessionSecret())
     .update(encoded)
-    .digest('base64url');
+    .digest('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
 
   const macBuf = Buffer.from(mac, 'utf8');
   const expBuf = Buffer.from(expectedMac, 'utf8');
@@ -165,8 +175,10 @@ export function verifyProofOfControlToken(
   }
 
   try {
+    const base64 = encoded.replace(/-/g, '+').replace(/_/g, '/');
+    const pad = base64.length % 4 === 0 ? '' : '='.repeat(4 - (base64.length % 4));
     const parsed = JSON.parse(
-      Buffer.from(encoded, 'base64url').toString('utf8')
+      Buffer.from(base64 + pad, 'base64').toString('utf8')
     ) as ProofOfControlTokenPayload;
 
     if (parsed.proofOfControl !== true) {

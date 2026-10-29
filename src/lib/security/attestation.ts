@@ -88,10 +88,17 @@ export function signScanAttestation(params: {
     verdict: payload.verdict,
   });
 
-  const encoded = Buffer.from(canonicalJson, 'utf8').toString('base64url');
+  const encoded = Buffer.from(canonicalJson, 'utf8')
+    .toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
   const mac = createHmac('sha256', getAttestationSecret())
     .update(encoded)
-    .digest('base64url');
+    .digest('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
 
   return `${encoded}.${mac}`;
 }
@@ -128,7 +135,10 @@ export function verifyScanAttestation(
 
   const expectedMac = createHmac('sha256', getAttestationSecret())
     .update(encoded)
-    .digest('base64url');
+    .digest('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
 
   const macBuf = Buffer.from(mac, 'utf8');
   const expBuf = Buffer.from(expectedMac, 'utf8');
@@ -140,8 +150,10 @@ export function verifyScanAttestation(
   }
 
   try {
+    const base64 = encoded.replace(/-/g, '+').replace(/_/g, '/');
+    const pad = base64.length % 4 === 0 ? '' : '='.repeat(4 - (base64.length % 4));
     const parsed = JSON.parse(
-      Buffer.from(encoded, 'base64url').toString('utf8')
+      Buffer.from(base64 + pad, 'base64').toString('utf8')
     ) as ScanAttestationPayload;
 
     const now = expected.nowMs ?? Date.now();

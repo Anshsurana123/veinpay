@@ -113,16 +113,24 @@ export async function checkIntegrationsHealth(
   }
 
   // 4. GoPlus Address Security
+  const goplusKey = process.env.GOPLUS_API_KEY?.trim();
   let goplusHealth: IntegrationHealth = {
-    configured: true,
+    configured: Boolean(goplusKey),
     status: 'ok',
-    message: 'GoPlus Address Security API active',
+    message: goplusKey
+      ? 'GoPlus Address Security API active (Authenticated Key Active)'
+      : 'GoPlus Address Security API active (Public Tier)',
   };
   if (!skipPing) {
     try {
+      const headers: Record<string, string> = { accept: 'application/json' };
+      if (goplusKey) {
+        headers['X-API-KEY'] = goplusKey;
+        headers['api-key'] = goplusKey;
+      }
       const res = await fetch(
         'https://api.gopluslabs.io/api/v1/supported_chains',
-        { signal: AbortSignal.timeout(1500) }
+        { headers, signal: AbortSignal.timeout(1500) }
       );
       if (!res.ok) {
         goplusHealth.status = 'degraded';

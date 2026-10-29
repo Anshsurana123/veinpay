@@ -43,6 +43,7 @@ export function PayerCheckoutPanel() {
     proofOfControlToken,
     activeScan,
     activeQuote,
+    scanError,
     isScanning,
     isLoadingQuote,
     selectPersona,
@@ -62,11 +63,13 @@ export function PayerCheckoutPanel() {
     syncConnectedWallet(isConnected && wagmiAddress ? wagmiAddress : null);
   }, [isConnected, wagmiAddress, syncConnectedWallet]);
 
+  const initialScanAttemptedRef = React.useRef(false);
   useEffect(() => {
-    if (!activeScan && !isScanning) {
+    if (!activeScan && !isScanning && !scanError && !initialScanAttemptedRef.current) {
+      initialScanAttemptedRef.current = true;
       void runFirewallAndQuotePipeline();
     }
-  }, [activeScan, isScanning, runFirewallAndQuotePipeline]);
+  }, [activeScan, isScanning, scanError, runFirewallAndQuotePipeline]);
 
   const isBlocked = activeScan ? !activeScan.socketUnlocked : false;
   const primaryRoute = activeQuote?.result.routes[0];

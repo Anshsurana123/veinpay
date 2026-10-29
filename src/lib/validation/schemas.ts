@@ -196,6 +196,13 @@ export const postEventBodySchema = z.object({
   sha256Hash: z.string().trim().optional(),
 });
 
+export const goPlusSecurityQuerySchema = z.object({
+  type: z.enum(['address', 'token', 'approval', 'phishing']).default('address'),
+  address: z.string().trim().optional(),
+  url: z.string().trim().optional(),
+  chainId: z.coerce.number().int().default(1),
+});
+
 // Generic validator returning parsed data or a 400 error response structure
 export function validateWithZod<T>(
   schema: z.ZodSchema<T>,

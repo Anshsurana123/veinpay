@@ -123,11 +123,13 @@ export function CakeWalletSettlementModal() {
   const isBtcMode = linkConfig.settlementMode === 'BTC_SILENT_PAYMENT';
   const isXmrMode = linkConfig.settlementMode === 'XMR_SUBADDRESS';
 
+  const initialRatesAttemptedRef = React.useRef(false);
   useEffect(() => {
-    if (settlementModalOpen && !spotRates) {
+    if (settlementModalOpen && !spotRates && !ratesError && !initialRatesAttemptedRef.current) {
+      initialRatesAttemptedRef.current = true;
       void fetchRates();
     }
-  }, [settlementModalOpen, spotRates, fetchRates]);
+  }, [settlementModalOpen, spotRates, ratesError, fetchRates]);
 
   const btcRate = spotRates?.rates?.BTC ?? null;
   const xmrRate = spotRates?.rates?.XMR ?? null;

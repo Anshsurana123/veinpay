@@ -24,11 +24,13 @@ export function SafeSendOutboundGuard() {
     swapToVerifiedContactAddress,
   } = useVeilPayStore();
 
+  const initialOutboundScanAttemptedRef = React.useRef(false);
   useEffect(() => {
-    if (!outboundScanResult) {
+    if (!outboundScanResult && !isScanningOutbound && !initialOutboundScanAttemptedRef.current) {
+      initialOutboundScanAttemptedRef.current = true;
       void runOutboundPoisonScan();
     }
-  }, [outboundScanResult, runOutboundPoisonScan]);
+  }, [outboundScanResult, isScanningOutbound, runOutboundPoisonScan]);
 
   const verdict = outboundScanResult?.verdict;
 
