@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   ShieldCheck,
   Lock,
@@ -12,7 +12,9 @@ import {
   AlertTriangle,
   Wallet,
   QrCode,
+  KeyRound,
 } from 'lucide-react';
+import { useAccount, useSignMessage } from 'wagmi';
 import { useVeilPayStore } from '@/store/veilpay-store';
 import { WALLET_PERSONAS } from '@/lib/graph/seed-topologies';
 import {
@@ -20,6 +22,10 @@ import {
   isTestnetChain,
   SUPPORTED_EVM_CHAINS,
 } from '@/lib/socket/tokens';
+import {
+  areAddressesMatchingSigner,
+  evaluatePayerQuoteAndBroadcastEligibility,
+} from '@/lib/session/proof-of-control';
 import { TopologicalGraphCanvas } from '@/components/TopologicalGraphCanvas';
 import { AigiForensicReceiptCard } from '@/components/AigiForensicReceiptCard';
 import type { SupportedEvmChainId } from '@/types/veilpay';
@@ -32,16 +38,28 @@ export function PayerCheckoutPanel() {
     customAddressInput,
     payerChainId,
     payerTokenSymbol,
+    connectedWalletAddress,
+    proofOfControlToken,
     activeScan,
     activeQuote,
     isScanning,
     isLoadingQuote,
     selectPersona,
     setCustomAddressInput,
+    syncConnectedWallet,
+    setProofOfControl,
     setPayerChainAndToken,
     runFirewallAndQuotePipeline,
     setSettlementModalOpen,
   } = useVeilPayStore();
+
+  const { address: wagmiAddress, isConnected } = useAccount();
+  const { signMessageAsync, isPending: isSigningProof } = useSignMessage();
+  const [proofError, setProofError] = useState<string | null>(null);
+
+  useEffect(() => {
+    syncConnectedWallet(isConnected && wagmiAddress ? wagmiAddress : null);
+  }, [isConnected, wagmiAddress, syncConnectedWallet]);
 
   useEffect(() => {
     if (!activeScan && !isScanning) {
@@ -51,6 +69,70 @@ export function PayerCheckoutPanel() {
 
   const isBlocked = activeScan ? !activeScan.socketUnlocked : false;
   const primaryRoute = activeQuote?.result.routes[0];
+  const eligibility = evaluatePayerQuoteAndBroadcastEligibility({
+    activePersonaId,
+    connectedAddress: connectedWalletAddress,
+    scannedAddress: activePayerAddress,
+    proofOfControlToken,
+  });
+
+  const handleSignProofOfControl = async () => {
+    setProofError(null);
+    if (!areAddressesMatchingSigner(connectedWalletAddress, activePayerAddress)) {
+      setProofError(
+        'Connected wallet does not match the scanned payer address.'
+      );
+      return;
+    }
+
+    try {
+      const nonceRes = await fetch('/api/session/nonce', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          linkId: linkConfig.handle || 'default',
+          scannedAddress: activePayerAddress,
+          chainId: payerChainId,
+        }),
+      });
+      const nonceData = await nonceRes.json();
+      if (!nonceRes.ok) {
+        throw new Error(nonceData.error || 'Failed to request proof nonce');
+      }
+
+      const signature = await signMessageAsync({
+        message: nonceData.message,
+      });
+
+      const verifyRes = await fetch('/api/session/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nonce: nonceData.nonce,
+          linkId: nonceData.linkId,
+          scannedAddress: nonceData.scannedAddress,
+          chainId: nonceData.chainId,
+          expiresAt: nonceData.expiresAt,
+          signature,
+        }),
+      });
+      const verifyData = await verifyRes.json();
+      if (!verifyRes.ok || !verifyData.valid || !verifyData.token) {
+        throw new Error(
+          verifyData.reason || 'Proof-of-control signature verification failed'
+        );
+      }
+
+      setProofOfControl(verifyData.token, activePayerAddress);
+      await runFirewallAndQuotePipeline();
+    } catch (err) {
+      setProofError(
+        err instanceof Error
+          ? err.message
+          : 'Failed to sign Proof of Control challenge.'
+      );
+    }
+  };
 
   return (
     <div className="space-y-4">
@@ -318,6 +400,61 @@ export function PayerCheckoutPanel() {
           </div>
         ) : (
           <div className="mt-3 space-y-3">
+            {eligibility.isScanOnly && (
+              <div className="flex flex-wrap items-center justify-between gap-2 border border-[#D99B26]/70 bg-[#2B210D]/60 p-3 font-mono text-xs">
+                <div className="space-y-1">
+                  <div className="font-bold text-[#E5A93C]">
+                    SCAN-ONLY MODE — PROOF OF WALLET CONTROL REQUIRED FOR QUOTE &amp; BROADCAST
+                  </div>
+                  <p className="text-[11px] text-[#F3F1EC]">
+                    {eligibility.reason}
+                  </p>
+                  {proofError && (
+                    <p className="text-[11px] text-[#D6453A]">{proofError}</p>
+                  )}
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  {isConnected &&
+                    wagmiAddress &&
+                    !areAddressesMatchingSigner(
+                      wagmiAddress,
+                      activePayerAddress
+                    ) && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          selectPersona('reown-connected', wagmiAddress)
+                        }
+                        className="border border-[#D97736] bg-[#261810] px-3 py-1.5 font-mono text-[11px] font-bold text-[#E5A93C] hover:bg-[#D97736] hover:text-[#0B0C0E]"
+                      >
+                        SWITCH SCAN TO CONNECTED WALLET ({wagmiAddress.slice(0, 6)}
+                        ...{wagmiAddress.slice(-4)})
+                      </button>
+                    )}
+
+                  {activePersonaId === 'reown-connected' &&
+                    areAddressesMatchingSigner(
+                      connectedWalletAddress,
+                      activePayerAddress
+                    ) &&
+                    !proofOfControlToken && (
+                      <button
+                        type="button"
+                        disabled={isSigningProof}
+                        onClick={() => void handleSignProofOfControl()}
+                        className="flex items-center gap-1.5 border border-[#1F9D68] bg-[#1F9D68] px-3 py-1.5 font-mono text-[11px] font-bold text-[#0B0C0E] hover:bg-[#25b87b] disabled:opacity-50"
+                      >
+                        <KeyRound className="h-3.5 w-3.5" />
+                        {isSigningProof
+                          ? 'SIGNING CHALLENGE...'
+                          : 'SIGN PROOF OF CONTROL'}
+                      </button>
+                    )}
+                </div>
+              </div>
+            )}
+
             {isLoadingQuote ? (
               <div className="border border-[#262A33] bg-[#0B0C0E] p-3 font-mono text-xs text-[#E5A93C]">
                 FETCHING REAL-TIME CROSS-CHAIN ROUTE...
@@ -380,25 +517,31 @@ export function PayerCheckoutPanel() {
             <div className="flex flex-col gap-2 sm:flex-row">
               <button
                 type="button"
-                disabled={activeQuote?.source === 'UNSUPPORTED_ON_TESTNET'}
+                disabled={
+                  !eligibility.canBroadcast ||
+                  activeQuote?.source === 'UNSUPPORTED_ON_TESTNET'
+                }
                 onClick={() => setSettlementModalOpen(true)}
                 className="flex flex-1 items-center justify-center gap-2 border border-[#1F9D68] bg-[#1F9D68] py-3 font-mono text-xs font-bold text-[#0B0C0E] transition-colors hover:bg-[#25b87b] disabled:cursor-not-allowed disabled:opacity-40"
               >
                 <ShieldCheck className="h-4 w-4" />
-                {linkConfig.settlementMode === 'EVM_SOCKET'
-                  ? activeQuote?.source === 'CCTP_V2_TESTNET'
-                    ? `SETTLE ${activeQuote.cctpRoute?.netAmountOutFormatted ?? linkConfig.amount} USDC NET VIA CIRCLE CCTP V2`
-                    : `SETTLE $${linkConfig.amount} VIA SOCKET V3 TO CAKE WALLET VAULT`
-                  : linkConfig.settlementMode === 'BTC_SILENT_PAYMENT'
-                    ? `OPEN BITCOIN SILENT PAYMENT (BIP-352 sp1...) QR VAULT`
-                    : `OPEN MONERO SUBADDRESS (888... RINGCT) QR VAULT`}
+                {!eligibility.canBroadcast
+                  ? 'SCAN-ONLY MODE (CONNECT & SIGN PROOF OF CONTROL TO SETTLE)'
+                  : linkConfig.settlementMode === 'EVM_SOCKET'
+                    ? activeQuote?.source === 'CCTP_V2_TESTNET'
+                      ? `SETTLE ${activeQuote.cctpRoute?.netAmountOutFormatted ?? linkConfig.amount} USDC NET VIA CIRCLE CCTP V2`
+                      : `SETTLE $${linkConfig.amount} VIA SOCKET V3 TO CAKE WALLET VAULT`
+                    : linkConfig.settlementMode === 'BTC_SILENT_PAYMENT'
+                      ? `OPEN BITCOIN SILENT PAYMENT (BIP-352 sp1...) QR VAULT`
+                      : `OPEN MONERO SUBADDRESS (888... RINGCT) QR VAULT`}
                 <ArrowRight className="h-4 w-4" />
               </button>
 
               <button
                 type="button"
+                disabled={!eligibility.canBroadcast}
                 onClick={() => setSettlementModalOpen(true)}
-                className="flex items-center justify-center gap-1.5 border border-[#D97736] bg-[#261810] px-4 py-3 font-mono text-xs font-semibold text-[#E5A93C] hover:bg-[#D97736] hover:text-[#0B0C0E]"
+                className="flex items-center justify-center gap-1.5 border border-[#D97736] bg-[#261810] px-4 py-3 font-mono text-xs font-semibold text-[#E5A93C] hover:bg-[#D97736] hover:text-[#0B0C0E] disabled:cursor-not-allowed disabled:opacity-40"
               >
                 <QrCode className="h-4 w-4" />
                 BTC / XMR QR VAULT

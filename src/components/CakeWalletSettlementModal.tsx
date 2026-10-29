@@ -31,6 +31,10 @@ import {
   getChainExplorerUrl,
   isTestnetChain,
 } from '@/lib/socket/tokens';
+import {
+  areAddressesMatchingSigner,
+  evaluatePayerQuoteAndBroadcastEligibility,
+} from '@/lib/session/proof-of-control';
 import { useCctpTransfer } from '@/hooks/useCctpTransfer';
 import type { VaultSettlementMode } from '@/types/veilpay';
 
@@ -39,6 +43,9 @@ export function CakeWalletSettlementModal() {
     settlementModalOpen,
     setSettlementModalOpen,
     linkConfig,
+    activePersonaId,
+    activePayerAddress,
+    proofOfControlToken,
     payerChainId,
     setVaultMode,
     activeScan,
@@ -171,7 +178,30 @@ export function CakeWalletSettlementModal() {
     }, 1800);
   };
 
+  const signerMatchesScannedWallet = areAddressesMatchingSigner(
+    connectedWallet,
+    activeScan.targetWallet
+  );
+  const eligibility = evaluatePayerQuoteAndBroadcastEligibility({
+    activePersonaId,
+    connectedAddress: connectedWallet,
+    scannedAddress: activePayerAddress,
+    proofOfControlToken,
+  });
+  const canBroadcastLiveWalletTx =
+    isConnected &&
+    Boolean(connectedWallet) &&
+    signerMatchesScannedWallet &&
+    eligibility.canBroadcast;
+
   const handleBroadcastLiveWalletTx = async () => {
+    if (!canBroadcastLiveWalletTx) {
+      setBroadcastError(
+        eligibility.reason ??
+          'Connected wallet must match the scanned wallet and complete Proof of Control before broadcasting.'
+      );
+      return;
+    }
     if (!primaryRoute?.txData?.object) return;
     setBroadcastError(null);
     try {
@@ -564,13 +594,12 @@ export function CakeWalletSettlementModal() {
 
           <div className="flex flex-wrap items-center gap-2">
             {linkConfig.settlementMode === 'EVM_SOCKET' &&
-              isConnected &&
-              connectedWallet &&
+              canBroadcastLiveWalletTx &&
               primaryRoute?.txData?.object &&
               !isExceedingSafetyCap && (
                 <button
                   type="button"
-                  disabled={isBroadcastingTx}
+                  disabled={isBroadcastingTx || !canBroadcastLiveWalletTx}
                   onClick={handleBroadcastLiveWalletTx}
                   className="flex items-center gap-1.5 border border-[#D97736] bg-[#261810] px-3.5 py-2.5 font-mono text-xs font-bold text-[#E5A93C] transition-colors hover:bg-[#D97736] hover:text-[#0B0C0E] disabled:opacity-50"
                 >

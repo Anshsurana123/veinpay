@@ -31,13 +31,18 @@ import {
   SUPPORTED_EVM_CHAINS,
   toAtomicUnits,
 } from '@/lib/socket/tokens';
+import {
+  areAddressesMatchingSigner,
+  evaluatePayerQuoteAndBroadcastEligibility,
+} from '@/lib/session/proof-of-control';
 
 export type ActivePersonaId =
   | 'persona-1'
   | 'persona-2'
   | 'persona-3'
   | 'persona-4'
-  | 'custom';
+  | 'custom'
+  | 'reown-connected';
 
 export interface FeedLogEntry {
   id: string;
@@ -74,6 +79,9 @@ export interface VeilPayStoreState {
   customAddressInput: string;
   payerChainId: SupportedEvmChainId;
   payerTokenSymbol: 'USDC' | 'USDT' | 'ETH';
+  connectedWalletAddress: string | null;
+  proofOfControlToken: string | null;
+  proofOfControlVerifiedFor: string | null;
 
   // Firewall Scan, AIGI Receipt & SOCKET Quote
   activeScan: FirewallScanResult | null;
@@ -130,6 +138,11 @@ export interface VeilPayStoreState {
   // Payer Actions
   selectPersona: (personaId: ActivePersonaId, customAddress?: string) => void;
   setCustomAddressInput: (input: string) => void;
+  syncConnectedWallet: (address: string | null) => void;
+  setProofOfControl: (
+    token: string | null,
+    verifiedForAddress: string | null
+  ) => void;
   setPayerChainAndToken: (
     chainId: SupportedEvmChainId,
     tokenSymbol: 'USDC' | 'USDT' | 'ETH'
@@ -225,6 +238,9 @@ export const useVeilPayStore = create<VeilPayStoreState>((set, get) => ({
   customAddressInput: '',
   payerChainId: 42161,
   payerTokenSymbol: 'USDC',
+  connectedWalletAddress: null,
+  proofOfControlToken: null,
+  proofOfControlVerifiedFor: null,
 
   activeScan: null,
   activeReceipt: null,
@@ -371,11 +387,32 @@ export const useVeilPayStore = create<VeilPayStoreState>((set, get) => ({
   },
 
   selectPersona: (personaId, customAddress) => {
-    const isTestnet = get().networkEnv === 'TESTNET';
-    if (personaId === 'custom' && customAddress) {
+    const state = get();
+    const isTestnet = state.networkEnv === 'TESTNET';
+    if (personaId === 'reown-connected' && customAddress) {
+      const addr = customAddress.trim();
+      const keepProof = areAddressesMatchingSigner(
+        state.proofOfControlVerifiedFor,
+        addr
+      );
+      set({
+        activePersonaId: 'reown-connected',
+        activePayerAddress: addr,
+        proofOfControlToken: keepProof ? state.proofOfControlToken : null,
+        proofOfControlVerifiedFor: keepProof
+          ? state.proofOfControlVerifiedFor
+          : null,
+        activeQuote: null,
+        selectedGraphNodeId: null,
+        selectedGraphEdgeId: null,
+      });
+    } else if (personaId === 'custom' && customAddress) {
       set({
         activePersonaId: 'custom',
         activePayerAddress: customAddress.trim(),
+        proofOfControlToken: null,
+        proofOfControlVerifiedFor: null,
+        activeQuote: null,
         selectedGraphNodeId: null,
         selectedGraphEdgeId: null,
       });
@@ -392,6 +429,9 @@ export const useVeilPayStore = create<VeilPayStoreState>((set, get) => ({
         activePayerAddress: found.address,
         payerChainId: targetChainId,
         payerTokenSymbol: found.defaultTokenSymbol,
+        proofOfControlToken: null,
+        proofOfControlVerifiedFor: null,
+        activeQuote: null,
         selectedGraphNodeId: null,
         selectedGraphEdgeId: null,
       });
@@ -401,11 +441,38 @@ export const useVeilPayStore = create<VeilPayStoreState>((set, get) => ({
 
   setCustomAddressInput: (input) => set({ customAddressInput: input }),
 
+  syncConnectedWallet: (address) => {
+    const state = get();
+    const cleaned = address?.trim() || null;
+    const stillMatchesProof = areAddressesMatchingSigner(
+      cleaned,
+      state.proofOfControlVerifiedFor
+    );
+    set({
+      connectedWalletAddress: cleaned,
+      proofOfControlToken: stillMatchesProof ? state.proofOfControlToken : null,
+      proofOfControlVerifiedFor: stillMatchesProof
+        ? state.proofOfControlVerifiedFor
+        : null,
+      activeQuote: stillMatchesProof ? state.activeQuote : null,
+    });
+  },
+
+  setProofOfControl: (token, verifiedForAddress) => {
+    set({
+      proofOfControlToken: token,
+      proofOfControlVerifiedFor: verifiedForAddress?.trim() || null,
+    });
+  },
+
   setPayerChainAndToken: (chainId, tokenSymbol) => {
     set({
       networkEnv: isTestnetChain(chainId) ? 'TESTNET' : 'MAINNET',
       payerChainId: chainId,
       payerTokenSymbol: tokenSymbol,
+      proofOfControlToken: null,
+      proofOfControlVerifiedFor: null,
+      activeQuote: null,
     });
     void get().runFirewallAndQuotePipeline();
   },
@@ -434,6 +501,7 @@ export const useVeilPayStore = create<VeilPayStoreState>((set, get) => ({
           policy: linkConfig.policy,
           crawlSettings,
           includeGemini: false,
+          proofOfControlToken: state.proofOfControlToken,
         }),
       });
 
@@ -456,8 +524,21 @@ export const useVeilPayStore = create<VeilPayStoreState>((set, get) => ({
           : prev.totalThreatsIntercepted,
       }));
 
-      // Step 3: ONLY IF firewall unlocked SOCKET AND socketAutoBridgeEnabled is true, fetch SOCKET V3 Quote
-      if (scan.socketUnlocked && linkConfig.policy.socketAutoBridgeEnabled) {
+      // Issue 2 Rule: Personas and pasted addresses stay scan-only (never get a quote or broadcast).
+      // Only fetch a quote when connected wallet == scanned wallet AND proofOfControlToken is verified.
+      const latestState = get();
+      const eligibility = evaluatePayerQuoteAndBroadcastEligibility({
+        activePersonaId: latestState.activePersonaId,
+        connectedAddress: latestState.connectedWalletAddress,
+        scannedAddress: targetWallet,
+        proofOfControlToken: latestState.proofOfControlToken,
+      });
+
+      if (
+        scan.socketUnlocked &&
+        linkConfig.policy.socketAutoBridgeEnabled &&
+        eligibility.canQuote
+      ) {
         set({ isLoadingQuote: true });
 
         const fromTokenCfg = EVM_TOKEN_REGISTRY[payerTokenSymbol];
@@ -490,6 +571,7 @@ export const useVeilPayStore = create<VeilPayStoreState>((set, get) => ({
           cleanLinkEnabled: String(linkConfig.policy.cleanLinkEnabled),
           unbundleEnabled: String(linkConfig.policy.unbundleEnabled),
           sybilBlockThreshold: String(linkConfig.policy.sybilBlockThreshold),
+          proofOfControlToken: latestState.proofOfControlToken ?? '',
         });
 
         const quoteRes = await fetch(`/api/socket/quote?${qs.toString()}`);

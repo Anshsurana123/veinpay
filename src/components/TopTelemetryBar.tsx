@@ -29,14 +29,18 @@ export function TopTelemetryBar() {
     setViewLayout,
     setSettingsDrawerOpen,
     selectPersona,
+    syncConnectedWallet,
     linkConfig,
   } = useVeilPayStore();
 
   useEffect(() => {
     if (isConnected && address) {
-      selectPersona('custom', address);
+      syncConnectedWallet(address);
+      selectPersona('reown-connected', address);
+    } else {
+      syncConnectedWallet(null);
     }
-  }, [isConnected, address, selectPersona]);
+  }, [isConnected, address, selectPersona, syncConnectedWallet]);
 
   const sourceLabel =
     activeScan?.executionSource === 'TIGERGRAPH_RESTPP_LIVE'
