@@ -1,103 +1,66 @@
 @import "tailwindcss";
 
 @theme {
-  --color-carbon-950: #0B0C0E;
-  --color-carbon-900: #131519;
-  --color-carbon-850: #16191E;
-  --color-carbon-800: #1A1D23;
-  --color-carbon-700: #262A33;
-  --color-carbon-600: #383E4C;
+  --color-canvas: #0f1a21;
+  --color-surface: #16252f;
+  --color-raised: #1c2f3b;
+  --color-line: #27404f;
+  --color-text-main: #eaf0f3;
+  --color-text-muted: #8ea5b4;
+  --color-ivory: #efe6d2;
+  --color-ink: #14212a;
+  --color-mint: #7fd6b0;
+  --color-coral: #f28b7b;
+  --color-amber: #e8c06a;
 
-  --color-alabaster: #F3F1EC;
-  --color-pewter: #9499A3;
-  --color-slate-dim: #636875;
-
-  --color-copper: #D97736;
-  --color-copper-hover: #E68545;
-  --color-copper-bg: #2A190E;
-  --color-gold: #E5A93C;
-  --color-gold-bg: #2B210E;
-
-  --color-jade: #1F9D68;
-  --color-jade-bg: #0E291E;
-
-  --color-ochre: #D99B26;
-  --color-ochre-bg: #2B210D;
-
-  --color-vermilion: #D6453A;
-  --color-vermilion-bg: #2D1412;
-
-  --font-sans: var(--font-plus-jakarta), system-ui, -apple-system, sans-serif;
-  --font-mono: var(--font-jetbrains-mono), ui-monospace, SFMono-Regular, monospace;
+  --font-serif: var(--font-serif), 'Fraunces', Georgia, serif;
+  --font-sans: var(--font-sans), 'DM Sans', system-ui, sans-serif;
+  --font-mono: var(--font-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
 :root {
   color-scheme: dark;
-  --vp-bg-canvas: #0B0C0E;
-  --vp-bg-panel: #131519;
-  --vp-bg-card: #1A1D23;
-  --vp-border: #262A33;
-  --vp-border-strong: #383E4C;
-  --vp-text-primary: #F3F1EC;
-  --vp-text-muted: #9499A3;
-  --vp-text-dim: #636875;
-  --vp-accent-copper: #D97736;
-  --vp-accent-gold: #E5A93C;
-  --vp-status-clean: #1F9D68;
-  --vp-status-clean-bg: #0E291E;
-  --vp-status-warn: #D99B26;
-  --vp-status-warn-bg: #2B210D;
-  --vp-status-block: #D6453A;
-  --vp-status-block-bg: #2D1412;
+  --bg: #0f1a21;
+  --s: #16252f;
+  --r: #1c2f3b;
+  --l: #27404f;
+  --t: #eaf0f3;
+  --m: #8ea5b4;
+  --iv: #efe6d2;
+  --ink: #14212a;
+  --ok: #7fd6b0;
+  --bad: #f28b7b;
+  --wn: #e8c06a;
+  --se: var(--font-serif), 'Fraunces', Georgia, serif;
+  --sa: var(--font-sans), 'DM Sans', system-ui, sans-serif;
 }
 
 * {
-  border-color: #262A33;
+  box-sizing: border-box;
+  border-color: var(--l);
 }
 
-html,
 body {
-  background-color: #0B0C0E;
-  color: #F3F1EC;
-  font-family: var(--font-sans);
-  letter-spacing: -0.015em;
+  background: radial-gradient(1100px 480px at 50% -10%, #1a3040, var(--bg) 60%);
+  color: var(--t);
+  font-family: var(--sa);
+  letter-spacing: -0.01em;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-.font-mono,
-code,
-pre,
-.tabular-nums {
-  font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
-}
-
-/* Custom precision hardware scrollbars */
+/* Custom scrollbars */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
-
 ::-webkit-scrollbar-track {
-  background: #0B0C0E;
+  background: var(--bg);
 }
-
 ::-webkit-scrollbar-thumb {
-  background: #262A33;
+  background: var(--l);
   border-radius: 3px;
 }
-
 ::-webkit-scrollbar-thumb:hover {
-  background: #383E4C;
-}
-
-/* Subtle tactical grid pattern for graph canvas */
-.vp-graph-grid {
-  background-color: #0B0C0E;
-  background-image:
-    radial-gradient(#262A33 1px, transparent 1px),
-    linear-gradient(to right, rgba(38, 42, 51, 0.32) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(38, 42, 51, 0.32) 1px, transparent 1px);
-  background-size: 20px 20px, 80px 80px, 80px 80px;
+  background: var(--m);
 }

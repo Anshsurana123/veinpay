@@ -1,63 +1,59 @@
-# VeilPay — Institutional Hardware & Financial Terminal Design System
+# VeilPay — Calm, Task-Focused Financial Security Design System
 
-> **CRITICAL RULE:** Section 1.3 and Section 3 of the Execution Mandate **strictly supersede** the legacy color notes in `project brief.txt`. Purple, indigo, violet, lavender, or magenta colors (`#6366F1`, `#8B5CF6`, `purple-*`, `indigo-*`, `violet-*`) are **STRICTLY BANNED** across the entire repository.
-
----
-
-## 1. Aesthetic Philosophy: Luxury Swiss Instrument & Financial Terminal
-
-VeilPay is designed as a tactile, high-precision **Institutional Hardware / Financial Security Terminal** inspired by **Teenage Engineering OP-1 / TX-6**, **Linear**, and **Bloomberg Terminal**:
-- **Zero Marketing Fluff:** No hero banners, no 3-column emoji cards, no fake testimonials, no decorative blobs, no glassmorphic neon gradients.
-- **Structural Precision:** Crisp `1px solid #262A33` hairline borders, subtle anodized surface elevation, mechanical segmented controls, LED status indicators, and real-time tabular telemetry (`tabular-nums`).
+> **CRITICAL RULE:** Purple, indigo, violet, lavender, or magenta colors (`#6366F1`, `#8B5CF6`, `purple-*`, `indigo-*`, `violet-*`) are **STRICTLY BANNED** across the entire repository.
 
 ---
 
-## 2. Locked Color Token System (Warm Carbon, Burnished Copper & Botanical Jade)
+## 1. Aesthetic Philosophy: Calm, Plain-Language & Task-Focused
+
+VeilPay's redesign transitions away from dense, all-caps monospace screens to a **calm, human, task-focused financial security interface**:
+- **Plain Language Over Jargon:** Instead of raw enum codes, the UI presents human sentences ("Your wallet is clear to pay", "This payment is blocked: linked wallet group", "Paying ansh-audit").
+- **Task Hierarchy:** Single-focus layout with top tabs (`Pay`, `Create link`, `Activity`, `Safe send`), removing cluttered split-screens.
+- **Organic Typography:** Fraunces (soft, editorial display serif) for logos, titles, and amounts paired with DM Sans for readable, accessible interface copy.
+
+---
+
+## 2. Locked Color Token System
 
 | Semantic Token | Hex Code | CSS Custom Property | Usage |
 | :--- | :--- | :--- | :--- |
-| **Canvas Primary** | `#0B0C0E` | `--vp-bg-canvas` | Deep Warm Carbon root background (zero blue-light harshness). |
-| **Surface Elevated** | `#131519` | `--vp-bg-panel` | Rich Graphite Slate panel & module container background. |
-| **Surface Interactive** | `#1A1D23` | `--vp-bg-card` | Interactive inputs, segmented controls, and hoverable cards. |
-| **Border Hairline** | `#262A33` | `--vp-border` | Structural `1px solid` hairline dividers and card borders. |
-| **Border Focus / Active** | `#383E4C` | `--vp-border-strong` | Active input borders and emphasized terminal cells. |
-| **Text Primary** | `#F3F1EC` | `--vp-text-primary` | Warm Alabaster Ivory primary copy and headers (never harsh `#FFFFFF`). |
-| **Text Secondary / Muted** | `#9499A3` | `--vp-text-muted` | Warm Pewter labels, column headers, and secondary metadata. |
-| **Text Dim / Technical** | `#636875` | `--vp-text-dim` | Inactive ticks, byte offsets, and subtle hints. |
-| **Brand & Cake Wallet Accent** | `#D97736` | `--vp-accent-copper` | Burnished Copper / Terracotta primary brand & Cake Wallet vault accent. |
-| **Brand Secondary Accent** | `#E5A93C` | `--vp-accent-gold` | Warm Bullion Gold secondary highlight & active selector indicator. |
-| **Status Verified Clean** | `#1F9D68` | `--vp-status-clean` | Deep Botanical Jade for `VERIFIED_CLEAN`, cleared hops, and active SOCKET routes. |
-| **Status Clean Fill** | `#0E291E` | `--vp-status-clean-bg` | Subtle badge background for verified states. |
-| **Status Sybil / Warning** | `#D99B26` | `--vp-status-warn` | Rich Ochre Amber for `Unbundle` sybil clusters, prefix/suffix matches, and bypass advisories. |
-| **Status Warning Fill** | `#2B210D` | `--vp-status-warn-bg` | Subtle badge background for warning states. |
-| **Status Firewall Block** | `#D6453A` | `--vp-status-block` | Oxide Vermilion Red for `CleanLink` drainer taint, `PoisonGraph` intercepts, and forged middle bytes. |
-| **Status Block Fill** | `#2D1412` | `--vp-status-block-bg` | Subtle badge background for blocked/intercepted states. |
+| **Canvas Background** | `#0F1A21` | `--bg` | Deep slate canvas with a subtle radial top glow (`#1a3040`). |
+| **Surface Card** | `#16252F` | `--s` | Primary surface container background (cards, sheets, inputs). |
+| **Raised Interactive** | `#1C2F3B` | `--r` | Hover states, active segmented buttons, secondary buttons. |
+| **Line & Hairline Border** | `#27404F` | `--l` | Structural dividers, card borders, progress ticks. |
+| **Text Primary** | `#EAF0F3` | `--t` | High-contrast alabaster copy for headings and primary content. |
+| **Text Muted** | `#8EA5B4` | `--m` | Subtitles, labels, currency tags, and timestamps. |
+| **Ivory Action** | `#EFE6D2` | `--iv` | Warm ivory for primary action buttons, active pills, and brand badges. |
+| **Dark Ink** | `#14212A` | `--ink` | High-contrast dark text inside ivory buttons and badges. |
+| **Status Cleared (Mint)** | `#7FD6B0` | `--ok` | Verified clean wallets, successful settlements, active links. |
+| **Status Blocked (Coral)** | `#F28B7B` | `--bad` | Intercepted drainers, sybil rings, address poisoning alerts. |
+| **Status Caution (Amber)** | `#E8C06A` | `--wn` | Sybil warning advisories, testnet sandbox banners, inconclusive notes. |
 
 ---
 
 ## 3. Tailwind CSS v4 Configuration (`src/app/globals.css`)
 
-Because Next.js 16 ships with **Tailwind CSS v4.3+**, we use native CSS-first `@import "tailwindcss";` and `@theme` blocks in `src/app/globals.css` (do **not** mix deprecated Tailwind v3 `tailwind.config.js` plugins with v4):
-
 ```css
 @import "tailwindcss";
 
 @theme {
-  --color-carbon-950: #0B0C0E;
-  --color-carbon-900: #131519;
-  --color-carbon-800: #1A1D23;
-  --color-carbon-700: #262A33;
-  --color-carbon-600: #383E4C;
+  --color-canvas: #0f1a21;
+  --color-surface: #16252f;
+  --color-raised: #1c2f3b;
+  --color-line: #27404f;
+  --color-text-main: #eaf0f3;
+  --color-text-muted: #8ea5b4;
+  --color-ivory: #efe6d2;
+  --color-ink: #14212a;
+  --color-mint: #7fd6b0;
+  --color-coral: #f28b7b;
+  --color-amber: #e8c06a;
 
-  --color-alabaster: #F3F1EC;
-  --color-pewter: #9499A3;
-  --color-slate-dim: #636875;
-
-  --color-copper: #D97736;
-  --color-copper-bg: #2A190E;
-  --color-gold: #E5A93C;
-
-  --color-jade: #1F9D68;
+  --font-serif: var(--font-serif), 'Fraunces', Georgia, serif;
+  --font-sans: var(--font-sans), 'DM Sans', system-ui, sans-serif;
+  --font-mono: var(--font-mono), ui-monospace, SFMono-Regular, monospace;
+}
+```
   --color-jade-bg: #0E291E;
 
   --color-ochre: #D99B26;

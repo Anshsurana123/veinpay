@@ -86,6 +86,8 @@ export interface FeedLogEntry {
 export interface VeilPayStoreState {
   // UI Navigation
   networkEnv: 'MAINNET' | 'TESTNET';
+  activeTab: 'pay' | 'create' | 'activity' | 'safesend';
+  judgeMode: boolean;
   activeLeftTab: 'LINK_BUILDER' | 'SAFE_SEND' | 'INCOMING_FEED';
   viewLayout: 'SPLIT' | 'RECEIVER_ONLY' | 'PAYER_ONLY';
   settingsDrawerOpen: boolean;
@@ -144,6 +146,9 @@ export interface VeilPayStoreState {
 
   // Actions
   setNetworkEnv: (env: 'MAINNET' | 'TESTNET') => void;
+  setActiveTab: (tab: 'pay' | 'create' | 'activity' | 'safesend') => void;
+  setJudgeMode: (enabled: boolean) => void;
+  toggleJudgeMode: () => void;
   setActiveLeftTab: (tab: 'LINK_BUILDER' | 'SAFE_SEND' | 'INCOMING_FEED') => void;
   setViewLayout: (layout: 'SPLIT' | 'RECEIVER_ONLY' | 'PAYER_ONLY') => void;
   setSettingsDrawerOpen: (open: boolean) => void;
@@ -210,6 +215,8 @@ export interface VeilPayStoreState {
 
 export const useVeilPayStore = create<VeilPayStoreState>((set, get) => ({
   networkEnv: 'MAINNET',
+  activeTab: 'pay',
+  judgeMode: false,
   activeLeftTab: 'LINK_BUILDER',
   viewLayout: 'SPLIT',
   settingsDrawerOpen: false,
@@ -287,6 +294,9 @@ export const useVeilPayStore = create<VeilPayStoreState>((set, get) => ({
     void get().runFirewallAndQuotePipeline();
   },
 
+  setActiveTab: (tab) => set({ activeTab: tab }),
+  setJudgeMode: (enabled) => set({ judgeMode: enabled }),
+  toggleJudgeMode: () => set((state) => ({ judgeMode: !state.judgeMode })),
   setActiveLeftTab: (tab) => set({ activeLeftTab: tab }),
   setViewLayout: (layout) => set({ viewLayout: layout }),
   setSettingsDrawerOpen: (open) => set({ settingsDrawerOpen: open }),
