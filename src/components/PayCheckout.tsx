@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { isAddress } from 'viem';
 import { useAccount, useSignMessage } from 'wagmi';
 import { useVeilPayStore, type ActivePersonaId } from '@/store/veilpay-store';
@@ -38,22 +38,37 @@ export function PayCheckout() {
     judgeMode,
     selectPersona,
     setCustomAddressInput,
+    syncConnectedWallet,
     setPayerChainAndToken,
     setProofOfControl,
     runFirewallAndQuotePipeline,
     setSettlementModalOpen,
     setVaultMode,
+    updateFirewallPolicy,
   } = useVeilPayStore();
 
   const { isConnected, address: wagmiAddress } = useAccount();
   const { signMessageAsync, isPending: isSigningProof } = useSignMessage();
   const [proofError, setProofError] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [demoState, setDemoState] = useState('');
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 2500);
   };
+
+  // Sync connected wallet when wagmi changes
+  useEffect(() => {
+    syncConnectedWallet(isConnected && wagmiAddress ? wagmiAddress : null);
+  }, [isConnected, wagmiAddress, syncConnectedWallet]);
+
+  // Initial trigger to run scan & quote pipeline on mount
+  useEffect(() => {
+    if (!activeScan && !isScanning) {
+      void runFirewallAndQuotePipeline();
+    }
+  }, [activeScan, isScanning, runFirewallAndQuotePipeline]);
 
   const isTestnet = networkEnv === 'TESTNET';
   const availableChains = SUPPORTED_EVM_CHAINS.filter(
@@ -95,6 +110,38 @@ export function PayCheckout() {
     }
     selectPersona('custom', trimmed);
     void runFirewallAndQuotePipeline();
+  };
+
+  const handleDemoStateSelect = (val: string) => {
+    setDemoState(val);
+    if (!val) {
+      // Auto from wallet
+      selectPersona('persona-1');
+      void runFirewallAndQuotePipeline();
+      return;
+    }
+
+    if (val === 'warn') {
+      selectPersona('persona-3');
+      updateFirewallPolicy({ sybilBlockThreshold: 30 }); // Allow cluster of 24 with warning
+      void runFirewallAndQuotePipeline();
+    } else if (val === 'poison') {
+      selectPersona('custom', '0x71C894a1B2c3D4e5F6A7b8C9d0e1F2a30000489B');
+      void runFirewallAndQuotePipeline();
+    } else if (val === 'bypass') {
+      selectPersona('persona-2');
+      updateFirewallPolicy({ firewallEnabled: false });
+      void runFirewallAndQuotePipeline();
+    } else if (val === 'error') {
+      useVeilPayStore.setState({
+        scanError:
+          'The history service didn’t respond in time. Nothing was sent. Retry the scan, or try again in a minute.',
+        isScanning: false,
+      });
+    } else if (val === 'fallback') {
+      selectPersona('persona-1');
+      void runFirewallAndQuotePipeline();
+    }
   };
 
   const handleSignProofOfControl = async () => {
@@ -171,12 +218,12 @@ export function PayCheckout() {
       <div className="bg-[#16252f] border border-[#27404f] rounded-[20px] p-6 text-center">
         <div className="text-sm text-[#8ea5b4]">
           Paying{' '}
-          <b className="text-[#eaf0f3] font-medium">
-            {linkConfig.handle || 'recipient'}
+          <b className="text-[#eaf0f3] font-medium" id="hd">
+            {linkConfig.handle || 'ansh-audit'}
           </b>
         </div>
         <div className="font-serif text-[56px] leading-tight my-1 text-[#eaf0f3]">
-          ${Number(linkConfig.amount).toLocaleString(undefined, {
+          ${Number(linkConfig.amount || 250).toLocaleString(undefined, {
             minimumFractionDigits: 2,
             maximumFractionDigits: 2,
           })}
@@ -315,41 +362,39 @@ export function PayCheckout() {
           </div>
         )}
 
-        {/* Demo Persona Chips (Only in Judge Mode) */}
-        {judgeMode && (
-          <div className="mt-4 pt-3 border-t border-[#27404f]">
-            <div className="text-xs text-[#8ea5b4] mb-2">
-              Judge fixtures: test seeded topologies
-            </div>
-            <div className="flex gap-2 flex-wrap">
-              {WALLET_PERSONAS.map((p) => {
-                const isActive = activePersonaId === p.id;
-                let shortLabel = 'Clean whale';
-                if (p.id === 'persona-2') shortLabel = 'Drainer, 2 hops';
-                if (p.id === 'persona-3') shortLabel = '24-wallet sybil ring';
-                if (p.id === 'persona-4') shortLabel = 'Deep taint, 4 hops';
-
-                return (
-                  <button
-                    key={p.id}
-                    type="button"
-                    onClick={() => {
-                      selectPersona(p.id as ActivePersonaId);
-                      void runFirewallAndQuotePipeline();
-                    }}
-                    className={`border rounded-full py-1 px-3 text-xs cursor-pointer transition-colors ${
-                      isActive
-                        ? 'border-[#efe6d2] text-[#efe6d2] bg-[#1c2f3b]'
-                        : 'border-[#27404f] text-[#8ea5b4] hover:text-[#eaf0f3]'
-                    }`}
-                  >
-                    {shortLabel}
-                  </button>
-                );
-              })}
-            </div>
+        {/* Demo Persona Chips (Always accessible or when Judge Mode is enabled) */}
+        <div className="mt-4 pt-3 border-t border-[#27404f]">
+          <div className="text-xs text-[#8ea5b4] mb-2">
+            Try a demo wallet
           </div>
-        )}
+          <div className="flex gap-2 flex-wrap">
+            {WALLET_PERSONAS.map((p) => {
+              const isActive = activePersonaId === p.id;
+              let shortLabel = 'Clean whale';
+              if (p.id === 'persona-2') shortLabel = 'Drainer, 2 hops';
+              if (p.id === 'persona-3') shortLabel = '24-wallet sybil ring';
+              if (p.id === 'persona-4') shortLabel = 'Deep taint, 4 hops';
+
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => {
+                    selectPersona(p.id as ActivePersonaId);
+                    void runFirewallAndQuotePipeline();
+                  }}
+                  className={`border rounded-full py-1 px-3 text-xs cursor-pointer transition-colors ${
+                    isActive
+                      ? 'border-[#efe6d2] text-[#efe6d2] bg-[#1c2f3b]'
+                      : 'border-[#27404f] text-[#8ea5b4] hover:text-[#eaf0f3]'
+                  }`}
+                >
+                  {shortLabel}
+                </button>
+              );
+            })}
+          </div>
+        </div>
       </div>
 
       {/* 5. Scanner Progress Steps */}
@@ -402,7 +447,7 @@ export function PayCheckout() {
         className="w-full py-4 text-[16.5px] rounded-2xl font-semibold cursor-pointer border-0 bg-[#efe6d2] text-[#14212a] hover:opacity-95 transition-opacity disabled:bg-[#1c2f3b] disabled:text-[#8ea5b4] disabled:cursor-not-allowed shadow-lg"
       >
         {canPay
-          ? `Pay $${Number(linkConfig.amount).toLocaleString(undefined, {
+          ? `Pay $${Number(linkConfig.amount || 250).toLocaleString(undefined, {
               minimumFractionDigits: 2,
             })}`
           : isBlocked
@@ -423,6 +468,23 @@ export function PayCheckout() {
       >
         Pay with Bitcoin or Monero instead
       </button>
+
+      {/* 11. Demo State Selector (Matching Mockup & Images) */}
+      <div className="text-center text-xs text-[#8ea5b4] mt-4 mb-2">
+        Demo state:{' '}
+        <select
+          value={demoState}
+          onChange={(e) => handleDemoStateSelect(e.target.value)}
+          className="bg-[#0f1a21] border border-[#27404f] rounded-lg px-2.5 py-1 text-xs text-[#eaf0f3] outline-none ml-1.5 inline-block focus:border-[#efe6d2]"
+        >
+          <option value="">Auto from wallet</option>
+          <option value="warn">warn</option>
+          <option value="poison">poison</option>
+          <option value="bypass">bypass</option>
+          <option value="error">error</option>
+          <option value="fallback">fallback</option>
+        </select>
+      </div>
 
       {/* Toast Notification */}
       {toastMessage && (

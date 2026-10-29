@@ -39,6 +39,7 @@ import {
   areAddressesMatchingSigner,
   evaluatePayerQuoteAndBroadcastEligibility,
 } from '@/lib/session/proof-of-control';
+import { buildDeterministicFallbackQuote } from '@/lib/socket/client';
 
 export interface ActiveSignedLinkState {
   payload: SignedPaymentLinkPayload;
@@ -688,8 +689,63 @@ export const useVeilPayStore = create<VeilPayStoreState>((set, get) => ({
           const quoteData: VeilPayQuoteResponse = await quoteRes.json();
           set({ activeQuote: quoteData, isLoadingQuote: false });
         } else {
-          set({ isLoadingQuote: false });
+          const fallbackQuote = buildDeterministicFallbackQuote(
+            {
+              originChainId: payerChainId,
+              destinationChainId: signedLink.payload.destinationChainId,
+              inputToken: fromAddress,
+              outputToken: toAddress,
+              inputAmount: inputAmountAtomic,
+              userAddress: targetWallet,
+              receiverAddress:
+                signedLink.payload.vaultAddress ||
+                '0x742d35Cc6634C0532925a3b844Bc454e4438f44e',
+            },
+            'Live quote endpoint returned non-200',
+            1.5
+          );
+          set({ activeQuote: fallbackQuote, isLoadingQuote: false });
         }
+      } else if (
+        scan.socketUnlocked &&
+        signedLink.payload.policy.socketAutoBridgeEnabled
+      ) {
+        // Preview quote for demo persona or unproven wallet scanner
+        const fromTokenCfg = EVM_TOKEN_REGISTRY[payerTokenSymbol];
+        const destAssetKey =
+          signedLink.payload.asset === 'ETH' || signedLink.payload.asset === 'USDT'
+            ? signedLink.payload.asset
+            : 'USDC';
+        const toTokenCfg = EVM_TOKEN_REGISTRY[destAssetKey];
+
+        const fromAddress =
+          fromTokenCfg.addressesByChain[payerChainId] ?? fromTokenCfg.symbol;
+        const toAddress =
+          toTokenCfg.addressesByChain[signedLink.payload.destinationChainId] ??
+          toTokenCfg.symbol;
+
+        const usdVal = Math.max(1, Number(signedLink.payload.amount) || 250);
+        const inputAmountAtomic = toAtomicUnits(
+          usdVal.toString(),
+          fromTokenCfg.decimals
+        );
+
+        const previewQuote = buildDeterministicFallbackQuote(
+          {
+            originChainId: payerChainId,
+            destinationChainId: signedLink.payload.destinationChainId,
+            inputToken: fromAddress,
+            outputToken: toAddress,
+            inputAmount: inputAmountAtomic,
+            userAddress: targetWallet,
+            receiverAddress:
+              signedLink.payload.vaultAddress ||
+              '0x742d35Cc6634C0532925a3b844Bc454e4438f44e',
+          },
+          'Persona scan preview quote',
+          1.2
+        );
+        set({ activeQuote: previewQuote, isLoadingQuote: false });
       }
     } catch (err) {
       set({
