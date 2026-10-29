@@ -8,6 +8,11 @@ import {
 } from '@/lib/socket/client';
 import { computeCctpV2Quote } from '@/lib/cctp/quote';
 import { isSupportedCctpTestnetChain } from '@/lib/cctp/contracts';
+import { runFullScan } from '@/lib/graph/full-scan';
+import {
+  getVerifiedLinkPolicy,
+  verifyScanAttestation,
+} from '@/lib/security/attestation';
 import { isTestnetChain, resolveTokenByAddressOrSymbol } from '@/lib/socket/tokens';
 import { CctpFinalityMode } from '@/types/veilpay';
 
@@ -37,11 +42,17 @@ export async function GET(request: NextRequest) {
     '25000000'
   ).trim();
   const userAddress = (searchParams.get('userAddress') ?? '').trim();
+  const linkId = (searchParams.get('linkId') ?? 'default').trim() || 'default';
+  const verifiedLink = getVerifiedLinkPolicy(linkId);
   const receiverAddress = (
+    verifiedLink.vaultAddress ??
     searchParams.get('receiverAddress') ??
     searchParams.get('recipient') ??
     ''
   ).trim();
+  const scanAttestation =
+    searchParams.get('scanAttestation') ??
+    request.headers.get('x-veilpay-scan-attestation');
   const finalityModeParam = (searchParams.get('finalityMode') ?? 'FAST').toUpperCase();
   const useForwardingService = searchParams.get('useForwardingService') === 'true';
 
@@ -66,6 +77,49 @@ export async function GET(request: NextRequest) {
         elapsedMs
       ),
       { status: 400 }
+    );
+  }
+
+  // Enforce server scanAttestation + proofOfControl + runFullScan() gate
+  const attestationCheck = verifyScanAttestation(scanAttestation, {
+    payer: userAddress,
+    linkId: verifiedLink.linkId,
+    policy: verifiedLink.policy,
+    requireProofOfControl: true,
+  });
+
+  if (!attestationCheck.valid || !attestationCheck.payload?.proofOfControl) {
+    return NextResponse.json(
+      {
+        success: false,
+        statusCode: 403,
+        error: 'ATTESTATION_OR_PROOF_OF_CONTROL_REQUIRED',
+        message:
+          attestationCheck.reason ??
+          'Valid server scanAttestation with proofOfControl=true is required to build a CCTP V2 route.',
+      },
+      { status: 403 }
+    );
+  }
+
+  const { scan, receipt } = await runFullScan({
+    targetWallet: userAddress,
+    merchantWallet: receiverAddress,
+    chainId: originChainId,
+    policy: verifiedLink.policy,
+  });
+
+  if (!scan.socketUnlocked) {
+    return NextResponse.json(
+      {
+        success: false,
+        statusCode: 403,
+        error: 'FIREWALL_INTERCEPTED',
+        message: `CCTP V2 route locked by VeilPay ${scan.maxHopsQueried}-Hop Graph Firewall (${scan.verdict}).`,
+        verdict: scan.verdict,
+        receipt,
+      },
+      { status: 403 }
     );
   }
 

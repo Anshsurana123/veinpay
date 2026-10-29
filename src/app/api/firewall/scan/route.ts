@@ -1,14 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import type { FirewallPolicyConfig, HopDepth, LiveCrawlSettings } from '@/types/veilpay';
 import { DEFAULT_CAKE_VAULT_ADDRESSES } from '@/lib/validators/address';
-import { resolveCanonicalWalletInput, runVeilPayFirewallTraversal } from '@/lib/graph/engine';
-import { tryExecuteLiveTigerGraphQuery } from '@/lib/graph/tigergraph-client';
-import { crawlLiveAddressAndScan } from '@/lib/graph/live-crawler';
-import { buildSeededGraphDataset } from '@/lib/graph/seed-topologies';
+import { runFullScan } from '@/lib/graph/full-scan';
+import { verifyProofOfControlToken } from '@/lib/session/proof-of-control';
 import {
-  generateAigiForensicReceipt,
-  maybeEnrichReceiptWithGemini,
-} from '@/lib/aigi/verdict';
+  getVerifiedLinkPolicy,
+  signScanAttestation,
+} from '@/lib/security/attestation';
 
 function parsePolicy(raw: Record<string, unknown>): FirewallPolicyConfig {
   const rawHops = Number(raw.maxHops ?? raw.max_hops ?? 3);
@@ -17,18 +15,22 @@ function parsePolicy(raw: Record<string, unknown>): FirewallPolicyConfig {
   return {
     firewallEnabled:
       raw.firewallEnabled !== undefined
-        ? Boolean(raw.firewallEnabled)
+        ? raw.firewallEnabled !== 'false' && Boolean(raw.firewallEnabled)
         : raw.firewall_enabled !== undefined
-          ? Boolean(raw.firewall_enabled)
+          ? raw.firewall_enabled !== 'false' && Boolean(raw.firewall_enabled)
           : true,
     maxHops: clampedHops,
     cleanLinkEnabled:
-      raw.cleanLinkEnabled !== undefined ? Boolean(raw.cleanLinkEnabled) : true,
+      raw.cleanLinkEnabled !== undefined
+        ? raw.cleanLinkEnabled !== 'false' && Boolean(raw.cleanLinkEnabled)
+        : true,
     unbundleEnabled:
-      raw.unbundleEnabled !== undefined ? Boolean(raw.unbundleEnabled) : true,
+      raw.unbundleEnabled !== undefined
+        ? raw.unbundleEnabled !== 'false' && Boolean(raw.unbundleEnabled)
+        : true,
     socketAutoBridgeEnabled:
       raw.socketAutoBridgeEnabled !== undefined
-        ? Boolean(raw.socketAutoBridgeEnabled)
+        ? raw.socketAutoBridgeEnabled !== 'false' && Boolean(raw.socketAutoBridgeEnabled)
         : true,
     sybilBlockThreshold: Number(raw.sybilBlockThreshold ?? 10) || 10,
   };
@@ -38,61 +40,44 @@ async function handleScan(params: {
   targetWallet: string;
   merchantWallet: string;
   chainId: number;
+  linkId: string;
   policy: FirewallPolicyConfig;
   crawlSettings?: Partial<LiveCrawlSettings>;
   includeGemini?: boolean;
+  proofOfControlToken?: string | null;
 }) {
-  const canonicalTarget = resolveCanonicalWalletInput(params.targetWallet);
-  const canonicalMerchant = resolveCanonicalWalletInput(params.merchantWallet);
+  const { scan, receipt } = await runFullScan({
+    targetWallet: params.targetWallet,
+    merchantWallet: params.merchantWallet,
+    chainId: params.chainId,
+    policy: params.policy,
+    crawlSettings: params.crawlSettings,
+    includeGemini: params.includeGemini,
+  });
 
-  // 1. Try live TigerGraph 4.x RESTPP if configured
-  const liveTgResult = await tryExecuteLiveTigerGraphQuery({
-    targetWallet: canonicalTarget,
-    merchantWallet: canonicalMerchant,
+  const pocCheck = verifyProofOfControlToken(params.proofOfControlToken, {
+    scannedAddress: scan.targetWallet,
+    linkId: params.linkId,
+    chainId: params.chainId,
+  });
+
+  const proofOfControl = pocCheck.valid && pocCheck.payload?.proofOfControl === true;
+
+  const scanAttestation = signScanAttestation({
+    payer: scan.targetWallet,
+    linkId: params.linkId,
+    verdict: scan.verdict,
+    socketUnlocked: scan.socketUnlocked,
+    proofOfControl,
     policy: params.policy,
   });
 
-  if (liveTgResult) {
-    let receipt = generateAigiForensicReceipt(liveTgResult);
-    if (params.includeGemini) {
-      receipt = await maybeEnrichReceiptWithGemini(receipt);
-    }
-    return NextResponse.json({
-      success: true,
-      scan: liveTgResult,
-      receipt,
-    });
-  }
-
-  // 2. Check if target wallet is in the seeded graph dataset
-  const seeded = buildSeededGraphDataset();
-  const isSeeded = seeded.vertices.has(canonicalTarget.toLowerCase());
-
-  const scanResult = isSeeded
-    ? runVeilPayFirewallTraversal({
-        targetWallet: canonicalTarget,
-        merchantWallet: canonicalMerchant,
-        policy: params.policy,
-        customDataset: seeded,
-        executionSource: 'IN_MEMORY_GSQL_ENGINE',
-      })
-    : await crawlLiveAddressAndScan({
-        targetWallet: canonicalTarget,
-        merchantWallet: canonicalMerchant,
-        chainId: params.chainId,
-        policy: params.policy,
-        crawlSettings: params.crawlSettings,
-      });
-
-  let receipt = generateAigiForensicReceipt(scanResult);
-  if (params.includeGemini) {
-    receipt = await maybeEnrichReceiptWithGemini(receipt);
-  }
-
   return NextResponse.json({
     success: true,
-    scan: scanResult,
+    scan,
     receipt,
+    scanAttestation,
+    proofOfControl,
   });
 }
 
@@ -103,35 +88,33 @@ export async function GET(request: NextRequest) {
     sp.get('target_wallet') ||
     sp.get('wallet') ||
     '0x4F2a9c117034e8B1200499A1c3f88200000188E1';
+  const linkId = (sp.get('linkId') || 'default').trim();
+  const verifiedLink = getVerifiedLinkPolicy(linkId);
   const merchantWallet =
+    verifiedLink.vaultAddress ||
     sp.get('merchantWallet') ||
     sp.get('merchant_wallet') ||
     DEFAULT_CAKE_VAULT_ADDRESSES.EVM_SOCKET;
   const chainId = Number(sp.get('chainId') || 42161);
 
-  const policy = parsePolicy({
-    firewallEnabled:
-      sp.get('firewallEnabled') !== null
-        ? sp.get('firewallEnabled') !== 'false'
-        : true,
-    maxHops: sp.get('maxHops') ?? sp.get('max_hops') ?? 3,
-    cleanLinkEnabled:
-      sp.get('cleanLinkEnabled') !== null
-        ? sp.get('cleanLinkEnabled') !== 'false'
-        : true,
-    unbundleEnabled:
-      sp.get('unbundleEnabled') !== null
-        ? sp.get('unbundleEnabled') !== 'false'
-        : true,
-    sybilBlockThreshold: sp.get('sybilBlockThreshold') ?? 10,
-  });
+  const policy = sp.has('maxHops') || sp.has('firewallEnabled')
+    ? parsePolicy({
+        firewallEnabled: sp.get('firewallEnabled') ?? true,
+        maxHops: sp.get('maxHops') ?? sp.get('max_hops') ?? 3,
+        cleanLinkEnabled: sp.get('cleanLinkEnabled') ?? true,
+        unbundleEnabled: sp.get('unbundleEnabled') ?? true,
+        sybilBlockThreshold: sp.get('sybilBlockThreshold') ?? 10,
+      })
+    : verifiedLink.policy;
 
   return handleScan({
     targetWallet,
     merchantWallet,
     chainId,
+    linkId,
     policy,
     includeGemini: sp.get('includeGemini') === 'true',
+    proofOfControlToken: sp.get('proofOfControlToken'),
   });
 }
 
@@ -144,8 +127,11 @@ export async function POST(request: NextRequest) {
         body.wallet ??
         '0x4F2a9c117034e8B1200499A1c3f88200000188E1'
     );
+    const linkId = String(body.linkId ?? 'default').trim() || 'default';
+    const verifiedLink = getVerifiedLinkPolicy(linkId);
     const merchantWallet = String(
-      body.merchantWallet ??
+      verifiedLink.vaultAddress ??
+        body.merchantWallet ??
         body.merchant_wallet ??
         DEFAULT_CAKE_VAULT_ADDRESSES.EVM_SOCKET
     );
@@ -153,20 +139,26 @@ export async function POST(request: NextRequest) {
     const rawPolicy =
       body.policy && typeof body.policy === 'object'
         ? (body.policy as Record<string, unknown>)
-        : body;
-    const policy = parsePolicy(rawPolicy);
+        : null;
+    const policy = rawPolicy ? parsePolicy(rawPolicy) : verifiedLink.policy;
     const crawlSettings =
       body.crawlSettings && typeof body.crawlSettings === 'object'
         ? (body.crawlSettings as Partial<LiveCrawlSettings>)
         : undefined;
+    const proofOfControlToken =
+      typeof body.proofOfControlToken === 'string'
+        ? body.proofOfControlToken
+        : null;
 
     return handleScan({
       targetWallet,
       merchantWallet,
       chainId,
+      linkId,
       policy,
       crawlSettings,
       includeGemini: Boolean(body.includeGemini),
+      proofOfControlToken,
     });
   } catch (err) {
     return NextResponse.json(

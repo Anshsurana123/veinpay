@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import type { HopDepth } from '@/types/veilpay';
 import { DEFAULT_CAKE_VAULT_ADDRESSES } from '@/lib/validators/address';
-import { runVeilPayFirewallTraversal } from '@/lib/graph/engine';
-import { generateAigiForensicReceipt } from '@/lib/aigi/verdict';
+import { runFullScan } from '@/lib/graph/full-scan';
+import {
+  getVerifiedLinkPolicy,
+  verifyScanAttestation,
+} from '@/lib/security/attestation';
 import { fetchSocketCrossChainQuote } from '@/lib/socket/client';
 import { EVM_TOKEN_REGISTRY } from '@/lib/socket/tokens';
 
@@ -14,30 +16,49 @@ async function executeGatedQuoteRequest(params: {
   inputAmount: string;
   userAddress: string;
   receiverAddress: string;
+  linkId: string;
+  scanAttestation: string | null;
   slippage?: string;
   sort?: 'output' | 'time';
-  firewallEnabled: boolean;
-  maxHops: HopDepth;
-  cleanLinkEnabled: boolean;
-  unbundleEnabled: boolean;
-  sybilBlockThreshold: number;
 }) {
-  // CRITICAL SECURITY GATE: Run TigerGraph pre-flight firewall check BEFORE building SOCKET quote!
-  const scan = runVeilPayFirewallTraversal({
+  // 1. Load authoritative policy from verified link ONLY (ignore any client-supplied policy params)
+  const verifiedLink = getVerifiedLinkPolicy(params.linkId);
+  const authoritativePolicy = verifiedLink.policy;
+  const authoritativeReceiver =
+    verifiedLink.vaultAddress || params.receiverAddress;
+
+  // 2. Verify short-lived server scanAttestation & require proofOfControl === true
+  const attestationCheck = verifyScanAttestation(params.scanAttestation, {
+    payer: params.userAddress,
+    linkId: verifiedLink.linkId,
+    policy: authoritativePolicy,
+    requireProofOfControl: true,
+  });
+
+  if (!attestationCheck.valid || !attestationCheck.payload?.proofOfControl) {
+    return NextResponse.json(
+      {
+        success: false,
+        statusCode: 403,
+        error: 'ATTESTATION_OR_PROOF_OF_CONTROL_REQUIRED',
+        message:
+          attestationCheck.reason ??
+          'Valid server scanAttestation with proofOfControl=true is required to request a quote.',
+      },
+      { status: 403 }
+    );
+  }
+
+  // 3. Re-execute shared server-side runFullScan() (RESTPP -> seeded -> live crawl)
+  // using the authoritative link policy so client policy params can never bypass the gate
+  const { scan, receipt } = await runFullScan({
     targetWallet: params.userAddress,
-    merchantWallet: params.receiverAddress,
-    policy: {
-      firewallEnabled: params.firewallEnabled,
-      maxHops: params.maxHops,
-      cleanLinkEnabled: params.cleanLinkEnabled,
-      unbundleEnabled: params.unbundleEnabled,
-      socketAutoBridgeEnabled: true,
-      sybilBlockThreshold: params.sybilBlockThreshold,
-    },
+    merchantWallet: authoritativeReceiver,
+    chainId: params.originChainId,
+    policy: authoritativePolicy,
   });
 
   if (!scan.socketUnlocked) {
-    const receipt = generateAigiForensicReceipt(scan);
     return NextResponse.json(
       {
         success: false,
@@ -58,18 +79,19 @@ async function executeGatedQuoteRequest(params: {
     outputToken: params.outputToken,
     inputAmount: params.inputAmount,
     userAddress: params.userAddress,
-    receiverAddress: params.receiverAddress,
+    receiverAddress: authoritativeReceiver,
     slippage: params.slippage,
     sort: params.sort,
   });
 
-  return NextResponse.json(quoteResponse, { status: 200 });
+  return NextResponse.json(quoteResponse, {
+    status: quoteResponse.statusCode || 200,
+  });
 }
 
 export async function GET(request: NextRequest) {
   const sp = request.nextUrl.searchParams;
 
-  // Support both Socket V3 and legacy V2 parameter names seamlessly
   const originChainId = Number(
     sp.get('originChainId') || sp.get('fromChainId') || 42161
   );
@@ -92,17 +114,13 @@ export async function GET(request: NextRequest) {
     sp.get('receiverAddress') ||
     sp.get('recipient') ||
     DEFAULT_CAKE_VAULT_ADDRESSES.EVM_SOCKET;
+  const linkId = (sp.get('linkId') || 'default').trim() || 'default';
+  const scanAttestation =
+    sp.get('scanAttestation') ||
+    request.headers.get('x-veilpay-scan-attestation');
 
-  const maxHops = Math.min(
-    5,
-    Math.max(1, Number(sp.get('maxHops') || sp.get('max_hops') || 3))
-  ) as HopDepth;
-
-  const firewallEnabled =
-    sp.get('firewallEnabled') !== null
-      ? sp.get('firewallEnabled') !== 'false'
-      : true;
-
+  // Note: Any client-supplied firewallEnabled / maxHops / cleanLinkEnabled / unbundleEnabled /
+  // sybilBlockThreshold query parameters are intentionally ignored.
   return executeGatedQuoteRequest({
     originChainId,
     destinationChainId,
@@ -111,13 +129,10 @@ export async function GET(request: NextRequest) {
     inputAmount,
     userAddress,
     receiverAddress,
+    linkId,
+    scanAttestation,
     slippage: sp.get('slippage') || '1',
     sort: sp.get('sort') === 'time' ? 'time' : 'output',
-    firewallEnabled,
-    maxHops,
-    cleanLinkEnabled: sp.get('cleanLinkEnabled') !== 'false',
-    unbundleEnabled: sp.get('unbundleEnabled') !== 'false',
-    sybilBlockThreshold: Number(sp.get('sybilBlockThreshold') || 10),
   });
 }
 
@@ -151,10 +166,11 @@ export async function POST(request: NextRequest) {
         body.recipient ??
         DEFAULT_CAKE_VAULT_ADDRESSES.EVM_SOCKET
     );
-    const maxHops = Math.min(
-      5,
-      Math.max(1, Number(body.maxHops ?? 3))
-    ) as HopDepth;
+    const linkId = String(body.linkId ?? 'default').trim() || 'default';
+    const scanAttestation =
+      typeof body.scanAttestation === 'string'
+        ? body.scanAttestation
+        : request.headers.get('x-veilpay-scan-attestation');
 
     return executeGatedQuoteRequest({
       originChainId,
@@ -164,16 +180,10 @@ export async function POST(request: NextRequest) {
       inputAmount,
       userAddress,
       receiverAddress,
+      linkId,
+      scanAttestation,
       slippage: String(body.slippage ?? '1'),
       sort: body.sort === 'time' ? 'time' : 'output',
-      firewallEnabled:
-        body.firewallEnabled !== undefined ? Boolean(body.firewallEnabled) : true,
-      maxHops,
-      cleanLinkEnabled:
-        body.cleanLinkEnabled !== undefined ? Boolean(body.cleanLinkEnabled) : true,
-      unbundleEnabled:
-        body.unbundleEnabled !== undefined ? Boolean(body.unbundleEnabled) : true,
-      sybilBlockThreshold: Number(body.sybilBlockThreshold ?? 10),
     });
   } catch (err) {
     return NextResponse.json(

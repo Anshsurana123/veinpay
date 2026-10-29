@@ -87,6 +87,7 @@ export interface VeilPayStoreState {
   activeScan: FirewallScanResult | null;
   activeReceipt: AigiForensicReceipt | null;
   activeQuote: VeilPayQuoteResponse | null;
+  scanAttestation: string | null;
   isScanning: boolean;
   isLoadingQuote: boolean;
   isGeneratingAiNarrative: boolean;
@@ -245,6 +246,7 @@ export const useVeilPayStore = create<VeilPayStoreState>((set, get) => ({
   activeScan: null,
   activeReceipt: null,
   activeQuote: null,
+  scanAttestation: null,
   isScanning: false,
   isLoadingQuote: false,
   isGeneratingAiNarrative: false,
@@ -487,10 +489,12 @@ export const useVeilPayStore = create<VeilPayStoreState>((set, get) => ({
       scannerStep: 1,
       scanError: null,
       activeQuote: null,
+      scanAttestation: null,
     });
 
     try {
       set({ scannerStep: 2 });
+      const activeLinkId = linkConfig.handle || 'default';
       const scanRes = await fetch('/api/firewall/scan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -498,6 +502,7 @@ export const useVeilPayStore = create<VeilPayStoreState>((set, get) => ({
           targetWallet,
           merchantWallet: linkConfig.vaultAddresses.EVM_SOCKET,
           chainId: payerChainId,
+          linkId: activeLinkId,
           policy: linkConfig.policy,
           crawlSettings,
           includeGemini: false,
@@ -512,10 +517,15 @@ export const useVeilPayStore = create<VeilPayStoreState>((set, get) => ({
 
       const scan: FirewallScanResult = scanJson.scan;
       const receipt: AigiForensicReceipt = scanJson.receipt;
+      const scanAttestation: string | null =
+        typeof scanJson.scanAttestation === 'string'
+          ? scanJson.scanAttestation
+          : null;
 
       set((prev) => ({
         activeScan: scan,
         activeReceipt: receipt,
+        scanAttestation,
         isScanning: false,
         scannerStep: 3,
         lastMeasuredLatencyMs: scan.executionTimeMs,
@@ -524,8 +534,9 @@ export const useVeilPayStore = create<VeilPayStoreState>((set, get) => ({
           : prev.totalThreatsIntercepted,
       }));
 
-      // Issue 2 Rule: Personas and pasted addresses stay scan-only (never get a quote or broadcast).
-      // Only fetch a quote when connected wallet == scanned wallet AND proofOfControlToken is verified.
+      // Issue 2 & 3 Rules: Personas and pasted addresses stay scan-only.
+      // Only fetch a quote when connected wallet == scanned wallet, proofOfControlToken is verified,
+      // AND server scanAttestation is issued. Policy is loaded server-side from the verified link.
       const latestState = get();
       const eligibility = evaluatePayerQuoteAndBroadcastEligibility({
         activePersonaId: latestState.activePersonaId,
@@ -537,7 +548,8 @@ export const useVeilPayStore = create<VeilPayStoreState>((set, get) => ({
       if (
         scan.socketUnlocked &&
         linkConfig.policy.socketAutoBridgeEnabled &&
-        eligibility.canQuote
+        eligibility.canQuote &&
+        scanAttestation
       ) {
         set({ isLoadingQuote: true });
 
@@ -566,12 +578,8 @@ export const useVeilPayStore = create<VeilPayStoreState>((set, get) => ({
           receiverAddress:
             linkConfig.vaultAddresses.EVM_SOCKET ||
             DEFAULT_CAKE_VAULT_ADDRESSES.EVM_SOCKET,
-          firewallEnabled: String(linkConfig.policy.firewallEnabled),
-          maxHops: String(linkConfig.policy.maxHops),
-          cleanLinkEnabled: String(linkConfig.policy.cleanLinkEnabled),
-          unbundleEnabled: String(linkConfig.policy.unbundleEnabled),
-          sybilBlockThreshold: String(linkConfig.policy.sybilBlockThreshold),
-          proofOfControlToken: latestState.proofOfControlToken ?? '',
+          linkId: activeLinkId,
+          scanAttestation,
         });
 
         const quoteRes = await fetch(`/api/socket/quote?${qs.toString()}`);
