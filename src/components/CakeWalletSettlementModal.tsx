@@ -51,6 +51,7 @@ export function CakeWalletSettlementModal() {
     activeQuote,
     crawlSettings,
     recordSimulatedSettlement,
+    activeSignedLink,
   } = useVeilPayStore();
 
   const { address: connectedWallet, isConnected } = useAccount();
@@ -90,6 +91,19 @@ export function CakeWalletSettlementModal() {
       activeQuote?.source !== 'CCTP_V2_TESTNET',
     onConfirmed: (hash) => {
       setBroadcastedTxHash(hash);
+      void fetch('/api/events', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'verify_receipt',
+          txHash: hash,
+          sourceChainId: payerChainId,
+          settlementMode: linkConfig.settlementMode,
+          receiverVault: linkConfig.vaultAddresses.EVM_SOCKET,
+          simulated: false,
+          linkId: activeSignedLink?.payload.linkId ?? 'default',
+        }),
+      }).catch(() => {});
       recordSimulatedSettlement(hash);
     },
   });

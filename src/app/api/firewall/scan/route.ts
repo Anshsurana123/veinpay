@@ -4,6 +4,7 @@ import { runFullScan } from '@/lib/graph/full-scan';
 import { resolveVerifiedLinkAuthority } from '@/lib/links';
 import { verifyProofOfControlToken } from '@/lib/session/proof-of-control';
 import { signScanAttestation } from '@/lib/security/attestation';
+import { getEventStore } from '@/lib/events/store';
 
 async function handleScan(params: {
   targetWallet: string;
@@ -14,6 +15,7 @@ async function handleScan(params: {
   crawlSettings?: Partial<LiveCrawlSettings>;
   includeGemini?: boolean;
   proofOfControlToken?: string | null;
+  simulated?: boolean;
 }) {
   // Load policy and vault ONLY from the verified link authority (never from client query/body)
   const authority = await resolveVerifiedLinkAuthority({
@@ -44,6 +46,30 @@ async function handleScan(params: {
     crawlSettings: params.crawlSettings,
     includeGemini: params.includeGemini,
   });
+
+  // Record scan result event into events store
+  try {
+    const store = getEventStore();
+    await store.recordEvent({
+      linkId: authority.linkId,
+      eventType: 'SCAN_RESULT',
+      status: scan.socketUnlocked ? 'ALLOWED' : 'BLOCKED',
+      simulated: Boolean(params.simulated),
+      payerAddress: scan.targetWallet,
+      receiverVault: authority.vaultAddress,
+      amount: '0.00',
+      asset: 'USDC',
+      sourceChainId: params.chainId,
+      sourceChainName: params.chainId === 42161 ? 'Arbitrum' : 'EVM',
+      verdict: scan.verdict,
+      hopDistance: scan.minTaintHop,
+      latencyMs: scan.executionTimeMs,
+      executionSource: scan.executionSource,
+      sha256Hash: receipt.cryptographicAuditHash,
+    });
+  } catch {
+    // Non-blocking event logging
+  }
 
   const pocCheck = verifyProofOfControlToken(params.proofOfControlToken, {
     scannedAddress: scan.targetWallet,
@@ -96,6 +122,7 @@ export async function GET(request: NextRequest) {
     sig: sp.get('sig'),
     includeGemini: sp.get('includeGemini') === 'true',
     proofOfControlToken: sp.get('proofOfControlToken'),
+    simulated: sp.get('simulated') === 'true',
   });
 }
 
@@ -132,6 +159,7 @@ export async function POST(request: NextRequest) {
       crawlSettings,
       includeGemini: Boolean(body.includeGemini),
       proofOfControlToken,
+      simulated: Boolean(body.simulated),
     });
   } catch (err) {
     return NextResponse.json(

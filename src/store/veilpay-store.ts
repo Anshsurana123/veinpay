@@ -64,13 +64,23 @@ export interface FeedLogEntry {
   amount: string;
   asset: PaymentAssetSymbol;
   sourceChainName: string;
-  status: 'INTERCEPTED' | 'SETTLED';
+  status:
+    | 'INTERCEPTED'
+    | 'SETTLED'
+    | 'BLOCKED'
+    | 'ALLOWED'
+    | 'PENDING'
+    | 'CONFIRMED'
+    | 'FAILED'
+    | 'AWAITING_PAYMENT'
+    | 'CLAIMED_UNVERIFIED';
   verdict: VerdictStatus;
   hopDistance: number | null;
   bridgeUsed?: string;
   latencyMs: number;
   executionSource: ExecutionEngineSource;
   sha256Hash: string;
+  simulated?: boolean;
 }
 
 export interface VeilPayStoreState {
@@ -190,59 +200,8 @@ export interface VeilPayStoreState {
       }
     >
   ) => void;
+  fetchEvents: () => Promise<void>;
 }
-
-const INITIAL_FEED: FeedLogEntry[] = [
-  {
-    id: 'feed-01',
-    timestamp: '2026-10-28T13:02:14.000Z',
-    payerAddress: WALLET_PERSONAS[1].address,
-    payerLabel: WALLET_PERSONAS[1].shortTitle,
-    amount: '250.00',
-    asset: 'USDC',
-    sourceChainName: 'Arbitrum',
-    status: 'INTERCEPTED',
-    verdict: 'INTERCEPTED_TAINT',
-    hopDistance: 2,
-    latencyMs: 2.94,
-    executionSource: 'IN_MEMORY_GSQL_ENGINE',
-    sha256Hash:
-      '9f4a8d2c7e1b60395f82c1d4a70e3b98126c5d4f8a90b1e23c4d5f6a7b8c9d0e',
-  },
-  {
-    id: 'feed-02',
-    timestamp: '2026-10-28T12:58:40.000Z',
-    payerAddress: WALLET_PERSONAS[2].address,
-    payerLabel: WALLET_PERSONAS[2].shortTitle,
-    amount: '250.00',
-    asset: 'USDC',
-    sourceChainName: 'Arbitrum',
-    status: 'INTERCEPTED',
-    verdict: 'INTERCEPTED_SYBIL',
-    hopDistance: 2,
-    latencyMs: 3.62,
-    executionSource: 'IN_MEMORY_GSQL_ENGINE',
-    sha256Hash:
-      '3c1e7b9a4d20f8561e3c9b7a4d2f80156e3c9b7a4d20f8561e3c9b7a4d2f8015',
-  },
-  {
-    id: 'feed-03',
-    timestamp: '2026-10-28T12:49:11.000Z',
-    payerAddress: WALLET_PERSONAS[0].address,
-    payerLabel: WALLET_PERSONAS[0].shortTitle,
-    amount: '250.00',
-    asset: 'USDC',
-    sourceChainName: 'Arbitrum',
-    status: 'SETTLED',
-    verdict: 'VERIFIED_CLEAN',
-    hopDistance: null,
-    bridgeUsed: 'Across Protocol (SOCKET V3)',
-    latencyMs: 1.85,
-    executionSource: 'IN_MEMORY_GSQL_ENGINE',
-    sha256Hash:
-      '7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b',
-  },
-];
 
 export const useVeilPayStore = create<VeilPayStoreState>((set, get) => ({
   networkEnv: 'MAINNET',
@@ -284,8 +243,8 @@ export const useVeilPayStore = create<VeilPayStoreState>((set, get) => ({
   outboundScanResult: null,
   isScanningOutbound: false,
 
-  paymentFeed: INITIAL_FEED,
-  totalThreatsIntercepted: 14,
+  paymentFeed: [],
+  totalThreatsIntercepted: 0,
   lastMeasuredLatencyMs: 2.41,
   crawlSettings: {
     liveEtherscanCrawlEnabled: true,
@@ -701,6 +660,16 @@ export const useVeilPayStore = create<VeilPayStoreState>((set, get) => ({
       state.activeQuote?.result.routes[0]?.bridgeDisplayName ??
       'Cake Wallet Vault';
 
+    const isBtcXmr =
+      state.linkConfig.settlementMode === 'BTC_SILENT_PAYMENT' ||
+      state.linkConfig.settlementMode === 'XMR_SUBADDRESS';
+
+    const status = isBtcXmr
+      ? 'CLAIMED_UNVERIFIED'
+      : state.activeScan.socketUnlocked
+        ? 'SETTLED'
+        : 'INTERCEPTED';
+
     const newItem: FeedLogEntry = {
       id: `feed-${Date.now()}`,
       timestamp: new Date().toISOString(),
@@ -713,7 +682,7 @@ export const useVeilPayStore = create<VeilPayStoreState>((set, get) => ({
       amount: state.linkConfig.amount,
       asset: state.linkConfig.asset,
       sourceChainName: sourceChain,
-      status: state.activeScan.socketUnlocked ? 'SETTLED' : 'INTERCEPTED',
+      status,
       verdict: state.activeScan.verdict,
       hopDistance: state.activeScan.minTaintHop,
       bridgeUsed: txHash
@@ -722,11 +691,85 @@ export const useVeilPayStore = create<VeilPayStoreState>((set, get) => ({
       latencyMs: state.activeScan.executionTimeMs,
       executionSource: state.activeScan.executionSource,
       sha256Hash: state.activeReceipt.cryptographicAuditHash,
+      simulated: true,
     };
 
     set((prev) => ({
       paymentFeed: [newItem, ...prev.paymentFeed],
     }));
+
+    void fetch('/api/events', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'record_settlement',
+        linkId: state.activeSignedLink?.payload.linkId ?? 'default',
+        simulated: true,
+        payerAddress: state.activePayerAddress,
+        payerLabel: newItem.payerLabel,
+        receiverVault:
+          state.linkConfig.vaultAddresses[state.linkConfig.settlementMode],
+        amount: state.linkConfig.amount,
+        asset: state.linkConfig.asset,
+        sourceChainId: state.payerChainId,
+        sourceChainName: sourceChain,
+        destinationChainId: state.linkConfig.destinationChainId,
+        txHash,
+        bridgeUsed: bridgeName,
+        sha256Hash: state.activeReceipt.cryptographicAuditHash,
+        settlementMode: state.linkConfig.settlementMode,
+      }),
+    }).catch(() => {});
+  },
+
+  fetchEvents: async () => {
+    const state = get();
+    const linkId = state.activeSignedLink?.payload.linkId;
+    const url = linkId
+      ? `/api/events?linkId=${encodeURIComponent(linkId)}`
+      : '/api/events';
+    try {
+      const headers: Record<string, string> = {};
+      if (state.activeSignedLink?.manageToken) {
+        headers['x-manage-token'] = state.activeSignedLink.manageToken;
+      }
+      const res = await fetch(url, { headers });
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data.events)) {
+          const feedEntries: FeedLogEntry[] = data.events.map((e: any) => ({
+            id: e.id,
+            timestamp: e.timestamp,
+            payerAddress: e.payerAddress,
+            payerLabel: e.payerLabel || 'Wallet',
+            amount: e.amount,
+            asset: e.asset,
+            sourceChainName: e.sourceChainName,
+            status: e.status,
+            verdict: e.verdict ?? 'VERIFIED_CLEAN',
+            hopDistance: e.hopDistance ?? null,
+            bridgeUsed: e.bridgeUsed,
+            latencyMs: e.latencyMs ?? 0,
+            executionSource: e.executionSource ?? 'IN_MEMORY_GSQL_ENGINE',
+            sha256Hash: e.sha256Hash ?? '',
+            simulated: e.simulated,
+          }));
+
+          const nonSimulatedBlocked = feedEntries.filter(
+            (e) =>
+              !e.simulated &&
+              (e.status === 'BLOCKED' || e.status === 'INTERCEPTED')
+          ).length;
+
+          set({
+            paymentFeed: feedEntries,
+            totalThreatsIntercepted: nonSimulatedBlocked,
+          });
+        }
+      }
+    } catch {
+      // Non-blocking
+    }
   },
 
   setOutboundCandidateInput: (input) => set({ outboundCandidateInput: input }),
