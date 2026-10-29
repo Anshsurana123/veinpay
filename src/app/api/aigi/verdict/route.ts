@@ -9,9 +9,37 @@ import {
   generateAigiForensicReceipt,
   maybeEnrichReceiptWithGemini,
 } from '@/lib/aigi/verdict';
+import {
+  buildRateLimitExceededResponse,
+  checkRateLimit,
+  getClientIp,
+} from '@/lib/security/rate-limit';
 
 export async function GET(request: NextRequest) {
+  const ip = getClientIp(request);
+  const rateLimit = await checkRateLimit('aigi-verdict', ip, {
+    limit: 20,
+    windowSeconds: 60,
+  });
+  if (!rateLimit.allowed) {
+    return buildRateLimitExceededResponse(rateLimit);
+  }
+
   const sp = request.nextUrl.searchParams;
+  const includeGemini = sp.get('includeGemini') === 'true';
+
+  if (includeGemini) {
+    const geminiLimit = await checkRateLimit('gemini-narration', ip, {
+      limit: 5,
+      windowSeconds: 60,
+    });
+    if (!geminiLimit.allowed) {
+      return buildRateLimitExceededResponse(
+        geminiLimit,
+        'Gemini narration rate limit exceeded (maximum 5 requests per minute).'
+      );
+    }
+  }
   const targetWallet =
     sp.get('targetWallet') ||
     sp.get('wallet') ||
@@ -46,6 +74,15 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const ip = getClientIp(request);
+  const rateLimit = await checkRateLimit('aigi-verdict', ip, {
+    limit: 20,
+    windowSeconds: 60,
+  });
+  if (!rateLimit.allowed) {
+    return buildRateLimitExceededResponse(rateLimit);
+  }
+
   try {
     const body = (await request.json()) as {
       scan?: FirewallScanResult;
@@ -83,6 +120,16 @@ export async function POST(request: NextRequest) {
 
     let receipt = generateAigiForensicReceipt(scanResult);
     if (body.includeGemini) {
+      const geminiLimit = await checkRateLimit('gemini-narration', ip, {
+        limit: 5,
+        windowSeconds: 60,
+      });
+      if (!geminiLimit.allowed) {
+        return buildRateLimitExceededResponse(
+          geminiLimit,
+          'Gemini narration rate limit exceeded (maximum 5 requests per minute).'
+        );
+      }
       receipt = await maybeEnrichReceiptWithGemini(receipt);
     }
 

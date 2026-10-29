@@ -13,8 +13,22 @@ import { resolveVerifiedLinkAuthority } from '@/lib/links';
 import { verifyScanAttestation } from '@/lib/security/attestation';
 import { isTestnetChain, resolveTokenByAddressOrSymbol } from '@/lib/socket/tokens';
 import { CctpFinalityMode } from '@/types/veilpay';
+import {
+  buildRateLimitExceededResponse,
+  checkRateLimit,
+  getClientIp,
+} from '@/lib/security/rate-limit';
 
 export async function GET(request: NextRequest) {
+  const ip = getClientIp(request);
+  const rateLimit = await checkRateLimit('cctp-quote', ip, {
+    limit: 35,
+    windowSeconds: 60,
+  });
+  if (!rateLimit.allowed) {
+    return buildRateLimitExceededResponse(rateLimit);
+  }
+
   const startPerf = performance.now();
   const { searchParams } = new URL(request.url);
 

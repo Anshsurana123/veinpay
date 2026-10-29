@@ -5,6 +5,11 @@ import { resolveVerifiedLinkAuthority } from '@/lib/links';
 import { verifyProofOfControlToken } from '@/lib/session/proof-of-control';
 import { signScanAttestation } from '@/lib/security/attestation';
 import { getEventStore } from '@/lib/events/store';
+import {
+  buildRateLimitExceededResponse,
+  checkRateLimit,
+  getClientIp,
+} from '@/lib/security/rate-limit';
 
 async function handleScan(params: {
   targetWallet: string;
@@ -105,6 +110,15 @@ async function handleScan(params: {
 }
 
 export async function GET(request: NextRequest) {
+  const ip = getClientIp(request);
+  const rateLimit = await checkRateLimit('firewall-scan', ip, {
+    limit: 25,
+    windowSeconds: 60,
+  });
+  if (!rateLimit.allowed) {
+    return buildRateLimitExceededResponse(rateLimit);
+  }
+
   const sp = request.nextUrl.searchParams;
   const targetWallet =
     sp.get('targetWallet') ||
@@ -114,19 +128,42 @@ export async function GET(request: NextRequest) {
   const linkId = (sp.get('linkId') || 'default').trim() || 'default';
   const chainId = Number(sp.get('chainId') || 42161);
 
+  const includeGemini = sp.get('includeGemini') === 'true';
+  if (includeGemini) {
+    const geminiLimit = await checkRateLimit('gemini-narration', ip, {
+      limit: 5,
+      windowSeconds: 60,
+    });
+    if (!geminiLimit.allowed) {
+      return buildRateLimitExceededResponse(
+        geminiLimit,
+        'Gemini narration rate limit exceeded (maximum 5 requests per minute).'
+      );
+    }
+  }
+
   return handleScan({
     targetWallet,
     chainId,
     linkId,
     c: sp.get('c'),
     sig: sp.get('sig'),
-    includeGemini: sp.get('includeGemini') === 'true',
+    includeGemini,
     proofOfControlToken: sp.get('proofOfControlToken'),
     simulated: sp.get('simulated') === 'true',
   });
 }
 
 export async function POST(request: NextRequest) {
+  const ip = getClientIp(request);
+  const rateLimit = await checkRateLimit('firewall-scan', ip, {
+    limit: 25,
+    windowSeconds: 60,
+  });
+  if (!rateLimit.allowed) {
+    return buildRateLimitExceededResponse(rateLimit);
+  }
+
   try {
     const body = (await request.json()) as Record<string, unknown>;
     const targetWallet = String(
@@ -148,6 +185,20 @@ export async function POST(request: NextRequest) {
     const c = typeof body.c === 'string' ? body.c : null;
     const sig = typeof body.sig === 'string' ? body.sig : null;
 
+    const includeGemini = Boolean(body.includeGemini);
+    if (includeGemini) {
+      const geminiLimit = await checkRateLimit('gemini-narration', ip, {
+        limit: 5,
+        windowSeconds: 60,
+      });
+      if (!geminiLimit.allowed) {
+        return buildRateLimitExceededResponse(
+          geminiLimit,
+          'Gemini narration rate limit exceeded (maximum 5 requests per minute).'
+        );
+      }
+    }
+
     // Any client-supplied policy or merchantWallet/vault in the request body is ignored;
     // policy and vault are loaded strictly from the verified link authority.
     return handleScan({
@@ -157,7 +208,7 @@ export async function POST(request: NextRequest) {
       c,
       sig,
       crawlSettings,
-      includeGemini: Boolean(body.includeGemini),
+      includeGemini,
       proofOfControlToken,
       simulated: Boolean(body.simulated),
     });

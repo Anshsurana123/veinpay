@@ -4,6 +4,11 @@ import { resolveVerifiedLinkAuthority } from '@/lib/links';
 import { verifyScanAttestation } from '@/lib/security/attestation';
 import { fetchSocketCrossChainQuote } from '@/lib/socket/client';
 import { EVM_TOKEN_REGISTRY, isTestnetChain } from '@/lib/socket/tokens';
+import {
+  buildRateLimitExceededResponse,
+  checkRateLimit,
+  getClientIp,
+} from '@/lib/security/rate-limit';
 
 function isUsdtInput(tokenStr: string): boolean {
   const t = tokenStr.trim().toUpperCase();
@@ -132,6 +137,15 @@ async function executeGatedQuoteRequest(params: {
 }
 
 export async function GET(request: NextRequest) {
+  const ip = getClientIp(request);
+  const rateLimit = await checkRateLimit('socket-quote', ip, {
+    limit: 35,
+    windowSeconds: 60,
+  });
+  if (!rateLimit.allowed) {
+    return buildRateLimitExceededResponse(rateLimit);
+  }
+
   const sp = request.nextUrl.searchParams;
 
   const originChainId = Number(
@@ -175,6 +189,15 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const ip = getClientIp(request);
+  const rateLimit = await checkRateLimit('socket-quote', ip, {
+    limit: 35,
+    windowSeconds: 60,
+  });
+  if (!rateLimit.allowed) {
+    return buildRateLimitExceededResponse(rateLimit);
+  }
+
   try {
     const body = (await request.json()) as Record<string, unknown>;
     const originChainId = Number(

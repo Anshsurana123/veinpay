@@ -4,6 +4,10 @@ import type {
   HopEvidenceStep,
 } from '@/types/veilpay';
 import { formatShortAddress } from '@/lib/validators/address';
+import {
+  getCachedGeminiSummary,
+  setCachedGeminiSummary,
+} from '@/lib/security/scan-cache';
 
 // ============================================================================
 // 1. PURE SYNCHRONOUS SHA-256 (FIPS 180-4) FOR DETERMINISTIC RECEIPT COMMITMENT
@@ -275,8 +279,24 @@ export function generateAigiForensicReceipt(
 export async function maybeEnrichReceiptWithGemini(
   receipt: AigiForensicReceipt
 ): Promise<AigiForensicReceipt> {
+  // Server flag gate: require ENABLE_GEMINI_NARRATION=true to prevent accidental credit spending
+  if (process.env.ENABLE_GEMINI_NARRATION !== 'true') {
+    return receipt;
+  }
+
   const apiKey = process.env.GEMINI_API_KEY?.trim();
   if (!apiKey) return receipt;
+
+  // Check summary cache keyed by receipt commitment hash
+  const receiptHash = receipt.cryptographicAuditHash;
+  const cachedSummary = getCachedGeminiSummary(receiptHash);
+  if (cachedSummary) {
+    return {
+      ...receipt,
+      geminiExecutiveSummary: cachedSummary,
+      geminiModelUsed: 'cached',
+    };
+  }
 
   const modelName = process.env.GEMINI_MODEL?.trim() || 'gemini-2.5-flash';
 
@@ -308,6 +328,9 @@ export async function maybeEnrichReceiptWithGemini(
 
     const summaryText = await Promise.race([genPromise, timeoutPromise]);
     if (!summaryText) return receipt;
+
+    // Cache summary by receipt hash for subsequent requests
+    setCachedGeminiSummary(receiptHash, summaryText, 300_000);
 
     return {
       ...receipt,

@@ -15,6 +15,13 @@ import {
   generateAigiForensicReceipt,
   maybeEnrichReceiptWithGemini,
 } from '@/lib/aigi/verdict';
+import { computePolicyKeccak256 } from '@/lib/links/canonical';
+import {
+  buildScanCacheKey,
+  clampCrawlSettings,
+  getCachedScanResult,
+  setCachedScanResult,
+} from '@/lib/security/scan-cache';
 
 export const AUTHORITATIVE_DEFAULT_POLICY: FirewallPolicyConfig = {
   firewallEnabled: true,
@@ -55,6 +62,29 @@ export async function runFullScan(
   const canonicalTarget = resolveCanonicalWalletInput(params.targetWallet);
   const canonicalMerchant = resolveCanonicalWalletInput(params.merchantWallet);
 
+  // Clamp crawl settings server-side to hard maxima (env-configurable)
+  const clampedCrawlSettings = clampCrawlSettings(params.crawlSettings);
+
+  // Check 60s cache by (targetWallet, chainId, policyHash)
+  const policyHash = computePolicyKeccak256(params.policy);
+  const cacheKey = buildScanCacheKey(
+    canonicalTarget,
+    params.chainId,
+    policyHash
+  );
+
+  const cached = getCachedScanResult(cacheKey);
+  if (cached) {
+    let finalReceipt = cached.receipt;
+    if (params.includeGemini && !finalReceipt.geminiExecutiveSummary) {
+      finalReceipt = await maybeEnrichReceiptWithGemini(finalReceipt);
+    }
+    return {
+      scan: cached.scan,
+      receipt: finalReceipt,
+    };
+  }
+
   // 1. Try live TigerGraph 4.x RESTPP if configured
   const liveTgResult = await tryExecuteLiveTigerGraphQuery({
     targetWallet: canonicalTarget,
@@ -67,10 +97,12 @@ export async function runFullScan(
     if (params.includeGemini) {
       receipt = await maybeEnrichReceiptWithGemini(receipt);
     }
-    return {
+    const output = {
       scan: liveTgResult,
       receipt,
     };
+    setCachedScanResult(cacheKey, output, 60_000);
+    return output;
   }
 
   // 2. Check if target wallet is in the seeded graph dataset
@@ -90,7 +122,7 @@ export async function runFullScan(
         merchantWallet: canonicalMerchant,
         chainId: params.chainId,
         policy: params.policy,
-        crawlSettings: params.crawlSettings,
+        crawlSettings: clampedCrawlSettings,
       });
 
   let receipt = generateAigiForensicReceipt(scanResult);
@@ -98,8 +130,10 @@ export async function runFullScan(
     receipt = await maybeEnrichReceiptWithGemini(receipt);
   }
 
-  return {
+  const output = {
     scan: scanResult,
     receipt,
   };
+  setCachedScanResult(cacheKey, output, 60_000);
+  return output;
 }
