@@ -12,6 +12,7 @@ import {
   saveCctpTransferRecord,
   transitionCctpTransfer,
 } from '@/lib/cctp';
+import { evaluateApprovalRequirement } from '@/lib/settlement/approval-machine';
 import { CctpRoute, CctpTransferRecord } from '@/types/veilpay';
 
 export interface UseCctpTransferOptions {
@@ -129,7 +130,6 @@ export function useCctpTransfer({ linkId, receiverVaultAddress }: UseCctpTransfe
           await switchChainAsync({ chainId: route.sourceChainId });
         }
 
-        const requiredAmount = BigInt(route.amountInAtomic);
         const currentAllowance = await publicClient.readContract({
           address: route.contracts.usdcSource,
           abi: erc20Abi,
@@ -137,7 +137,17 @@ export function useCctpTransfer({ linkId, receiverVaultAddress }: UseCctpTransfe
           args: [connectedAddress, route.contracts.tokenMessengerV2],
         });
 
-        if (currentAllowance < requiredAmount) {
+        const approvalCheck = evaluateApprovalRequirement({
+          inputTokenAddress: route.contracts.usdcSource,
+          approval: {
+            tokenAddress: route.contracts.usdcSource,
+            spenderAddress: route.contracts.tokenMessengerV2,
+            minimumAmount: route.amountInAtomic,
+          },
+          currentAllowance,
+        });
+
+        if (approvalCheck.requiresApproval && approvalCheck.spenderAddress) {
           current = transitionCctpTransfer(current, 'APPROVING');
           updateRecord(current);
 
@@ -145,7 +155,7 @@ export function useCctpTransfer({ linkId, receiverVaultAddress }: UseCctpTransfe
             address: route.contracts.usdcSource,
             abi: erc20Abi,
             functionName: 'approve',
-            args: [route.contracts.tokenMessengerV2, requiredAmount],
+            args: [approvalCheck.spenderAddress, approvalCheck.requiredAmount],
             chain: walletClient.chain,
             account: connectedAddress,
           });

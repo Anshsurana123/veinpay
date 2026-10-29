@@ -2,11 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import QRCode from 'qrcode';
-import {
-  useAccount,
-  useSendTransaction,
-  useSwitchChain,
-} from 'wagmi';
+import { useAccount } from 'wagmi';
 import {
   X,
   Lock,
@@ -27,6 +23,7 @@ import {
   DEFAULT_CAKE_VAULT_ADDRESSES,
 } from '@/lib/validators/address';
 import {
+  EVM_TOKEN_REGISTRY,
   getChainDisplayName,
   getChainExplorerUrl,
   isTestnetChain,
@@ -36,6 +33,7 @@ import {
   evaluatePayerQuoteAndBroadcastEligibility,
 } from '@/lib/session/proof-of-control';
 import { useCctpTransfer } from '@/hooks/useCctpTransfer';
+import { useSettlementFlow } from '@/hooks/useSettlementFlow';
 import type { VaultSettlementMode } from '@/types/veilpay';
 
 export function CakeWalletSettlementModal() {
@@ -47,6 +45,7 @@ export function CakeWalletSettlementModal() {
     activePayerAddress,
     proofOfControlToken,
     payerChainId,
+    payerTokenSymbol,
     setVaultMode,
     activeScan,
     activeQuote,
@@ -54,11 +53,7 @@ export function CakeWalletSettlementModal() {
     recordSimulatedSettlement,
   } = useVeilPayStore();
 
-  const { address: connectedWallet, isConnected, chainId: walletChainId } =
-    useAccount();
-  const { switchChainAsync } = useSwitchChain();
-  const { sendTransactionAsync, isPending: isBroadcastingTx } =
-    useSendTransaction();
+  const { address: connectedWallet, isConnected } = useAccount();
 
   const {
     activeTransfer: cctpTransfer,
@@ -69,6 +64,34 @@ export function CakeWalletSettlementModal() {
   } = useCctpTransfer({
     linkId: linkConfig.handle,
     receiverVaultAddress: linkConfig.vaultAddresses.EVM_SOCKET,
+  });
+
+  const primaryRoute = activeQuote?.result.routes[0];
+  const inputTokenAddress =
+    EVM_TOKEN_REGISTRY[payerTokenSymbol]?.addressesByChain[payerChainId] ?? null;
+
+  const {
+    step: settlementStep,
+    requiresApproval,
+    isNativeToken,
+    spenderAddress,
+    approvalTxHash,
+    settlementTxHash,
+    errorMessage: settlementFlowError,
+    approveIfNeededAndSend,
+  } = useSettlementFlow({
+    route: primaryRoute,
+    originChainId: payerChainId,
+    inputTokenAddress,
+    ownerAddress: connectedWallet ?? null,
+    enabled:
+      settlementModalOpen &&
+      linkConfig.settlementMode === 'EVM_SOCKET' &&
+      activeQuote?.source !== 'CCTP_V2_TESTNET',
+    onConfirmed: (hash) => {
+      setBroadcastedTxHash(hash);
+      recordSimulatedSettlement(hash);
+    },
   });
 
   const [btcLegacyFormat, setBtcLegacyFormat] = useState(false);
@@ -110,8 +133,6 @@ export function CakeWalletSettlementModal() {
     recipientName: `VeilPay:${linkConfig.handle}`,
     description: `VeilPay Verified Clean Settlement ($${linkConfig.amount})`,
   });
-
-  const primaryRoute = activeQuote?.result.routes[0];
 
   const activeUri =
     linkConfig.settlementMode === 'BTC_SILENT_PAYMENT'
@@ -194,6 +215,12 @@ export function CakeWalletSettlementModal() {
     signerMatchesScannedWallet &&
     eligibility.canBroadcast;
 
+  const isBroadcastingTx =
+    settlementStep === 'approving' ||
+    settlementStep === 'sending' ||
+    settlementStep === 'pending' ||
+    isCctpBusy;
+
   const handleBroadcastLiveWalletTx = async () => {
     if (!canBroadcastLiveWalletTx) {
       setBroadcastError(
@@ -216,18 +243,10 @@ export function CakeWalletSettlementModal() {
         return;
       }
 
-      if (walletChainId !== payerChainId && switchChainAsync) {
-        await switchChainAsync({ chainId: payerChainId });
+      const hash = await approveIfNeededAndSend();
+      if (hash) {
+        setBroadcastedTxHash(hash);
       }
-      const txObj = primaryRoute.txData.object;
-      const hash = await sendTransactionAsync({
-        to: txObj.to as `0x${string}`,
-        data: txObj.data as `0x${string}`,
-        value: BigInt(txObj.value || '0'),
-        chainId: payerChainId,
-      });
-      setBroadcastedTxHash(hash);
-      recordSimulatedSettlement(hash);
     } catch (err) {
       setBroadcastError(
         err instanceof Error
@@ -408,12 +427,31 @@ export function CakeWalletSettlementModal() {
 
                   {primaryRoute.txData?.object && (
                     <div className="mt-2 border-t border-[#262A33] pt-2 text-[11px]">
-                      <div className="text-[#9499A3]">
-                        ROUTER CONTRACT (TO):{' '}
-                        <span className="text-[#F3F1EC]">
-                          {primaryRoute.txData.object.to}
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="text-[#9499A3]">
+                          ROUTER CONTRACT (TO):{' '}
+                          <span className="text-[#F3F1EC]">
+                            {primaryRoute.txData.object.to}
+                          </span>
                         </span>
+                        {activeQuote?.source !== 'CCTP_V2_TESTNET' && (
+                          <span className="border border-[#D97736]/60 bg-[#261810] px-2 py-0.5 text-[10px] font-bold uppercase text-[#E5A93C]">
+                            FLOW STEP: {settlementStep}
+                            {isNativeToken ? ' (NATIVE - NO APPROVAL)' : ''}
+                          </span>
+                        )}
                       </div>
+                      {!isNativeToken && spenderAddress && (
+                        <div className="mt-1 text-[#9499A3]">
+                          ERC-20 SPENDER:{' '}
+                          <span className="text-[#F3F1EC]">{spenderAddress}</span>
+                          {approvalTxHash && (
+                            <span className="ml-2 text-[#1F9D68]">
+                              (APPROVAL TX: {approvalTxHash.slice(0, 12)}...)
+                            </span>
+                          )}
+                        </div>
+                      )}
                       <div className="mt-1 truncate text-[#9499A3]">
                         TX CALLDATA:{' '}
                         <span className="text-[#E5A93C]">
@@ -455,13 +493,14 @@ export function CakeWalletSettlementModal() {
               </div>
             )}
 
-            {broadcastedTxHash && (
+            {(broadcastedTxHash || settlementTxHash) && (
               <div className="flex items-center justify-between border border-[#1F9D68] bg-[#0E291E] p-3 font-mono text-xs">
                 <div className="truncate text-[#1F9D68]">
-                  ✓ ON-CHAIN TX BROADCASTED: {broadcastedTxHash.slice(0, 18)}...
+                  ✓ ON-CHAIN TX ({settlementStep.toUpperCase()}):{' '}
+                  {(broadcastedTxHash || settlementTxHash)?.slice(0, 18)}...
                 </div>
                 <a
-                  href={`${getChainExplorerUrl(payerChainId)}/tx/${broadcastedTxHash}`}
+                  href={`${getChainExplorerUrl(payerChainId)}/tx/${broadcastedTxHash || settlementTxHash}`}
                   target="_blank"
                   rel="noreferrer"
                   className="flex shrink-0 items-center gap-1 border border-[#1F9D68] bg-[#0B0C0E] px-2.5 py-1 text-[10px] font-bold text-[#1F9D68] hover:bg-[#1F9D68] hover:text-[#0B0C0E]"
@@ -471,9 +510,9 @@ export function CakeWalletSettlementModal() {
               </div>
             )}
 
-            {broadcastError && (
+            {(broadcastError || settlementFlowError) && (
               <div className="border border-[#D6453A] bg-[#2D1412] p-2.5 font-mono text-[11px] text-[#D6453A]">
-                WALLET TX ERROR: {broadcastError}
+                WALLET TX ERROR: {broadcastError || settlementFlowError}
               </div>
             )}
 
@@ -604,9 +643,15 @@ export function CakeWalletSettlementModal() {
                   className="flex items-center gap-1.5 border border-[#D97736] bg-[#261810] px-3.5 py-2.5 font-mono text-xs font-bold text-[#E5A93C] transition-colors hover:bg-[#D97736] hover:text-[#0B0C0E] disabled:opacity-50"
                 >
                   <Wallet className="h-3.5 w-3.5" />
-                  {isBroadcastingTx
-                    ? 'SIGNING IN WALLET...'
-                    : `SIGN & BROADCAST ON ${getChainDisplayName(payerChainId).toUpperCase()}`}
+                  {settlementStep === 'approving'
+                    ? 'APPROVING ERC-20 ALLOWANCE...'
+                    : settlementStep === 'sending'
+                      ? 'SENDING SWAP TX...'
+                      : settlementStep === 'pending'
+                        ? 'WAITING FOR RECEIPT...'
+                        : requiresApproval && !isNativeToken
+                          ? `APPROVE & SWAP ON ${getChainDisplayName(payerChainId).toUpperCase()}`
+                          : `SIGN & BROADCAST ON ${getChainDisplayName(payerChainId).toUpperCase()}`}
                 </button>
               )}
 
