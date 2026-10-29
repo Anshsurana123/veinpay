@@ -45,7 +45,7 @@ export function AigiForensicReceiptCard() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `veilpay-aigi-receipt-${activeReceipt.cryptographicAuditHash.slice(0, 12)}.json`;
+    a.download = `veilpay-signed-receipt-${(activeReceipt.commitmentHash ?? activeReceipt.cryptographicAuditHash).slice(0, 12)}.json`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -84,7 +84,7 @@ export function AigiForensicReceiptCard() {
           <div>
             <div className="flex items-center gap-2">
               <span className="font-mono text-xs font-bold tracking-wider uppercase text-[#F3F1EC]">
-                MODULE D // AIGI FORENSIC SECURITY VERDICT
+                MODULE D // AIGI SIGNED FORENSIC RECEIPT
               </span>
               <span
                 className={`border px-2 py-0.5 font-mono text-[10px] font-bold uppercase ${
@@ -230,15 +230,30 @@ export function AigiForensicReceiptCard() {
         )}
       </div>
 
-      {/* Cryptographic Audit Hash Footer */}
-      <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border border-[#262A33] bg-[#0B0C0E] px-3 py-2 font-mono text-[10px]">
-        <div className="flex items-center gap-1.5 text-[#9499A3]">
-          <Hash className="h-3.5 w-3.5 text-[#D97736]" />
-          <span>SHA-256 COMMITMENT HASH:</span>
+      {/* Commitment Hash & Signed Receipt Footer */}
+      <div className="mt-3 space-y-1.5 border border-[#262A33] bg-[#0B0C0E] px-3 py-2 font-mono text-[10px]">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5 text-[#9499A3]">
+            <Hash className="h-3.5 w-3.5 text-[#D97736]" />
+            <span>SHA-256 COMMITMENT HASH:</span>
+          </div>
+          <span className="break-all font-semibold tabular-nums text-[#E5A93C]">
+            {activeReceipt.commitmentHash ?? activeReceipt.cryptographicAuditHash}
+          </span>
         </div>
-        <span className="break-all font-semibold tabular-nums text-[#E5A93C]">
-          {activeReceipt.cryptographicAuditHash}
-        </span>
+        {activeReceipt.signature && (
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[#262A33]/50 pt-1 text-[10px]">
+            <span className="text-[#9499A3]">
+              ED25519 SIGNED RECEIPT ({activeReceipt.keyId ?? 'veilpay-ed25519-v1'}):
+            </span>
+            <span
+              className="max-w-[260px] truncate font-mono text-[#1F9D68]"
+              title={activeReceipt.signature}
+            >
+              {activeReceipt.signature.slice(0, 18)}...{activeReceipt.signature.slice(-10)}
+            </span>
+          </div>
+        )}
       </div>
     </div>
   );

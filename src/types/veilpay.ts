@@ -232,6 +232,9 @@ export interface AigiForensicReceipt {
   geminiExecutiveSummary?: string | null;
   geminiModelUsed?: string | null;
   cryptographicAuditHash: string;
+  commitmentHash?: string;
+  signature?: string;
+  keyId?: string;
   canonicalPayloadJson: string;
   generatedAt: string;
 }

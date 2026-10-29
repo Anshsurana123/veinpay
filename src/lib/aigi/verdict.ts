@@ -8,6 +8,7 @@ import {
   getCachedGeminiSummary,
   setCachedGeminiSummary,
 } from '@/lib/security/scan-cache';
+import { signReceiptCommitmentHash } from '@/lib/aigi/receipt-signer';
 
 // ============================================================================
 // 1. PURE SYNCHRONOUS SHA-256 (FIPS 180-4) FOR DETERMINISTIC RECEIPT COMMITMENT
@@ -243,6 +244,7 @@ export function generateAigiForensicReceipt(
 
   const canonicalPayloadJson = JSON.stringify(canonicalCommitmentObject);
   const cryptographicAuditHash = `0x${sha256HexSync(canonicalPayloadJson)}`;
+  const { signature, keyId } = signReceiptCommitmentHash(cryptographicAuditHash);
 
   return {
     receiptId: `VP-AIGI-${cryptographicAuditHash.slice(2, 10).toUpperCase()}`,
@@ -267,6 +269,9 @@ export function generateAigiForensicReceipt(
     geminiExecutiveSummary: null,
     geminiModelUsed: null,
     cryptographicAuditHash,
+    commitmentHash: cryptographicAuditHash,
+    signature,
+    keyId,
     canonicalPayloadJson,
     generatedAt: scan.timestamp,
   };
