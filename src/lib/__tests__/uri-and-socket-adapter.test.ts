@@ -3,11 +3,13 @@ import {
   buildBip321SilentPaymentUri,
   buildLegacySilentPaymentUri,
   buildMoneroPaymentUri,
-  DEFAULT_CAKE_VAULT_ADDRESSES,
-  TESTNET_CAKE_VAULT_ADDRESSES,
   validateBip352SilentPaymentAddress,
   validateMoneroAddress,
 } from '@/lib/validators/address';
+import {
+  DEMO_CAKE_VAULT_ADDRESSES,
+  DEMO_TESTNET_CAKE_VAULT_ADDRESSES,
+} from '@/lib/demo-fixtures';
 import {
   buildDeterministicFallbackQuote,
   buildSameChainDirectRoute,
@@ -20,13 +22,13 @@ import {
 describe('Cake Wallet BIP-352/BIP-321 & Monero URIs + SOCKET V3/V2 Adapter', () => {
   it('Validates official BIP-352 Silent Payment test vector and builds BIP-321 & legacy URIs', () => {
     const spValidation = validateBip352SilentPaymentAddress(
-      DEFAULT_CAKE_VAULT_ADDRESSES.BTC_SILENT_PAYMENT
+      DEMO_CAKE_VAULT_ADDRESSES.BTC_SILENT_PAYMENT
     );
     expect(spValidation.valid).toBe(true);
     expect(spValidation.network).toBe('mainnet');
 
     const bip321 = buildBip321SilentPaymentUri({
-      spAddress: DEFAULT_CAKE_VAULT_ADDRESSES.BTC_SILENT_PAYMENT,
+      spAddress: DEMO_CAKE_VAULT_ADDRESSES.BTC_SILENT_PAYMENT,
       amountBtc: '0.0025',
       label: 'VeilPay Vault',
     });
@@ -35,7 +37,7 @@ describe('Cake Wallet BIP-352/BIP-321 & Monero URIs + SOCKET V3/V2 Adapter', () 
     expect(bip321).toContain('label=VeilPay%20Vault');
 
     const legacy = buildLegacySilentPaymentUri({
-      spAddress: DEFAULT_CAKE_VAULT_ADDRESSES.BTC_SILENT_PAYMENT,
+      spAddress: DEMO_CAKE_VAULT_ADDRESSES.BTC_SILENT_PAYMENT,
       amountBtc: '0.0025',
       label: 'VeilPay Vault',
     });
@@ -44,18 +46,18 @@ describe('Cake Wallet BIP-352/BIP-321 & Monero URIs + SOCKET V3/V2 Adapter', () 
 
   it('Validates Monero RingCT subaddress and builds spec-compliant monero: URI', () => {
     const xmrCheck = validateMoneroAddress(
-      DEFAULT_CAKE_VAULT_ADDRESSES.XMR_SUBADDRESS
+      DEMO_CAKE_VAULT_ADDRESSES.XMR_SUBADDRESS
     );
     expect(xmrCheck.valid).toBe(true);
     expect(xmrCheck.addressType).toBe('SUBADDRESS');
 
     const uri = buildMoneroPaymentUri({
-      subaddress: DEFAULT_CAKE_VAULT_ADDRESSES.XMR_SUBADDRESS,
+      subaddress: DEMO_CAKE_VAULT_ADDRESSES.XMR_SUBADDRESS,
       amountXmr: '1.5',
       recipientName: 'VeilPay Audit',
     });
     expect(uri).toContain(
-      `monero:${DEFAULT_CAKE_VAULT_ADDRESSES.XMR_SUBADDRESS}?tx_amount=1.5&recipient_name=VeilPay%20Audit`
+      `monero:${DEMO_CAKE_VAULT_ADDRESSES.XMR_SUBADDRESS}?tx_amount=1.5&recipient_name=VeilPay%20Audit`
     );
   });
 
@@ -68,7 +70,7 @@ describe('Cake Wallet BIP-352/BIP-321 & Monero URIs + SOCKET V3/V2 Adapter', () 
         outputToken: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
         inputAmount: '250000000',
         userAddress: '0x4F2a9c117034e8B1200499A1c3f88200000188E1',
-        receiverAddress: DEFAULT_CAKE_VAULT_ADDRESSES.EVM_SOCKET,
+        receiverAddress: DEMO_CAKE_VAULT_ADDRESSES.EVM_SOCKET,
       },
       0.5
     );
@@ -84,7 +86,7 @@ describe('Cake Wallet BIP-352/BIP-321 & Monero URIs + SOCKET V3/V2 Adapter', () 
         outputToken: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
         inputAmount: '250000000',
         userAddress: '0x4F2a9c117034e8B1200499A1c3f88200000188E1',
-        receiverAddress: DEFAULT_CAKE_VAULT_ADDRESSES.EVM_SOCKET,
+        receiverAddress: DEMO_CAKE_VAULT_ADDRESSES.EVM_SOCKET,
       },
       'Test timeout',
       3500
@@ -99,7 +101,7 @@ describe('Cake Wallet BIP-352/BIP-321 & Monero URIs + SOCKET V3/V2 Adapter', () 
 
   it('Validates BIP-352 Testnet (tsp1...) Silent Payment address and EVM Testnet chain/token registry', () => {
     const tspValidation = validateBip352SilentPaymentAddress(
-      TESTNET_CAKE_VAULT_ADDRESSES.BTC_SILENT_PAYMENT
+      DEMO_TESTNET_CAKE_VAULT_ADDRESSES.BTC_SILENT_PAYMENT
     );
     expect(tspValidation.valid).toBe(true);
     expect(tspValidation.network).toBe('testnet');

@@ -4,7 +4,6 @@ import type {
   FirewallScanResult,
   HopDepth,
 } from '@/types/veilpay';
-import { DEFAULT_CAKE_VAULT_ADDRESSES } from '@/lib/validators/address';
 import { runVeilPayFirewallTraversal } from '@/lib/graph/engine';
 import {
   generateAigiForensicReceipt,
@@ -24,7 +23,7 @@ export async function GET(request: NextRequest) {
 
   const scan = runVeilPayFirewallTraversal({
     targetWallet,
-    merchantWallet: DEFAULT_CAKE_VAULT_ADDRESSES.EVM_SOCKET,
+    merchantWallet: sp.get('merchantWallet') || '',
     policy: {
       firewallEnabled: sp.get('firewallEnabled') !== 'false',
       maxHops,
@@ -70,8 +69,7 @@ export async function POST(request: NextRequest) {
       scanResult = runVeilPayFirewallTraversal({
         targetWallet:
           body.targetWallet || '0x99B1c402881a77e3d90123456789aB00000FDead',
-        merchantWallet:
-          body.merchantWallet || DEFAULT_CAKE_VAULT_ADDRESSES.EVM_SOCKET,
+        merchantWallet: body.merchantWallet || '',
         policy: {
           firewallEnabled: body.policy?.firewallEnabled ?? true,
           maxHops,

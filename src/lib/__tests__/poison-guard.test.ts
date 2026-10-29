@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { evaluateOutboundPoisonRisk } from '@/lib/graph/poison-guard';
-import { DEFAULT_CAKE_VAULT_ADDRESSES } from '@/lib/validators/address';
+import { DEMO_CAKE_VAULT_ADDRESSES } from '@/lib/demo-fixtures';
 
 describe('Case 4: PoisonGraph Outbound Lookalike & Dust-Factory Guard', () => {
   it('Sub-Case 4A: Intercepts poisoned vanity clone (0x71C894a1...489B) with 6-char prefix, 4-char suffix, and 4,210 dust edges', () => {
@@ -39,7 +39,7 @@ describe('Case 4: PoisonGraph Outbound Lookalike & Dust-Factory Guard', () => {
 
   it('Sub-Case 4C: Detects wrong-network addresses (BIP-352 sp1... in EVM field) and malformed strings', () => {
     const wrongNet = evaluateOutboundPoisonRisk({
-      candidateInput: DEFAULT_CAKE_VAULT_ADDRESSES.BTC_SILENT_PAYMENT,
+      candidateInput: DEMO_CAKE_VAULT_ADDRESSES.BTC_SILENT_PAYMENT,
       expectedMode: 'EVM_SOCKET',
     });
     expect(wrongNet.verdict).toBe('INVALID_ADDRESS_OR_NETWORK_MISMATCH');

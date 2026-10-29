@@ -16,7 +16,7 @@ import {
   verifyRevokeLinkSignature,
   verifySignedPaymentLink,
 } from '@/lib/links/verify';
-import { DEFAULT_CAKE_VAULT_ADDRESSES } from '@/lib/validators/address';
+import { DEMO_CAKE_VAULT_ADDRESSES } from '@/lib/demo-fixtures';
 import type { FirewallPolicyConfig, SignedPaymentLinkPayload } from '@/types/veilpay';
 
 const RECEIVER_ACCOUNT = privateKeyToAccount(
@@ -111,7 +111,7 @@ describe('EIP-712 Receiver-Signed Payment Links (Issue 4)', () => {
       (b) => ({
         ...b,
         settlementMode: 'BTC_SILENT_PAYMENT',
-        vaultAddress: DEFAULT_CAKE_VAULT_ADDRESSES.BTC_SILENT_PAYMENT,
+        vaultAddress: DEMO_CAKE_VAULT_ADDRESSES.BTC_SILENT_PAYMENT,
       }),
       (b) => ({ ...b, vaultAddress: ATTACKER_ACCOUNT.address.toLowerCase() }),
       (b) => ({
@@ -240,7 +240,7 @@ describe('EIP-712 Receiver-Signed Payment Links (Issue 4)', () => {
     const btcLink = await createSignedTestLink({
       settlementMode: 'BTC_SILENT_PAYMENT',
       asset: 'BTC',
-      vaultAddress: DEFAULT_CAKE_VAULT_ADDRESSES.BTC_SILENT_PAYMENT,
+      vaultAddress: DEMO_CAKE_VAULT_ADDRESSES.BTC_SILENT_PAYMENT,
     });
     const btcRes = await verifySignedPaymentLink({
       encodedPayload: btcLink.c,
@@ -286,7 +286,7 @@ describe('EIP-712 Receiver-Signed Payment Links (Issue 4)', () => {
       asset: 'USDC',
       destinationChainId: 8453,
       settlementMode: 'EVM_SOCKET',
-      vaultAddresses: DEFAULT_CAKE_VAULT_ADDRESSES,
+      vaultAddresses: DEMO_CAKE_VAULT_ADDRESSES,
       policy: BASE_POLICY,
     });
     const legacyC = Buffer.from(legacyUnsignedJson, 'utf-8').toString(

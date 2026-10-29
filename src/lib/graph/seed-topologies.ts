@@ -1,5 +1,6 @@
 import type { GraphEdge, GraphVertex } from '@/types/veilpay';
-import { DEFAULT_CAKE_VAULT_ADDRESSES, toEip55Address } from '@/lib/validators/address';
+import { DEMO_CAKE_VAULT_ADDRESSES } from '@/lib/demo-fixtures';
+import { toEip55Address } from '@/lib/validators/address';
 
 export interface WalletPersonaPreset {
   id: 'persona-1' | 'persona-2' | 'persona-3' | 'persona-4';
@@ -93,7 +94,7 @@ export const OUTBOUND_POISON_TEST_PRESETS = [
     id: 'wrong-network-sp1',
     label: 'Test Wrong-Network Address (BIP-352 sp1... in EVM Field)',
     badge: 'CASE 4C · PROTOCOL MISMATCH',
-    address: DEFAULT_CAKE_VAULT_ADDRESSES.BTC_SILENT_PAYMENT,
+    address: DEMO_CAKE_VAULT_ADDRESSES.BTC_SILENT_PAYMENT,
     description: 'Tests Case 4C multi-protocol detection when a Bitcoin Silent Payment address is pasted into an EVM payout field.',
   },
 ] as const;
@@ -152,11 +153,11 @@ export function buildSeededGraphDataset(): SeedGraphDataset {
     edges.push(e);
   };
 
-  // --- Merchant Default Vault ---
+  // --- Merchant Demo Fixture Vault ---
   addVertex({
-    id: DEFAULT_CAKE_VAULT_ADDRESSES.EVM_SOCKET,
+    id: DEMO_CAKE_VAULT_ADDRESSES.EVM_SOCKET,
     v_type: 'Merchant',
-    label: 'Cake Wallet Default EVM Vault',
+    label: 'Cake Wallet Demo EVM Vault (Fixture)',
     riskTag: 'MERCHANT_VAULT',
     hopDistance: -1,
     chainId: 8453,
@@ -780,7 +781,7 @@ export function buildSeededGraphDataset(): SeedGraphDataset {
   for (let d = 1; d <= 8; d++) {
     const victimAddr =
       d === 1
-        ? DEFAULT_CAKE_VAULT_ADDRESSES.EVM_SOCKET
+        ? DEMO_CAKE_VAULT_ADDRESSES.EVM_SOCKET
         : toEip55Address(`900000000000000000000000000000000000000${d}`);
     if (!vertices.has(victimAddr.toLowerCase())) {
       addVertex({

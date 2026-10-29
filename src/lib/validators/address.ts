@@ -1,28 +1,8 @@
-import type { VaultSettlementMode, VeilPayLinkConfig } from '@/types/veilpay';
+import type { VaultSettlementMode } from '@/types/veilpay';
 
 // ============================================================================
-// 1. CANONICAL DEFAULT VAULT & DEMO PERSONA ADDRESSES (100% Spec-Valid)
+// 1. DEMO PERSONA SHORTHAND ALIASES (FOR SIMULATOR GRAPH INPUT)
 // ============================================================================
-
-export const DEFAULT_CAKE_VAULT_ADDRESSES = {
-  EVM_SOCKET: '0x742d35Cc6634C0532925a3b844Bc454e4438f44e',
-  // Official BIP-352 Test Vector Bech32m Silent Payment Address (valid 66-byte scan+spend pubkeys + Bech32m checksum)
-  BTC_SILENT_PAYMENT:
-    'sp1qqgste7k9hx0qftg6qmwlkqtwuy6cycyavzmzj85c6qdfhjdpdjtdgqjuexzk6murw56suy3e0rd2cgqvycxttddwsvgxe2usfpxumr70xc9pkqwv',
-  // Valid 95-char Monero RingCT Subaddress
-  XMR_SUBADDRESS:
-    '888tNkZrPN6JsEgekjMnABU4TBzc2Dt29EPAvkRxbANsAnjyPbb3iQ1YBRk1UXcdRsiKc9dhwMVgN5S9cQUiyoogDavup3H',
-} as const;
-
-export const TESTNET_CAKE_VAULT_ADDRESSES = {
-  EVM_SOCKET: '0x742d35Cc6634C0532925a3b844Bc454e4438f44e',
-  // Official BIP-352 Testnet/Signet Bech32m Silent Payment Address (tsp1... prefix + valid Bech32m checksum)
-  BTC_SILENT_PAYMENT:
-    'tsp1qqgste7k9hx0qftg6qmwlkqtwuy6cycyavzmzj85c6qdfhjdpdjtdgqjuexzk6murw56suy3e0rd2cgqvycxttddwsvgxe2usfpxumr70xc3wk4yh',
-  // Valid 95-char Monero Subaddress
-  XMR_SUBADDRESS:
-    '888tNkZrPN6JsEgekjMnABU4TBzc2Dt29EPAvkRxbANsAnjyPbb3iQ1YBRk1UXcdRsiKc9dhwMVgN5S9cQUiyoogDavup3H',
-} as const;
 
 export const DEMO_ADDRESS_ALIASES: Record<string, string> = {
   '0x4f2a...88e1': '0x4F2a9c117034e8B1200499A1c3f88200000188E1',

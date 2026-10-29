@@ -23,9 +23,9 @@ import {
   WALLET_PERSONAS,
 } from '@/lib/graph/seed-topologies';
 import {
-  DEFAULT_CAKE_VAULT_ADDRESSES,
-  TESTNET_CAKE_VAULT_ADDRESSES,
-} from '@/lib/validators/address';
+  getInitialVaultAddresses,
+  isDemoModeEnabled,
+} from '@/lib/demo-fixtures';
 import { DEFAULT_LINK_CONFIG } from '@/lib/utils/link-codec';
 import { buildSimulatorSignedPreviewLink } from '@/lib/links/eip712';
 import {
@@ -303,10 +303,7 @@ export const useVeilPayStore = create<VeilPayStoreState>((set, get) => ({
         env === 'TESTNET' ? 84532 : 8453;
       const nextPayerChain: SupportedEvmChainId =
         env === 'TESTNET' ? 421614 : 42161;
-      const nextBtcVault =
-        env === 'TESTNET'
-          ? TESTNET_CAKE_VAULT_ADDRESSES.BTC_SILENT_PAYMENT
-          : DEFAULT_CAKE_VAULT_ADDRESSES.BTC_SILENT_PAYMENT;
+      const demoVaults = getInitialVaultAddresses(undefined, env);
 
       return {
         networkEnv: env,
@@ -315,10 +312,9 @@ export const useVeilPayStore = create<VeilPayStoreState>((set, get) => ({
         linkConfig: {
           ...state.linkConfig,
           destinationChainId: nextDestChain,
-          vaultAddresses: {
-            ...state.linkConfig.vaultAddresses,
-            BTC_SILENT_PAYMENT: nextBtcVault,
-          },
+          vaultAddresses: isDemoModeEnabled()
+            ? demoVaults
+            : state.linkConfig.vaultAddresses,
         },
       };
     });
@@ -614,6 +610,7 @@ export const useVeilPayStore = create<VeilPayStoreState>((set, get) => ({
       if (
         scan.socketUnlocked &&
         signedLink.payload.policy.socketAutoBridgeEnabled &&
+        Boolean(signedLink.payload.vaultAddress.trim()) &&
         eligibility.canQuote &&
         scanAttestation
       ) {

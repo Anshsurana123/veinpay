@@ -42,6 +42,7 @@ export interface VerifyPaymentLinkOptions {
   expectedHandle?: string | null;
   nowMs?: number;
   requireProvenEvmVault?: boolean;
+  allowEmptySimulatorVault?: boolean;
   publicClient?: Pick<PublicClient, 'verifyTypedData'>;
 }
 
@@ -260,18 +261,29 @@ export async function verifySignedPaymentLink(
   }
 
   // Validate vaultAddress for the chosen settlementMode
-  const vaultValidation = validateMultiProtocolAddress(
-    candidatePayload.vaultAddress,
-    candidatePayload.settlementMode
-  );
-  if (!vaultValidation.valid) {
+  const isVaultEmpty = !candidatePayload.vaultAddress.trim();
+  if (isVaultEmpty && !options.allowEmptySimulatorVault) {
     return {
       valid: false,
       errorCode: 'INVALID_VAULT_ADDRESS',
       reason:
-        vaultValidation.errorMessage ??
-        `Invalid vaultAddress for mode ${candidatePayload.settlementMode}.`,
+        'Destination vault address is empty. Link creation and settlement are blocked until a valid address is entered for the chosen mode.',
     };
+  }
+  if (!isVaultEmpty) {
+    const vaultValidation = validateMultiProtocolAddress(
+      candidatePayload.vaultAddress,
+      candidatePayload.settlementMode
+    );
+    if (!vaultValidation.valid) {
+      return {
+        valid: false,
+        errorCode: 'INVALID_VAULT_ADDRESS',
+        reason:
+          vaultValidation.errorMessage ??
+          `Invalid vaultAddress for mode ${candidatePayload.settlementMode}.`,
+      };
+    }
   }
 
   const typedData = buildPaymentLinkTypedData(candidatePayload);

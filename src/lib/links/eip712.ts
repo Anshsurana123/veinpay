@@ -185,8 +185,7 @@ export async function buildSimulatorSignedPreviewLink(
   sig: `0x${string}`;
 }> {
   const simAccount = privateKeyToAccount(SIMULATOR_PREVIEW_PK);
-  const vaultAddr =
-    config.vaultAddresses[config.settlementMode] || simAccount.address;
+  const vaultAddr = config.vaultAddresses[config.settlementMode] ?? '';
   const payload = createPaymentLinkPayload({
     linkId: `0xsim_${(config.handle || 'default').replace(/[^a-zA-Z0-9]/g, '').slice(0, 16) || 'default'}`,
     handle: config.handle || 'goa.eth',

@@ -20,7 +20,7 @@ import {
   buildBip321SilentPaymentUri,
   buildLegacySilentPaymentUri,
   buildMoneroPaymentUri,
-  DEFAULT_CAKE_VAULT_ADDRESSES,
+  validateMultiProtocolAddress,
 } from '@/lib/validators/address';
 import {
   EVM_TOKEN_REGISTRY,
@@ -107,35 +107,46 @@ export function CakeWalletSettlementModal() {
   const amountBtc = (amountNum / 92000).toFixed(6);
   const amountXmr = (amountNum / 175).toFixed(4);
 
-  const spAddress =
-    linkConfig.vaultAddresses.BTC_SILENT_PAYMENT ||
-    DEFAULT_CAKE_VAULT_ADDRESSES.BTC_SILENT_PAYMENT;
-  const xmrSubaddress =
-    linkConfig.vaultAddresses.XMR_SUBADDRESS ||
-    DEFAULT_CAKE_VAULT_ADDRESSES.XMR_SUBADDRESS;
+  const spAddress = linkConfig.vaultAddresses.BTC_SILENT_PAYMENT || '';
+  const xmrSubaddress = linkConfig.vaultAddresses.XMR_SUBADDRESS || '';
 
-  const bip321Uri = buildBip321SilentPaymentUri({
-    spAddress,
-    amountBtc,
-    label: `VeilPay:${linkConfig.handle}`,
-    message: `VeilPay Verified Clean Settlement ($${linkConfig.amount})`,
-  });
-
-  const legacyBtcUri = buildLegacySilentPaymentUri({
-    spAddress,
-    amountBtc,
-    label: `VeilPay:${linkConfig.handle}`,
-  });
-
-  const xmrUri = buildMoneroPaymentUri({
-    subaddress: xmrSubaddress,
-    amountXmr,
-    recipientName: `VeilPay:${linkConfig.handle}`,
-    description: `VeilPay Verified Clean Settlement ($${linkConfig.amount})`,
-  });
-
-  const activeUri =
+  const hasVaultConfigured = Boolean(
     linkConfig.settlementMode === 'BTC_SILENT_PAYMENT'
+      ? spAddress
+      : linkConfig.settlementMode === 'XMR_SUBADDRESS'
+        ? xmrSubaddress
+        : linkConfig.vaultAddresses.EVM_SOCKET
+  );
+
+  const bip321Uri = spAddress
+    ? buildBip321SilentPaymentUri({
+        spAddress,
+        amountBtc,
+        label: `VeilPay:${linkConfig.handle}`,
+        message: `VeilPay Verified Clean Settlement ($${linkConfig.amount})`,
+      })
+    : '';
+
+  const legacyBtcUri = spAddress
+    ? buildLegacySilentPaymentUri({
+        spAddress,
+        amountBtc,
+        label: `VeilPay:${linkConfig.handle}`,
+      })
+    : '';
+
+  const xmrUri = xmrSubaddress
+    ? buildMoneroPaymentUri({
+        subaddress: xmrSubaddress,
+        amountXmr,
+        recipientName: `VeilPay:${linkConfig.handle}`,
+        description: `VeilPay Verified Clean Settlement ($${linkConfig.amount})`,
+      })
+    : '';
+
+  const activeUri = !hasVaultConfigured
+    ? ''
+    : linkConfig.settlementMode === 'BTC_SILENT_PAYMENT'
       ? btcLegacyFormat
         ? legacyBtcUri
         : bip321Uri
@@ -145,7 +156,10 @@ export function CakeWalletSettlementModal() {
           linkConfig.vaultAddresses.EVM_SOCKET;
 
   useEffect(() => {
-    if (!settlementModalOpen || !activeScan?.socketUnlocked) return;
+    if (!settlementModalOpen || !activeScan?.socketUnlocked || !activeUri) {
+      setQrDataUrl('');
+      return;
+    }
     let mounted = true;
     QRCode.toDataURL(activeUri, {
       width: 220,
@@ -186,6 +200,12 @@ export function CakeWalletSettlementModal() {
   };
 
   const handleConfirmSettlement = () => {
+    if (!hasVaultConfigured) {
+      setBroadcastError(
+        'Cannot settle: no destination vault address configured for this mode.'
+      );
+      return;
+    }
     recordSimulatedSettlement(
       broadcastedTxHash ??
         `0x${activeScan.targetWallet.slice(2, 10)}cfe92817a001`
@@ -534,6 +554,14 @@ export function CakeWalletSettlementModal() {
               </div>
             )}
           </div>
+        ) : !hasVaultConfigured ? (
+          <div className="mt-4 border border-[#D99B26] bg-[#2B210D]/50 p-4 font-mono text-xs">
+            <div className="font-bold text-[#E5A93C]">NO VAULT CONFIGURED</div>
+            <p className="mt-1 text-[11px] text-[#F3F1EC]">
+              The receiver has not provided a destination address for this settlement mode.
+              Payment links must specify a valid destination vault before QR codes and settlement URIs can be generated.
+            </p>
+          </div>
         ) : (
           <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-5">
             <div className="flex flex-col items-center justify-center border border-[#262A33] bg-[#0B0C0E] p-3 sm:col-span-2">
@@ -597,8 +625,9 @@ export function CakeWalletSettlementModal() {
               <div className="mt-3 flex gap-2">
                 <button
                   type="button"
+                  disabled={!activeUri}
                   onClick={handleCopyUri}
-                  className="flex flex-1 items-center justify-center gap-1.5 border border-[#262A33] bg-[#1A1D23] py-2 text-xs font-semibold text-[#F3F1EC] hover:border-[#D97736]"
+                  className="flex flex-1 items-center justify-center gap-1.5 border border-[#262A33] bg-[#1A1D23] py-2 text-xs font-semibold text-[#F3F1EC] hover:border-[#D97736] disabled:opacity-50"
                 >
                   {copiedUri ? (
                     <>
@@ -613,8 +642,10 @@ export function CakeWalletSettlementModal() {
                   )}
                 </button>
                 <a
-                  href={activeUri}
-                  className="flex flex-1 items-center justify-center gap-1.5 border border-[#D97736] bg-[#261810] py-2 text-xs font-semibold text-[#E5A93C] hover:bg-[#D97736] hover:text-[#0B0C0E]"
+                  href={activeUri || undefined}
+                  className={`flex flex-1 items-center justify-center gap-1.5 border border-[#D97736] bg-[#261810] py-2 text-xs font-semibold text-[#E5A93C] hover:bg-[#D97736] hover:text-[#0B0C0E] ${
+                    !activeUri ? 'pointer-events-none opacity-50' : ''
+                  }`}
                 >
                   <ExternalLink className="h-3.5 w-3.5" />
                   LAUNCH CAKE WALLET
@@ -627,8 +658,10 @@ export function CakeWalletSettlementModal() {
         {/* Footer Confirm Action */}
         <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-[#262A33] pt-3">
           <span className="font-mono text-[11px] text-[#9499A3]">
-            DESTINATION: {currentVaultAddr.slice(0, 14)}...
-            {currentVaultAddr.slice(-6)}
+            DESTINATION:{' '}
+            {currentVaultAddr
+              ? `${currentVaultAddr.slice(0, 14)}...${currentVaultAddr.slice(-6)}`
+              : 'NONE (UNCONFIGURED)'}
           </span>
 
           <div className="flex flex-wrap items-center gap-2">
@@ -657,8 +690,9 @@ export function CakeWalletSettlementModal() {
 
             <button
               type="button"
+              disabled={!hasVaultConfigured}
               onClick={handleConfirmSettlement}
-              className="flex items-center gap-2 border border-[#1F9D68] bg-[#1F9D68] px-4 py-2.5 font-mono text-xs font-bold text-[#0B0C0E] transition-colors hover:bg-[#25b87b]"
+              className="flex items-center gap-2 border border-[#1F9D68] bg-[#1F9D68] px-4 py-2.5 font-mono text-xs font-bold text-[#0B0C0E] transition-colors hover:bg-[#25b87b] disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {settledConfirmed ? (
                 <>

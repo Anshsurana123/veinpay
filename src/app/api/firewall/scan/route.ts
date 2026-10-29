@@ -20,6 +20,7 @@ async function handleScan(params: {
     linkId: params.linkId,
     c: params.c,
     sig: params.sig,
+    allowEmptySimulatorVault: true,
   });
 
   if (!authority.ok) {

@@ -11,7 +11,6 @@ import type {
 } from '@/types/veilpay';
 import threatSnapshot from '@/data/threat-intel-snapshot.json';
 import {
-  DEFAULT_CAKE_VAULT_ADDRESSES,
   DEMO_ADDRESS_ALIASES,
   toEip55Address,
 } from '@/lib/validators/address';
@@ -87,9 +86,9 @@ export function runVeilPayFirewallTraversal(
 
   const targetCanonical = resolveCanonicalWalletInput(options.targetWallet);
   const targetLower = targetCanonical.toLowerCase();
-  const merchantCanonical = resolveCanonicalWalletInput(
-    options.merchantWallet || DEFAULT_CAKE_VAULT_ADDRESSES.EVM_SOCKET
-  );
+  const merchantCanonical = options.merchantWallet
+    ? resolveCanonicalWalletInput(options.merchantWallet)
+    : '';
   const policy = options.policy;
   const maxHops = Math.min(5, Math.max(1, Number(policy.maxHops) || 3)) as HopDepth;
 

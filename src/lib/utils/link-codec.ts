@@ -2,7 +2,7 @@ import type {
   SignedPaymentLinkPayload,
   VeilPayLinkConfig,
 } from '@/types/veilpay';
-import { DEFAULT_CAKE_VAULT_ADDRESSES } from '@/lib/validators/address';
+import { getInitialVaultAddresses } from '@/lib/demo-fixtures';
 import {
   decodeBase64UrlToUtf8,
   encodeSignedLinkPayloadToBase64Url,
@@ -14,11 +14,7 @@ export const DEFAULT_LINK_CONFIG: VeilPayLinkConfig = {
   asset: 'USDC',
   destinationChainId: 8453, // Base Mainnet default
   settlementMode: 'EVM_SOCKET',
-  vaultAddresses: {
-    EVM_SOCKET: DEFAULT_CAKE_VAULT_ADDRESSES.EVM_SOCKET,
-    BTC_SILENT_PAYMENT: DEFAULT_CAKE_VAULT_ADDRESSES.BTC_SILENT_PAYMENT,
-    XMR_SUBADDRESS: DEFAULT_CAKE_VAULT_ADDRESSES.XMR_SUBADDRESS,
-  },
+  vaultAddresses: getInitialVaultAddresses(),
   policy: {
     firewallEnabled: true,
     maxHops: 3,

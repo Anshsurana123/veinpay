@@ -5,7 +5,6 @@ export * from './verify';
 
 import type { FirewallPolicyConfig, LinkTrustLevel } from '@/types/veilpay';
 import { getVerifiedLinkPolicy } from '@/lib/security/attestation';
-import { DEFAULT_CAKE_VAULT_ADDRESSES } from '@/lib/validators/address';
 import { encodeSignedLinkPayloadToBase64Url } from './canonical';
 import { getStoredLinkRecord, isLinkRevoked, storeSignedLinkRecord } from './store';
 import { verifySignedPaymentLink } from './verify';
@@ -31,12 +30,14 @@ export async function resolveVerifiedLinkAuthority(params: {
   linkId?: string | null;
   c?: string | null;
   sig?: string | null;
+  allowEmptySimulatorVault?: boolean;
 }): Promise<ResolvedLinkAuthority> {
   // 1. If c and sig are provided, verify the EIP-712 signed link directly
   if (params.c || params.sig) {
     const verification = await verifySignedPaymentLink({
       encodedPayload: params.c,
       signature: params.sig,
+      allowEmptySimulatorVault: params.allowEmptySimulatorVault,
     });
     if (!verification.valid || !verification.payload) {
       return {
@@ -117,9 +118,7 @@ export async function resolveVerifiedLinkAuthority(params: {
     ok: true,
     linkId: verifiedPolicyRec.linkId,
     handle: verifiedPolicyRec.linkId,
-    vaultAddress:
-      verifiedPolicyRec.vaultAddress ||
-      DEFAULT_CAKE_VAULT_ADDRESSES.EVM_SOCKET,
+    vaultAddress: verifiedPolicyRec.vaultAddress ?? '',
     policy: verifiedPolicyRec.policy,
   };
 }
