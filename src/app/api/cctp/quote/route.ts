@@ -9,10 +9,8 @@ import {
 import { computeCctpV2Quote } from '@/lib/cctp/quote';
 import { isSupportedCctpTestnetChain } from '@/lib/cctp/contracts';
 import { runFullScan } from '@/lib/graph/full-scan';
-import {
-  getVerifiedLinkPolicy,
-  verifyScanAttestation,
-} from '@/lib/security/attestation';
+import { resolveVerifiedLinkAuthority } from '@/lib/links';
+import { verifyScanAttestation } from '@/lib/security/attestation';
 import { isTestnetChain, resolveTokenByAddressOrSymbol } from '@/lib/socket/tokens';
 import { CctpFinalityMode } from '@/types/veilpay';
 
@@ -43,18 +41,31 @@ export async function GET(request: NextRequest) {
   ).trim();
   const userAddress = (searchParams.get('userAddress') ?? '').trim();
   const linkId = (searchParams.get('linkId') ?? 'default').trim() || 'default';
-  const verifiedLink = getVerifiedLinkPolicy(linkId);
-  const receiverAddress = (
-    verifiedLink.vaultAddress ??
-    searchParams.get('receiverAddress') ??
-    searchParams.get('recipient') ??
-    ''
-  ).trim();
+  const c = searchParams.get('c');
+  const sig = searchParams.get('sig');
   const scanAttestation =
     searchParams.get('scanAttestation') ??
     request.headers.get('x-veilpay-scan-attestation');
   const finalityModeParam = (searchParams.get('finalityMode') ?? 'FAST').toUpperCase();
   const useForwardingService = searchParams.get('useForwardingService') === 'true';
+
+  // Load policy and destination vault ONLY from the verified link authority (never from client query string)
+  const authority = await resolveVerifiedLinkAuthority({ linkId, c, sig });
+  if (!authority.ok || !authority.vaultAddress) {
+    return NextResponse.json(
+      {
+        success: false,
+        statusCode: 403,
+        error: authority.errorCode ?? 'INVALID_SIGNED_LINK',
+        message:
+          authority.reason ??
+          'Verified signed payment link is required to resolve policy and destination vault.',
+      },
+      { status: 403 }
+    );
+  }
+
+  const receiverAddress = authority.vaultAddress;
 
   const baseParams: SocketQuoteRequestParams = {
     originChainId,
@@ -73,7 +84,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(
       buildUnsupportedTestnetQuote(
         baseParams,
-        'Valid userAddress and receiverAddress EVM addresses are required.',
+        'Valid userAddress and verified link EVM vaultAddress are required.',
         elapsedMs
       ),
       { status: 400 }
@@ -83,8 +94,8 @@ export async function GET(request: NextRequest) {
   // Enforce server scanAttestation + proofOfControl + runFullScan() gate
   const attestationCheck = verifyScanAttestation(scanAttestation, {
     payer: userAddress,
-    linkId: verifiedLink.linkId,
-    policy: verifiedLink.policy,
+    linkId: authority.linkId,
+    policy: authority.policy,
     requireProofOfControl: true,
   });
 
@@ -106,7 +117,7 @@ export async function GET(request: NextRequest) {
     targetWallet: userAddress,
     merchantWallet: receiverAddress,
     chainId: originChainId,
-    policy: verifiedLink.policy,
+    policy: authority.policy,
   });
 
   if (!scan.socketUnlocked) {

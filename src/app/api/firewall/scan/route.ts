@@ -1,75 +1,65 @@
 import { NextRequest, NextResponse } from 'next/server';
-import type { FirewallPolicyConfig, HopDepth, LiveCrawlSettings } from '@/types/veilpay';
-import { DEFAULT_CAKE_VAULT_ADDRESSES } from '@/lib/validators/address';
+import type { LiveCrawlSettings } from '@/types/veilpay';
 import { runFullScan } from '@/lib/graph/full-scan';
+import { resolveVerifiedLinkAuthority } from '@/lib/links';
 import { verifyProofOfControlToken } from '@/lib/session/proof-of-control';
-import {
-  getVerifiedLinkPolicy,
-  signScanAttestation,
-} from '@/lib/security/attestation';
-
-function parsePolicy(raw: Record<string, unknown>): FirewallPolicyConfig {
-  const rawHops = Number(raw.maxHops ?? raw.max_hops ?? 3);
-  const clampedHops = Math.min(5, Math.max(1, Number.isNaN(rawHops) ? 3 : rawHops)) as HopDepth;
-
-  return {
-    firewallEnabled:
-      raw.firewallEnabled !== undefined
-        ? raw.firewallEnabled !== 'false' && Boolean(raw.firewallEnabled)
-        : raw.firewall_enabled !== undefined
-          ? raw.firewall_enabled !== 'false' && Boolean(raw.firewall_enabled)
-          : true,
-    maxHops: clampedHops,
-    cleanLinkEnabled:
-      raw.cleanLinkEnabled !== undefined
-        ? raw.cleanLinkEnabled !== 'false' && Boolean(raw.cleanLinkEnabled)
-        : true,
-    unbundleEnabled:
-      raw.unbundleEnabled !== undefined
-        ? raw.unbundleEnabled !== 'false' && Boolean(raw.unbundleEnabled)
-        : true,
-    socketAutoBridgeEnabled:
-      raw.socketAutoBridgeEnabled !== undefined
-        ? raw.socketAutoBridgeEnabled !== 'false' && Boolean(raw.socketAutoBridgeEnabled)
-        : true,
-    sybilBlockThreshold: Number(raw.sybilBlockThreshold ?? 10) || 10,
-  };
-}
+import { signScanAttestation } from '@/lib/security/attestation';
 
 async function handleScan(params: {
   targetWallet: string;
-  merchantWallet: string;
   chainId: number;
   linkId: string;
-  policy: FirewallPolicyConfig;
+  c?: string | null;
+  sig?: string | null;
   crawlSettings?: Partial<LiveCrawlSettings>;
   includeGemini?: boolean;
   proofOfControlToken?: string | null;
 }) {
+  // Load policy and vault ONLY from the verified link authority (never from client query/body)
+  const authority = await resolveVerifiedLinkAuthority({
+    linkId: params.linkId,
+    c: params.c,
+    sig: params.sig,
+  });
+
+  if (!authority.ok) {
+    return NextResponse.json(
+      {
+        success: false,
+        errorCode: authority.errorCode,
+        error:
+          authority.reason ??
+          'Payment link verification failed; scan refused.',
+      },
+      { status: 403 }
+    );
+  }
+
   const { scan, receipt } = await runFullScan({
     targetWallet: params.targetWallet,
-    merchantWallet: params.merchantWallet,
+    merchantWallet: authority.vaultAddress,
     chainId: params.chainId,
-    policy: params.policy,
+    policy: authority.policy,
     crawlSettings: params.crawlSettings,
     includeGemini: params.includeGemini,
   });
 
   const pocCheck = verifyProofOfControlToken(params.proofOfControlToken, {
     scannedAddress: scan.targetWallet,
-    linkId: params.linkId,
+    linkId: authority.linkId,
     chainId: params.chainId,
   });
 
-  const proofOfControl = pocCheck.valid && pocCheck.payload?.proofOfControl === true;
+  const proofOfControl =
+    pocCheck.valid && pocCheck.payload?.proofOfControl === true;
 
   const scanAttestation = signScanAttestation({
     payer: scan.targetWallet,
-    linkId: params.linkId,
+    linkId: authority.linkId,
     verdict: scan.verdict,
     socketUnlocked: scan.socketUnlocked,
     proofOfControl,
-    policy: params.policy,
+    policy: authority.policy,
   });
 
   return NextResponse.json({
@@ -78,6 +68,12 @@ async function handleScan(params: {
     receipt,
     scanAttestation,
     proofOfControl,
+    linkAuthority: {
+      linkId: authority.linkId,
+      trustLevel: authority.trustLevel,
+      signer: authority.signer,
+      vaultAddress: authority.vaultAddress,
+    },
   });
 }
 
@@ -88,31 +84,15 @@ export async function GET(request: NextRequest) {
     sp.get('target_wallet') ||
     sp.get('wallet') ||
     '0x4F2a9c117034e8B1200499A1c3f88200000188E1';
-  const linkId = (sp.get('linkId') || 'default').trim();
-  const verifiedLink = getVerifiedLinkPolicy(linkId);
-  const merchantWallet =
-    verifiedLink.vaultAddress ||
-    sp.get('merchantWallet') ||
-    sp.get('merchant_wallet') ||
-    DEFAULT_CAKE_VAULT_ADDRESSES.EVM_SOCKET;
+  const linkId = (sp.get('linkId') || 'default').trim() || 'default';
   const chainId = Number(sp.get('chainId') || 42161);
-
-  const policy = sp.has('maxHops') || sp.has('firewallEnabled')
-    ? parsePolicy({
-        firewallEnabled: sp.get('firewallEnabled') ?? true,
-        maxHops: sp.get('maxHops') ?? sp.get('max_hops') ?? 3,
-        cleanLinkEnabled: sp.get('cleanLinkEnabled') ?? true,
-        unbundleEnabled: sp.get('unbundleEnabled') ?? true,
-        sybilBlockThreshold: sp.get('sybilBlockThreshold') ?? 10,
-      })
-    : verifiedLink.policy;
 
   return handleScan({
     targetWallet,
-    merchantWallet,
     chainId,
     linkId,
-    policy,
+    c: sp.get('c'),
+    sig: sp.get('sig'),
     includeGemini: sp.get('includeGemini') === 'true',
     proofOfControlToken: sp.get('proofOfControlToken'),
   });
@@ -128,19 +108,7 @@ export async function POST(request: NextRequest) {
         '0x4F2a9c117034e8B1200499A1c3f88200000188E1'
     );
     const linkId = String(body.linkId ?? 'default').trim() || 'default';
-    const verifiedLink = getVerifiedLinkPolicy(linkId);
-    const merchantWallet = String(
-      verifiedLink.vaultAddress ??
-        body.merchantWallet ??
-        body.merchant_wallet ??
-        DEFAULT_CAKE_VAULT_ADDRESSES.EVM_SOCKET
-    );
     const chainId = Number(body.chainId ?? 42161);
-    const rawPolicy =
-      body.policy && typeof body.policy === 'object'
-        ? (body.policy as Record<string, unknown>)
-        : null;
-    const policy = rawPolicy ? parsePolicy(rawPolicy) : verifiedLink.policy;
     const crawlSettings =
       body.crawlSettings && typeof body.crawlSettings === 'object'
         ? (body.crawlSettings as Partial<LiveCrawlSettings>)
@@ -149,13 +117,17 @@ export async function POST(request: NextRequest) {
       typeof body.proofOfControlToken === 'string'
         ? body.proofOfControlToken
         : null;
+    const c = typeof body.c === 'string' ? body.c : null;
+    const sig = typeof body.sig === 'string' ? body.sig : null;
 
+    // Any client-supplied policy or merchantWallet/vault in the request body is ignored;
+    // policy and vault are loaded strictly from the verified link authority.
     return handleScan({
       targetWallet,
-      merchantWallet,
       chainId,
       linkId,
-      policy,
+      c,
+      sig,
       crawlSettings,
       includeGemini: Boolean(body.includeGemini),
       proofOfControlToken,

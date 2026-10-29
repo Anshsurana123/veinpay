@@ -1,10 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { DEFAULT_CAKE_VAULT_ADDRESSES } from '@/lib/validators/address';
 import { runFullScan } from '@/lib/graph/full-scan';
-import {
-  getVerifiedLinkPolicy,
-  verifyScanAttestation,
-} from '@/lib/security/attestation';
+import { resolveVerifiedLinkAuthority } from '@/lib/links';
+import { verifyScanAttestation } from '@/lib/security/attestation';
 import { fetchSocketCrossChainQuote } from '@/lib/socket/client';
 import { EVM_TOKEN_REGISTRY } from '@/lib/socket/tokens';
 
@@ -15,22 +12,41 @@ async function executeGatedQuoteRequest(params: {
   outputToken: string;
   inputAmount: string;
   userAddress: string;
-  receiverAddress: string;
   linkId: string;
+  c?: string | null;
+  sig?: string | null;
   scanAttestation: string | null;
   slippage?: string;
   sort?: 'output' | 'time';
 }) {
-  // 1. Load authoritative policy from verified link ONLY (ignore any client-supplied policy params)
-  const verifiedLink = getVerifiedLinkPolicy(params.linkId);
-  const authoritativePolicy = verifiedLink.policy;
-  const authoritativeReceiver =
-    verifiedLink.vaultAddress || params.receiverAddress;
+  // 1. Load authoritative policy and vault ONLY from the verified link (never from client query/body)
+  const authority = await resolveVerifiedLinkAuthority({
+    linkId: params.linkId,
+    c: params.c,
+    sig: params.sig,
+  });
+
+  if (!authority.ok || !authority.vaultAddress) {
+    return NextResponse.json(
+      {
+        success: false,
+        statusCode: 403,
+        error: authority.errorCode ?? 'INVALID_SIGNED_LINK',
+        message:
+          authority.reason ??
+          'Verified signed payment link is required to resolve policy and destination vault.',
+      },
+      { status: 403 }
+    );
+  }
+
+  const authoritativePolicy = authority.policy;
+  const authoritativeReceiver = authority.vaultAddress;
 
   // 2. Verify short-lived server scanAttestation & require proofOfControl === true
   const attestationCheck = verifyScanAttestation(params.scanAttestation, {
     payer: params.userAddress,
-    linkId: verifiedLink.linkId,
+    linkId: authority.linkId,
     policy: authoritativePolicy,
     requireProofOfControl: true,
   });
@@ -50,7 +66,7 @@ async function executeGatedQuoteRequest(params: {
   }
 
   // 3. Re-execute shared server-side runFullScan() (RESTPP -> seeded -> live crawl)
-  // using the authoritative link policy so client policy params can never bypass the gate
+  // using the authoritative link policy and vault
   const { scan, receipt } = await runFullScan({
     targetWallet: params.userAddress,
     merchantWallet: authoritativeReceiver,
@@ -110,17 +126,12 @@ export async function GET(request: NextRequest) {
     sp.get('inputAmount') || sp.get('fromAmount') || '250000000';
   const userAddress =
     sp.get('userAddress') || '0x4F2a9c117034e8B1200499A1c3f88200000188E1';
-  const receiverAddress =
-    sp.get('receiverAddress') ||
-    sp.get('recipient') ||
-    DEFAULT_CAKE_VAULT_ADDRESSES.EVM_SOCKET;
   const linkId = (sp.get('linkId') || 'default').trim() || 'default';
   const scanAttestation =
     sp.get('scanAttestation') ||
     request.headers.get('x-veilpay-scan-attestation');
 
-  // Note: Any client-supplied firewallEnabled / maxHops / cleanLinkEnabled / unbundleEnabled /
-  // sybilBlockThreshold query parameters are intentionally ignored.
+  // Policy and receiver vault are loaded strictly from the verified link (never from query string)
   return executeGatedQuoteRequest({
     originChainId,
     destinationChainId,
@@ -128,8 +139,9 @@ export async function GET(request: NextRequest) {
     outputToken,
     inputAmount,
     userAddress,
-    receiverAddress,
     linkId,
+    c: sp.get('c'),
+    sig: sp.get('sig'),
     scanAttestation,
     slippage: sp.get('slippage') || '1',
     sort: sp.get('sort') === 'time' ? 'time' : 'output',
@@ -161,17 +173,15 @@ export async function POST(request: NextRequest) {
     const userAddress = String(
       body.userAddress ?? '0x4F2a9c117034e8B1200499A1c3f88200000188E1'
     );
-    const receiverAddress = String(
-      body.receiverAddress ??
-        body.recipient ??
-        DEFAULT_CAKE_VAULT_ADDRESSES.EVM_SOCKET
-    );
     const linkId = String(body.linkId ?? 'default').trim() || 'default';
+    const c = typeof body.c === 'string' ? body.c : null;
+    const sig = typeof body.sig === 'string' ? body.sig : null;
     const scanAttestation =
       typeof body.scanAttestation === 'string'
         ? body.scanAttestation
         : request.headers.get('x-veilpay-scan-attestation');
 
+    // Policy and receiver vault are loaded strictly from the verified link (never from request body)
     return executeGatedQuoteRequest({
       originChainId,
       destinationChainId,
@@ -179,8 +189,9 @@ export async function POST(request: NextRequest) {
       outputToken,
       inputAmount,
       userAddress,
-      receiverAddress,
       linkId,
+      c,
+      sig,
       scanAttestation,
       slippage: String(body.slippage ?? '1'),
       sort: body.sort === 'time' ? 'time' : 'output',

@@ -7,9 +7,11 @@ import type {
   FirewallPolicyConfig,
   FirewallScanResult,
   HopDepth,
+  LinkTrustLevel,
   LiveCrawlSettings,
   OutboundPoisonScanResult,
   PaymentAssetSymbol,
+  SignedPaymentLinkPayload,
   SupportedEvmChainId,
   VaultSettlementMode,
   VeilPayLinkConfig,
@@ -25,6 +27,7 @@ import {
   TESTNET_CAKE_VAULT_ADDRESSES,
 } from '@/lib/validators/address';
 import { DEFAULT_LINK_CONFIG } from '@/lib/utils/link-codec';
+import { buildSimulatorSignedPreviewLink } from '@/lib/links/eip712';
 import {
   EVM_TOKEN_REGISTRY,
   isTestnetChain,
@@ -35,6 +38,15 @@ import {
   areAddressesMatchingSigner,
   evaluatePayerQuoteAndBroadcastEligibility,
 } from '@/lib/session/proof-of-control';
+
+export interface ActiveSignedLinkState {
+  payload: SignedPaymentLinkPayload;
+  c: string;
+  sig: `0x${string}`;
+  trustLevel: LinkTrustLevel;
+  url?: string;
+  manageToken?: string;
+}
 
 export type ActivePersonaId =
   | 'persona-1'
@@ -72,6 +84,8 @@ export interface VeilPayStoreState {
 
   // Receiver Payment Link Configuration
   linkConfig: VeilPayLinkConfig;
+  activeSignedLink: ActiveSignedLinkState | null;
+  linkVerificationError: string | null;
 
   // Payer Checkout Simulator State
   activePersonaId: ActivePersonaId;
@@ -135,6 +149,12 @@ export interface VeilPayStoreState {
   ) => void;
   updateFirewallPolicy: (partial: Partial<FirewallPolicyConfig>) => void;
   hydrateFromDecodedLink: (decoded: VeilPayLinkConfig) => void;
+  setActiveSignedLink: (signed: ActiveSignedLinkState | null) => void;
+  setLinkVerificationError: (error: string | null) => void;
+  hydrateFromVerifiedLink: (
+    signed: ActiveSignedLinkState,
+    decoded: VeilPayLinkConfig
+  ) => void;
 
   // Payer Actions
   selectPersona: (personaId: ActivePersonaId, customAddress?: string) => void;
@@ -233,6 +253,8 @@ export const useVeilPayStore = create<VeilPayStoreState>((set, get) => ({
   showRawGsqlInspector: false,
 
   linkConfig: DEFAULT_LINK_CONFIG,
+  activeSignedLink: null,
+  linkVerificationError: null,
 
   activePersonaId: 'persona-1',
   activePayerAddress: WALLET_PERSONAS[0].address,
@@ -289,6 +311,7 @@ export const useVeilPayStore = create<VeilPayStoreState>((set, get) => ({
       return {
         networkEnv: env,
         payerChainId: nextPayerChain,
+        activeSignedLink: null,
         linkConfig: {
           ...state.linkConfig,
           destinationChainId: nextDestChain,
@@ -313,6 +336,7 @@ export const useVeilPayStore = create<VeilPayStoreState>((set, get) => ({
 
   updateLinkConfig: (partial) => {
     set((state) => ({
+      activeSignedLink: null,
       linkConfig: {
         ...state.linkConfig,
         ...partial,
@@ -332,6 +356,7 @@ export const useVeilPayStore = create<VeilPayStoreState>((set, get) => ({
       }
 
       return {
+        activeSignedLink: null,
         linkConfig: {
           ...state.linkConfig,
           settlementMode: mode,
@@ -343,6 +368,7 @@ export const useVeilPayStore = create<VeilPayStoreState>((set, get) => ({
 
   setVaultAddress: (mode, address) => {
     set((state) => ({
+      activeSignedLink: null,
       linkConfig: {
         ...state.linkConfig,
         vaultAddresses: {
@@ -356,6 +382,7 @@ export const useVeilPayStore = create<VeilPayStoreState>((set, get) => ({
   setDestinationChainAndAsset: (chainId, asset) => {
     set((state) => ({
       networkEnv: isTestnetChain(chainId) ? 'TESTNET' : 'MAINNET',
+      activeSignedLink: null,
       linkConfig: {
         ...state.linkConfig,
         destinationChainId: chainId,
@@ -367,6 +394,7 @@ export const useVeilPayStore = create<VeilPayStoreState>((set, get) => ({
 
   updateFirewallPolicy: (partial) => {
     set((state) => ({
+      activeSignedLink: null,
       linkConfig: {
         ...state.linkConfig,
         policy: {
@@ -383,6 +411,27 @@ export const useVeilPayStore = create<VeilPayStoreState>((set, get) => ({
       networkEnv: isTestnetChain(decoded.destinationChainId)
         ? 'TESTNET'
         : 'MAINNET',
+      activeSignedLink: null,
+      linkConfig: decoded,
+    });
+    void get().runFirewallAndQuotePipeline();
+  },
+
+  setActiveSignedLink: (signed) => {
+    set({ activeSignedLink: signed, linkVerificationError: null });
+  },
+
+  setLinkVerificationError: (error) => {
+    set({ linkVerificationError: error });
+  },
+
+  hydrateFromVerifiedLink: (signed, decoded) => {
+    set({
+      networkEnv: isTestnetChain(decoded.destinationChainId)
+        ? 'TESTNET'
+        : 'MAINNET',
+      activeSignedLink: signed,
+      linkVerificationError: null,
       linkConfig: decoded,
     });
     void get().runFirewallAndQuotePipeline();
@@ -494,16 +543,33 @@ export const useVeilPayStore = create<VeilPayStoreState>((set, get) => ({
 
     try {
       set({ scannerStep: 2 });
-      const activeLinkId = linkConfig.handle || 'default';
+      let signedLink = state.activeSignedLink;
+      if (!signedLink) {
+        const preview = await buildSimulatorSignedPreviewLink(linkConfig);
+        signedLink = {
+          payload: preview.payload,
+          c: preview.c,
+          sig: preview.sig,
+          trustLevel:
+            linkConfig.settlementMode === 'EVM_SOCKET' &&
+            preview.payload.signer.toLowerCase() ===
+              preview.payload.vaultAddress.toLowerCase()
+              ? 'PROVEN'
+              : 'SIGNED_UNPROVEN',
+        };
+        set({ activeSignedLink: signedLink });
+      }
+
+      const activeLinkId = signedLink.payload.linkId;
       const scanRes = await fetch('/api/firewall/scan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           targetWallet,
-          merchantWallet: linkConfig.vaultAddresses.EVM_SOCKET,
           chainId: payerChainId,
           linkId: activeLinkId,
-          policy: linkConfig.policy,
+          c: signedLink.c,
+          sig: signedLink.sig,
           crawlSettings,
           includeGemini: false,
           proofOfControlToken: state.proofOfControlToken,
@@ -534,9 +600,9 @@ export const useVeilPayStore = create<VeilPayStoreState>((set, get) => ({
           : prev.totalThreatsIntercepted,
       }));
 
-      // Issue 2 & 3 Rules: Personas and pasted addresses stay scan-only.
+      // Issue 2, 3 & 4 Rules: Personas and pasted addresses stay scan-only.
       // Only fetch a quote when connected wallet == scanned wallet, proofOfControlToken is verified,
-      // AND server scanAttestation is issued. Policy is loaded server-side from the verified link.
+      // AND server scanAttestation is issued. Policy & vault are loaded server-side from the verified link.
       const latestState = get();
       const eligibility = evaluatePayerQuoteAndBroadcastEligibility({
         activePersonaId: latestState.activePersonaId,
@@ -547,7 +613,7 @@ export const useVeilPayStore = create<VeilPayStoreState>((set, get) => ({
 
       if (
         scan.socketUnlocked &&
-        linkConfig.policy.socketAutoBridgeEnabled &&
+        signedLink.payload.policy.socketAutoBridgeEnabled &&
         eligibility.canQuote &&
         scanAttestation
       ) {
@@ -555,12 +621,12 @@ export const useVeilPayStore = create<VeilPayStoreState>((set, get) => ({
 
         const fromTokenCfg = EVM_TOKEN_REGISTRY[payerTokenSymbol];
         const destAssetKey =
-          linkConfig.asset === 'ETH' || linkConfig.asset === 'USDT'
-            ? linkConfig.asset
+          signedLink.payload.asset === 'ETH' || signedLink.payload.asset === 'USDT'
+            ? signedLink.payload.asset
             : 'USDC';
         const toTokenCfg = EVM_TOKEN_REGISTRY[destAssetKey];
 
-        const usdVal = Math.max(1, Number(linkConfig.amount) || 250);
+        const usdVal = Math.max(1, Number(signedLink.payload.amount) || 250);
         const tokenHumanAmount = usdVal / fromTokenCfg.approxUsdPrice;
         const inputAmountAtomic = toAtomicUnits(
           tokenHumanAmount,
@@ -569,16 +635,15 @@ export const useVeilPayStore = create<VeilPayStoreState>((set, get) => ({
 
         const qs = new URLSearchParams({
           originChainId: String(payerChainId),
-          destinationChainId: String(linkConfig.destinationChainId),
+          destinationChainId: String(signedLink.payload.destinationChainId),
           inputToken: fromTokenCfg.addressesByChain[payerChainId],
           outputToken:
-            toTokenCfg.addressesByChain[linkConfig.destinationChainId],
+            toTokenCfg.addressesByChain[signedLink.payload.destinationChainId],
           inputAmount: inputAmountAtomic,
           userAddress: targetWallet,
-          receiverAddress:
-            linkConfig.vaultAddresses.EVM_SOCKET ||
-            DEFAULT_CAKE_VAULT_ADDRESSES.EVM_SOCKET,
           linkId: activeLinkId,
+          c: signedLink.c,
+          sig: signedLink.sig,
           scanAttestation,
         });
 

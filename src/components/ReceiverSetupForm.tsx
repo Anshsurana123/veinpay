@@ -10,14 +10,23 @@ import {
   Layers,
   GitBranch,
   Shuffle,
+  KeyRound,
+  Ban,
 } from 'lucide-react';
+import { useAccount, useSignTypedData } from 'wagmi';
 import { useVeilPayStore } from '@/store/veilpay-store';
 import { isTestnetChain, SUPPORTED_EVM_CHAINS } from '@/lib/socket/tokens';
-import { encodeLinkConfigToBase64Url } from '@/lib/utils/link-codec';
+import {
+  buildPaymentLinkTypedData,
+  buildRevokeLinkTypedData,
+  createPaymentLinkPayload,
+} from '@/lib/links/eip712';
 import { validateMultiProtocolAddress } from '@/lib/validators/address';
 import type {
   HopDepth,
+  LinkTrustLevel,
   PaymentAssetSymbol,
+  SignedPaymentLinkPayload,
   SupportedEvmChainId,
   VaultSettlementMode,
 } from '@/types/veilpay';
@@ -33,23 +42,27 @@ const HOP_OPTIONS: { value: HopDepth; label: string; tag?: string }[] = [
 export function ReceiverSetupForm() {
   const {
     linkConfig,
+    activeSignedLink,
     updateLinkConfig,
     setVaultMode,
     setVaultAddress,
     setDestinationChainAndAsset,
     updateFirewallPolicy,
+    setActiveSignedLink,
     runFirewallAndQuotePipeline,
   } = useVeilPayStore();
 
+  const { address: connectedReceiverAddress, isConnected } = useAccount();
+  const { signTypedDataAsync, isPending: isSigningLink } = useSignTypedData();
+
   const [copied, setCopied] = useState(false);
   const [origin, setOrigin] = useState('https://veilpay.xyz');
+  const [linkActionError, setLinkActionError] = useState<string | null>(null);
+  const [revokedNotice, setRevokedNotice] = useState<string | null>(null);
 
   useEffect(() => {
     setOrigin(window.location.origin);
   }, []);
-
-  const encodedPayload = encodeLinkConfigToBase64Url(linkConfig);
-  const shareableUrl = `${origin}/pay/${encodeURIComponent(linkConfig.handle || 'goa.eth')}?c=${encodedPayload}`;
 
   const activeVaultAddress =
     linkConfig.vaultAddresses[linkConfig.settlementMode];
@@ -58,7 +71,127 @@ export function ReceiverSetupForm() {
     linkConfig.settlementMode
   );
 
+  const shareableUrl =
+    activeSignedLink?.c && activeSignedLink?.sig
+      ? `${origin}/pay/${encodeURIComponent(activeSignedLink.payload.handle || 'goa.eth')}?c=${activeSignedLink.c}&sig=${activeSignedLink.sig}`
+      : '';
+
+  const handleCreateSignedLink = async () => {
+    setLinkActionError(null);
+    setRevokedNotice(null);
+    if (!isConnected || !connectedReceiverAddress) {
+      setLinkActionError(
+        'Connect your receiver wallet (Reown AppKit) to sign this EIP-712 payment link.'
+      );
+      return;
+    }
+    if (!addressValidation.valid) {
+      setLinkActionError(
+        addressValidation.errorMessage ||
+          'Enter a valid destination vault address for the selected settlement mode.'
+      );
+      return;
+    }
+
+    try {
+      const payload = createPaymentLinkPayload({
+        handle: linkConfig.handle || 'goa.eth',
+        amount: linkConfig.amount || '250.00',
+        asset: linkConfig.asset,
+        destinationChainId: linkConfig.destinationChainId,
+        settlementMode: linkConfig.settlementMode,
+        vaultAddress: activeVaultAddress,
+        policy: linkConfig.policy,
+        signer: connectedReceiverAddress,
+      });
+
+      const sig = await signTypedDataAsync(buildPaymentLinkTypedData(payload));
+
+      const res = await fetch('/api/links', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ payload, sig }),
+      });
+      const data = (await res.json()) as {
+        error?: string;
+        c?: string;
+        sig?: `0x${string}`;
+        url?: string;
+        trustLevel?: LinkTrustLevel;
+        manageToken?: string;
+        payload?: SignedPaymentLinkPayload;
+      };
+      if (!res.ok || !data.c || !data.sig || !data.payload || !data.trustLevel) {
+        throw new Error(data.error || 'Failed to register signed payment link.');
+      }
+
+      setActiveSignedLink({
+        payload: data.payload,
+        c: data.c,
+        sig: data.sig,
+        trustLevel: data.trustLevel,
+        url: data.url,
+        manageToken: data.manageToken,
+      });
+      await runFirewallAndQuotePipeline();
+    } catch (err) {
+      setLinkActionError(
+        err instanceof Error
+          ? err.message
+          : 'Failed to sign EIP-712 PaymentLink.'
+      );
+    }
+  };
+
+  const handleRevokeSignedLink = async () => {
+    setLinkActionError(null);
+    setRevokedNotice(null);
+    if (!activeSignedLink) return;
+    if (!isConnected || !connectedReceiverAddress) {
+      setLinkActionError(
+        'Connect the original link signer wallet to sign the EIP-712 Revoke message.'
+      );
+      return;
+    }
+
+    try {
+      const issuedAt = new Date().toISOString();
+      const sig = await signTypedDataAsync(
+        buildRevokeLinkTypedData({
+          linkId: activeSignedLink.payload.linkId,
+          signer: connectedReceiverAddress,
+          issuedAt,
+        })
+      );
+
+      const res = await fetch('/api/links/revoke', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          linkId: activeSignedLink.payload.linkId,
+          signer: connectedReceiverAddress,
+          issuedAt,
+          sig,
+        }),
+      });
+      const data = (await res.json()) as { error?: string; revoked?: boolean };
+      if (!res.ok || !data.revoked) {
+        throw new Error(data.error || 'Failed to revoke payment link.');
+      }
+
+      setRevokedNotice(
+        `Link ${activeSignedLink.payload.linkId.slice(0, 12)}... revoked on server.`
+      );
+      setActiveSignedLink(null);
+    } catch (err) {
+      setLinkActionError(
+        err instanceof Error ? err.message : 'Failed to revoke link.'
+      );
+    }
+  };
+
   const handleCopyLink = async () => {
+    if (!shareableUrl) return;
     try {
       await navigator.clipboard.writeText(shareableUrl);
       setCopied(true);
@@ -541,12 +674,20 @@ export function ReceiverSetupForm() {
       <div className="border border-[#D97736]/60 bg-[#131519] p-3.5">
         <div className="mb-2 flex items-center justify-between">
           <span className="font-mono text-[11px] font-semibold text-[#E5A93C] uppercase">
-            GENERATED ZERO-DOXX PAYMENT LINK
+            GENERATED ZERO-DOXX PAYMENT LINK (EIP-712 RECEIVER SIGNED)
           </span>
           <span className="font-mono text-[10px] text-[#9499A3]">
-            BASE64URL STATELESS PAYLOAD
+            {activeSignedLink
+              ? `TRUST: ${activeSignedLink.trustLevel}`
+              : 'SIGN WITH CONNECTED WALLET'}
           </span>
         </div>
+
+        <p className="mb-2 font-mono text-[10px] text-[#9499A3]">
+          Note: The handle is a human-readable label, not a verified identity.
+          The EIP-712 signature proves which wallet signed the link and locks
+          the destination vault and firewall policy hash.
+        </p>
 
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           <div className="flex-1 overflow-hidden border border-[#262A33] bg-[#0B0C0E] px-3 py-2">
@@ -555,16 +696,28 @@ export function ReceiverSetupForm() {
                 veilpay.xyz/pay/{linkConfig.handle || 'goa.eth'}
               </span>
               <span className="truncate font-mono text-[10px] text-[#646973]">
-                {shareableUrl}
+                {shareableUrl ||
+                  'Connect wallet & click Sign Link to generate ?c=...&sig=0x...'}
               </span>
             </div>
           </div>
 
-          <div className="flex items-center gap-1.5">
+          <div className="flex flex-wrap items-center gap-1.5">
             <button
               type="button"
-              onClick={handleCopyLink}
-              className="flex items-center gap-1.5 border border-[#D97736] bg-[#D97736] px-3 py-2 font-mono text-xs font-bold text-[#0B0C0E] transition-colors hover:bg-[#E5A93C]"
+              onClick={() => void handleCreateSignedLink()}
+              disabled={isSigningLink || !addressValidation.valid}
+              className="flex items-center gap-1.5 border border-[#1F9D68] bg-[#0E291E] px-3 py-2 font-mono text-xs font-bold text-[#1F9D68] transition-colors hover:bg-[#1F9D68] hover:text-[#0B0C0E] disabled:opacity-50"
+            >
+              <KeyRound className="h-3.5 w-3.5" />
+              {isSigningLink ? 'SIGNING...' : 'SIGN LINK'}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => void handleCopyLink()}
+              disabled={!shareableUrl}
+              className="flex items-center gap-1.5 border border-[#D97736] bg-[#D97736] px-3 py-2 font-mono text-xs font-bold text-[#0B0C0E] transition-colors hover:bg-[#E5A93C] disabled:opacity-50"
             >
               {copied ? (
                 <>
@@ -579,17 +732,43 @@ export function ReceiverSetupForm() {
               )}
             </button>
 
-            <a
-              href={shareableUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-1 border border-[#262A33] bg-[#1A1D23] px-2.5 py-2 font-mono text-xs text-[#F3F1EC] transition-colors hover:border-[#D97736]"
-              title="Open Standalone Payer Checkout Route"
-            >
-              <ExternalLink className="h-3.5 w-3.5 text-[#E5A93C]" />
-            </a>
+            {activeSignedLink && (
+              <button
+                type="button"
+                onClick={() => void handleRevokeSignedLink()}
+                disabled={isSigningLink}
+                className="flex items-center gap-1 border border-[#D6453A] bg-[#2A1215] px-2.5 py-2 font-mono text-xs font-semibold text-[#D6453A] hover:bg-[#D6453A] hover:text-[#0B0C0E] disabled:opacity-50"
+                title="Revoke Signed Payment Link (EIP-712 Revoke)"
+              >
+                <Ban className="h-3.5 w-3.5" />
+                REVOKE
+              </button>
+            )}
+
+            {shareableUrl && (
+              <a
+                href={shareableUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1 border border-[#262A33] bg-[#1A1D23] px-2.5 py-2 font-mono text-xs text-[#F3F1EC] transition-colors hover:border-[#D97736]"
+                title="Open Standalone Payer Checkout Route"
+              >
+                <ExternalLink className="h-3.5 w-3.5 text-[#E5A93C]" />
+              </a>
+            )}
           </div>
         </div>
+
+        {linkActionError && (
+          <div className="mt-2 font-mono text-[11px] text-[#D6453A]">
+            {linkActionError}
+          </div>
+        )}
+        {revokedNotice && (
+          <div className="mt-2 font-mono text-[11px] text-[#E5A93C]">
+            {revokedNotice}
+          </div>
+        )}
       </div>
     </div>
   );

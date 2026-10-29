@@ -86,6 +86,8 @@ export interface GraphEdge {
   attributes: GraphEdgeAttributes;
 }
 
+export type InconclusivePolicyMode = 'BLOCK' | 'WARN';
+
 export interface FirewallPolicyConfig {
   firewallEnabled: boolean;
   maxHops: HopDepth;
@@ -93,6 +95,26 @@ export interface FirewallPolicyConfig {
   unbundleEnabled: boolean;
   socketAutoBridgeEnabled: boolean;
   sybilBlockThreshold: number;
+  inconclusivePolicy?: InconclusivePolicyMode;
+}
+
+export type LinkTrustLevel = 'PROVEN' | 'SIGNED_UNPROVEN';
+
+export interface SignedPaymentLinkPayload {
+  version: number;
+  linkId: string;
+  handle: string;
+  amount: string;
+  openAmount: boolean;
+  asset: PaymentAssetSymbol;
+  destinationChainId: SupportedEvmChainId;
+  settlementMode: VaultSettlementMode;
+  vaultAddress: string;
+  policyHash: `0x${string}`;
+  policy: FirewallPolicyConfig;
+  createdAt: string;
+  expiresAt: string;
+  signer: `0x${string}`;
 }
 
 export interface VeilPayLinkConfig {

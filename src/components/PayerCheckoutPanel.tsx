@@ -33,6 +33,7 @@ import type { SupportedEvmChainId } from '@/types/veilpay';
 export function PayerCheckoutPanel() {
   const {
     linkConfig,
+    activeSignedLink,
     activePersonaId,
     activePayerAddress,
     customAddressInput,
@@ -90,7 +91,7 @@ export function PayerCheckoutPanel() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          linkId: linkConfig.handle || 'default',
+          linkId: activeSignedLink?.payload.linkId || linkConfig.handle || 'default',
           scannedAddress: activePayerAddress,
           chainId: payerChainId,
         }),
@@ -162,6 +163,41 @@ export function PayerCheckoutPanel() {
             </div>
           </div>
         </div>
+
+        {/* Receiver EIP-712 Signature & Trust Level Verification Banner */}
+        {activeSignedLink && (
+          <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2 border border-[#262A33] bg-[#0B0C0E] px-3 py-2 font-mono text-[10px]">
+            <div className="flex flex-wrap items-center gap-3 text-[#9499A3]">
+              <span>
+                SIGNER:{' '}
+                <strong className="text-[#F3F1EC]">
+                  {activeSignedLink.payload.signer.slice(0, 8)}...
+                  {activeSignedLink.payload.signer.slice(-6)}
+                </strong>
+              </span>
+              <span>
+                VAULT:{' '}
+                <strong className="text-[#F3F1EC]">
+                  {activeSignedLink.payload.vaultAddress.slice(0, 10)}...
+                  {activeSignedLink.payload.vaultAddress.slice(-6)}
+                </strong>
+              </span>
+              <span className="text-[#646973]">
+                (Handle &ldquo;{activeSignedLink.payload.handle}&rdquo; is a
+                label, not an identity)
+              </span>
+            </div>
+            <span
+              className={`border px-2 py-0.5 font-bold uppercase ${
+                activeSignedLink.trustLevel === 'PROVEN'
+                  ? 'border-[#1F9D68]/60 bg-[#0E291E] text-[#1F9D68]'
+                  : 'border-[#D99B26]/60 bg-[#2B210D] text-[#D99B26]'
+              }`}
+            >
+              TRUST: {activeSignedLink.trustLevel}
+            </span>
+          </div>
+        )}
 
         {/* 4-Persona Simulator Bar */}
         <div className="mt-3">
