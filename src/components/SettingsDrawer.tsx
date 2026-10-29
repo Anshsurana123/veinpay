@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   X,
   Sliders,
@@ -8,8 +8,11 @@ import {
   Database,
   Cpu,
   CheckCircle2,
+  AlertTriangle,
+  CircleDashed,
 } from 'lucide-react';
 import { useVeilPayStore } from '@/store/veilpay-store';
+import type { HealthCheckResponse, IntegrationHealth } from '@/lib/health';
 
 export function SettingsDrawer() {
   const {
@@ -19,6 +22,32 @@ export function SettingsDrawer() {
     updateCrawlSettings,
     runFirewallAndQuotePipeline,
   } = useVeilPayStore();
+
+  const [healthData, setHealthData] = useState<HealthCheckResponse | null>(null);
+  const [healthLoading, setHealthLoading] = useState(false);
+
+  useEffect(() => {
+    if (!settingsDrawerOpen) return;
+    let cancelled = false;
+    setHealthLoading(true);
+    fetch('/api/health')
+      .then((res) => res.json())
+      .then((data: HealthCheckResponse) => {
+        if (!cancelled) {
+          setHealthData(data);
+          setHealthLoading(false);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setHealthLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [settingsDrawerOpen]);
 
   if (!settingsDrawerOpen) return null;
 
@@ -171,42 +200,87 @@ export function SettingsDrawer() {
           </div>
 
           <div className="space-y-2 border border-[#262A33] bg-[#0B0C0E] p-3.5">
-            <div className="font-mono text-[11px] font-semibold uppercase text-[#E5A93C]">
-              INTEGRATION STACK DIAGNOSTICS
+            <div className="flex items-center justify-between">
+              <div className="font-mono text-[11px] font-semibold uppercase text-[#E5A93C]">
+                INTEGRATION STACK DIAGNOSTICS
+              </div>
+              {healthLoading && (
+                <span className="font-mono text-[10px] text-[#9499A3]">
+                  CHECKING...
+                </span>
+              )}
             </div>
+
             {[
               {
-                name: 'SOCKET Swap V3 Public API',
-                status: 'ACTIVE (200 OK + 3.5s Fallback)',
+                id: 'socket',
+                name: 'SOCKET Swap V3 API',
+                item: healthData?.integrations.socket,
               },
               {
-                name: 'TigerGraph GSQL-Mirror & RESTPP v2',
-                status: 'ONLINE (<5ms In-Process / RESTPP Ready)',
+                id: 'tigergraph',
+                name: 'TigerGraph RESTPP & Engine',
+                item: healthData?.integrations.tigergraph,
               },
               {
+                id: 'etherscan',
                 name: 'Etherscan V2 Multichain Crawler',
-                status: 'CONFIGURED (60+ Chains + GoPlus)',
+                item: healthData?.integrations.etherscan,
               },
               {
-                name: 'AIGI SHA-256 + Gemini Narration',
-                status: 'DETERMINISTIC + GEMINI 2.5 FLASH',
+                id: 'goplus',
+                name: 'GoPlus Security Intel',
+                item: healthData?.integrations.goplus,
               },
               {
-                name: 'Reown AppKit + Cake Wallet Vaults',
-                status: 'EIP-55 / BIP-352 sp1 / Monero 888',
+                id: 'gemini',
+                name: 'Gemini AIGI Narration',
+                item: healthData?.integrations.gemini,
               },
-            ].map((diag) => (
-              <div
-                key={diag.name}
-                className="flex items-center justify-between border-b border-[#262A33]/60 pb-1.5 font-mono text-[11px] last:border-none last:pb-0"
-              >
-                <span className="text-[#9499A3]">{diag.name}</span>
-                <span className="flex items-center gap-1 text-[#1F9D68]">
-                  <CheckCircle2 className="h-3 w-3" />
-                  {diag.status}
-                </span>
-              </div>
-            ))}
+              {
+                id: 'reown',
+                name: 'Reown AppKit Connect',
+                item: healthData?.integrations.reown,
+              },
+              {
+                id: 'redis',
+                name: 'Upstash Redis Events & Rate Limit',
+                item: healthData?.integrations.redis,
+              },
+            ].map(({ id, name, item }) => {
+              const status = item?.status ?? (healthLoading ? 'checking' : 'not_configured');
+              return (
+                <div
+                  key={id}
+                  className="flex flex-col gap-0.5 border-b border-[#262A33]/60 pb-1.5 font-mono text-[11px] last:border-none last:pb-0"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-[#9499A3]">{name}</span>
+                    {status === 'ok' ? (
+                      <span className="flex items-center gap-1 text-[#1F9D68]">
+                        <CheckCircle2 className="h-3 w-3" />
+                        OK
+                      </span>
+                    ) : status === 'degraded' ? (
+                      <span className="flex items-center gap-1 text-[#D99B26]">
+                        <AlertTriangle className="h-3 w-3" />
+                        DEGRADED
+                      </span>
+                    ) : (
+                      <span className="flex items-center gap-1 text-[#9499A3]">
+                        <CircleDashed className="h-3 w-3" />
+                        NOT CONFIGURED
+                      </span>
+                    )}
+                  </div>
+                  {item?.message && (
+                    <div className="text-[10px] text-[#9499A3]/80">
+                      {item.message}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
 
