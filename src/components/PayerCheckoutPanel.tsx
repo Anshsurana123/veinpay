@@ -320,7 +320,15 @@ export function PayerCheckoutPanel() {
           <div className="mt-3 space-y-3">
             {isLoadingQuote ? (
               <div className="border border-[#262A33] bg-[#0B0C0E] p-3 font-mono text-xs text-[#E5A93C]">
-                FETCHING REAL-TIME SOCKET SWAP V3 CROSS-CHAIN ROUTE...
+                FETCHING REAL-TIME CROSS-CHAIN ROUTE...
+              </div>
+            ) : activeQuote?.source === 'UNSUPPORTED_ON_TESTNET' ? (
+              <div className="border border-[#D6453A] bg-[#2D1412]/70 p-3 font-mono text-xs text-[#D6453A]">
+                <div className="font-bold">UNSUPPORTED ON TESTNET</div>
+                <p className="mt-1 text-[11px] text-[#F3F1EC]">
+                  {activeQuote.fallbackReason ??
+                    'Cross-chain testnet routing supports USDC only via Circle CCTP V2.'}
+                </p>
               </div>
             ) : primaryRoute ? (
               <div className="grid grid-cols-2 gap-2 font-mono sm:grid-cols-4">
@@ -336,30 +344,34 @@ export function PayerCheckoutPanel() {
 
                 <div className="border border-[#262A33] bg-[#0B0C0E] p-2.5">
                   <div className="text-[10px] text-[#9499A3]">
-                    ESTIMATED OUTPUT
+                    NET RECEIVER OUTPUT
                   </div>
                   <div className="mt-0.5 text-xs font-bold tabular-nums text-[#1F9D68]">
-                    {primaryRoute.outputAmountFormatted} {linkConfig.asset}
+                    {primaryRoute.outputAmountFormatted}
                   </div>
                 </div>
 
                 <div className="border border-[#262A33] bg-[#0B0C0E] p-2.5">
                   <div className="flex items-center gap-1 text-[10px] text-[#9499A3]">
                     <Clock className="h-3 w-3 text-[#E5A93C]" />
-                    EST. SETTLEMENT TIME
+                    EXPECTED FINALITY TIME
                   </div>
                   <div className="mt-0.5 text-xs font-bold tabular-nums text-[#F3F1EC]">
-                    ~{primaryRoute.serviceTime} sec
+                    {activeQuote?.cctpRoute
+                      ? `${activeQuote.cctpRoute.expectedTimeSeconds} sec (${activeQuote.cctpRoute.finalityMode})`
+                      : `${primaryRoute.serviceTime} sec`}
                   </div>
                 </div>
 
                 <div className="border border-[#262A33] bg-[#0B0C0E] p-2.5">
                   <div className="flex items-center gap-1 text-[10px] text-[#9499A3]">
                     <Fuel className="h-3 w-3 text-[#D97736]" />
-                    NETWORK GAS FEE
+                    {activeQuote?.cctpRoute ? 'CCTP BURN FEE' : 'NETWORK GAS FEE'}
                   </div>
                   <div className="mt-0.5 text-xs font-bold tabular-nums text-[#E5A93C]">
-                    ${primaryRoute.totalGasFeesInUsd.toFixed(4)} USD
+                    {activeQuote?.cctpRoute
+                      ? `${activeQuote.cctpRoute.feeFormatted} USDC (${activeQuote.cctpRoute.protocolFeeBps} bps)`
+                      : `$${primaryRoute.totalGasFeesInUsd.toFixed(4)} USD`}
                   </div>
                 </div>
               </div>
@@ -368,12 +380,15 @@ export function PayerCheckoutPanel() {
             <div className="flex flex-col gap-2 sm:flex-row">
               <button
                 type="button"
+                disabled={activeQuote?.source === 'UNSUPPORTED_ON_TESTNET'}
                 onClick={() => setSettlementModalOpen(true)}
-                className="flex flex-1 items-center justify-center gap-2 border border-[#1F9D68] bg-[#1F9D68] py-3 font-mono text-xs font-bold text-[#0B0C0E] transition-colors hover:bg-[#25b87b]"
+                className="flex flex-1 items-center justify-center gap-2 border border-[#1F9D68] bg-[#1F9D68] py-3 font-mono text-xs font-bold text-[#0B0C0E] transition-colors hover:bg-[#25b87b] disabled:cursor-not-allowed disabled:opacity-40"
               >
                 <ShieldCheck className="h-4 w-4" />
                 {linkConfig.settlementMode === 'EVM_SOCKET'
-                  ? `SETTLE $${linkConfig.amount} VIA SOCKET V3 TO CAKE WALLET VAULT`
+                  ? activeQuote?.source === 'CCTP_V2_TESTNET'
+                    ? `SETTLE ${activeQuote.cctpRoute?.netAmountOutFormatted ?? linkConfig.amount} USDC NET VIA CIRCLE CCTP V2`
+                    : `SETTLE $${linkConfig.amount} VIA SOCKET V3 TO CAKE WALLET VAULT`
                   : linkConfig.settlementMode === 'BTC_SILENT_PAYMENT'
                     ? `OPEN BITCOIN SILENT PAYMENT (BIP-352 sp1...) QR VAULT`
                     : `OPEN MONERO SUBADDRESS (888... RINGCT) QR VAULT`}

@@ -1,4 +1,6 @@
 import type {
+  CctpFinalityMode,
+  CctpRoute,
   NormalizedSocketRoute,
   VeilPayQuoteResponse,
 } from '@/types/veilpay';
@@ -9,6 +11,8 @@ import {
   NATIVE_TOKEN_ADDRESS,
   resolveTokenByAddressOrSymbol,
 } from '@/lib/socket/tokens';
+import { computeCctpV2Quote } from '@/lib/cctp/quote';
+import { isSupportedCctpTestnetChain } from '@/lib/cctp/contracts';
 
 export interface SocketQuoteRequestParams {
   originChainId: number;
@@ -20,6 +24,8 @@ export interface SocketQuoteRequestParams {
   receiverAddress: string;
   slippage?: string;
   sort?: 'output' | 'time';
+  finalityMode?: CctpFinalityMode;
+  useForwardingService?: boolean;
 }
 
 interface RawSocketV3Route {
@@ -261,21 +267,201 @@ export function buildDeterministicFallbackQuote(
   };
 }
 
+export function buildUnsupportedTestnetQuote(
+  params: SocketQuoteRequestParams,
+  reason: string,
+  elapsedMs: number
+): VeilPayQuoteResponse {
+  return {
+    success: false,
+    statusCode: 400,
+    source: 'UNSUPPORTED_ON_TESTNET',
+    fallbackReason: reason,
+    executionTimeMs: elapsedMs,
+    result: {
+      originChainId: params.originChainId,
+      destinationChainId: params.destinationChainId,
+      userAddress: params.userAddress,
+      receiverAddress: params.receiverAddress,
+      routes: [],
+    },
+  };
+}
+
+export function buildCctpV2QuoteResponse(
+  params: SocketQuoteRequestParams,
+  cctpRoute: CctpRoute,
+  elapsedMs: number
+): VeilPayQuoteResponse {
+  const originName = getChainDisplayName(params.originChainId);
+  const destName = getChainDisplayName(params.destinationChainId);
+  const bridgeDisplayName = `Circle CCTP V2 (${cctpRoute.finalityMode} · ${originName} Domain ${cctpRoute.sourceDomain} → ${destName} Domain ${cctpRoute.destinationDomain})`;
+  const netUsd = Number(Number(cctpRoute.netAmountOutFormatted).toFixed(2));
+  const grossUsd = Number(Number(cctpRoute.amountInFormatted).toFixed(2));
+  const quoteId = `0xcctp_v2_${cctpRoute.sourceDomain}_${cctpRoute.destinationDomain}_${cctpRoute.amountInAtomic}`;
+
+  const normalizedRoute: NormalizedSocketRoute = {
+    quoteId,
+    userOp: 'tx',
+    originChainId: cctpRoute.sourceChainId,
+    destinationChainId: cctpRoute.destinationChainId,
+    isSameChainDirect: false,
+    toAmount: cctpRoute.netAmountOutAtomic,
+    usedBridgeNames: [bridgeDisplayName],
+    serviceTime: cctpRoute.expectedTimeSeconds,
+    totalGasFeesInUsd: 0.02,
+    outputAmountFormatted: `${cctpRoute.netAmountOutFormatted} USDC`,
+    minAmountOutFormatted: `${cctpRoute.netAmountOutFormatted} USDC`,
+    outputValueInUsd: netUsd,
+    inputAmountFormatted: `${cctpRoute.amountInFormatted} USDC`,
+    inputValueInUsd: grossUsd,
+    estimatedTime: cctpRoute.expectedTimeSeconds,
+    slippage: 0,
+    routeTags: [
+      'CCTP_V2_TESTNET',
+      cctpRoute.finalityMode === 'FAST' ? 'FAST_ATTESTATION' : 'STANDARD_FINALITY',
+    ],
+    bridgeProtocolName: 'circle-cctp-v2',
+    bridgeDisplayName,
+    cctpRoute,
+    approval: cctpRoute.approval,
+    txData: {
+      kind: 'evm_tx',
+      object: cctpRoute.burnTxData,
+    },
+    gasFee: {
+      estimatedFee: '85000000000000',
+      feeInUsd: 0.02,
+    },
+    statusCheckUrl: `/api/cctp/attestation?sourceDomain=${cctpRoute.sourceDomain}`,
+  };
+
+  return {
+    success: true,
+    statusCode: 200,
+    source: 'CCTP_V2_TESTNET',
+    cctp: cctpRoute,
+    cctpRoute,
+    executionTimeMs: elapsedMs,
+    result: {
+      originChainId: cctpRoute.sourceChainId,
+      destinationChainId: cctpRoute.destinationChainId,
+      userAddress: params.userAddress,
+      receiverAddress: params.receiverAddress,
+      routes: [normalizedRoute],
+    },
+  };
+}
+
 export async function fetchSocketCrossChainQuote(
   params: SocketQuoteRequestParams
 ): Promise<VeilPayQuoteResponse> {
   const startPerf = performance.now();
 
-  const inMeta = resolveTokenByAddressOrSymbol(
-    params.originChainId,
-    params.inputToken
-  );
-  const outMeta = resolveTokenByAddressOrSymbol(
-    params.destinationChainId,
-    params.outputToken
-  );
+  let inMeta;
+  let outMeta;
+  try {
+    inMeta = resolveTokenByAddressOrSymbol(
+      params.originChainId,
+      params.inputToken
+    );
+    outMeta = resolveTokenByAddressOrSymbol(
+      params.destinationChainId,
+      params.outputToken
+    );
+  } catch (err) {
+    const elapsedMs = Number((performance.now() - startPerf).toFixed(2));
+    return buildUnsupportedTestnetQuote(
+      params,
+      err instanceof Error ? err.message : 'Unsupported token or chain selection.',
+      elapsedMs
+    );
+  }
 
-  // Scenario 5B: Same-Chain & Same-Token Direct Transfer (skip bridging overhead)
+  // Testnet routing rules (Issue 1 / T1):
+  // - Never silently substitute a token or build a fake cross-chain ERC-20 transfer.
+  // - Same chain (origin == destination): direct transfer (USDC or native ETH only on testnet), labeled SAME_CHAIN_DIRECT with tx.chainId == destinationChainId.
+  // - Different chains on testnet: USDC only via real Circle CCTP V2 burn-and-mint flow ('CCTP_V2_TESTNET').
+  // - Non-USDC on testnet cross-chain (or mainnet<->testnet mix): explicit 'UNSUPPORTED_ON_TESTNET' error.
+  if (
+    isTestnetChain(params.originChainId) ||
+    isTestnetChain(params.destinationChainId)
+  ) {
+    const elapsedMs = Number((performance.now() - startPerf).toFixed(2));
+
+    if (
+      !isTestnetChain(params.originChainId) ||
+      !isTestnetChain(params.destinationChainId)
+    ) {
+      return buildUnsupportedTestnetQuote(
+        params,
+        'Cannot bridge between mainnet and testnet chains.',
+        elapsedMs
+      );
+    }
+
+    if (params.originChainId === params.destinationChainId) {
+      if (
+        inMeta.symbol !== outMeta.symbol ||
+        (inMeta.symbol !== 'USDC' && inMeta.symbol !== 'ETH')
+      ) {
+        return buildUnsupportedTestnetQuote(
+          params,
+          `Token ${inMeta.symbol} -> ${outMeta.symbol} is unsupported on testnet. Same-chain testnet transfers support direct USDC or native ETH only.`,
+          elapsedMs
+        );
+      }
+
+      return buildSameChainDirectRoute(
+        {
+          ...params,
+          destinationChainId: params.originChainId,
+          inputToken: inMeta.address,
+          outputToken: outMeta.address,
+        },
+        elapsedMs
+      );
+    }
+
+    // Cross-chain on testnet: strictly USDC only via Circle CCTP V2
+    if (inMeta.symbol !== 'USDC' || outMeta.symbol !== 'USDC') {
+      return buildUnsupportedTestnetQuote(
+        params,
+        `Cross-chain testnet routing supports USDC only via Circle CCTP V2. Selected ${inMeta.symbol} -> ${outMeta.symbol} is unsupported on testnet.`,
+        elapsedMs
+      );
+    }
+
+    if (
+      !isSupportedCctpTestnetChain(params.originChainId) ||
+      !isSupportedCctpTestnetChain(params.destinationChainId)
+    ) {
+      return buildUnsupportedTestnetQuote(
+        params,
+        `Chain pair ${params.originChainId} -> ${params.destinationChainId} is not supported by Circle CCTP V2 Testnet.`,
+        elapsedMs
+      );
+    }
+
+    const outcome = await computeCctpV2Quote({
+      sourceChainId: params.originChainId,
+      destinationChainId: params.destinationChainId,
+      inputToken: inMeta.address,
+      outputToken: outMeta.address,
+      amountInAtomic: params.inputAmount,
+      userAddress: params.userAddress,
+      verifiedVaultAddress: params.receiverAddress,
+      requestedFinality: params.finalityMode ?? 'FAST',
+      useForwardingService: params.useForwardingService ?? false,
+    });
+    const totalElapsed = Number((performance.now() - startPerf).toFixed(2));
+    if (!outcome.ok) {
+      return buildUnsupportedTestnetQuote(params, outcome.message, totalElapsed);
+    }
+    return buildCctpV2QuoteResponse(params, outcome.route, totalElapsed);
+  }
+
+  // Scenario 5B: Same-Chain & Same-Token Direct Transfer on Mainnet (skip bridging overhead)
   if (
     params.originChainId === params.destinationChainId &&
     inMeta.address.toLowerCase() === outMeta.address.toLowerCase()
@@ -289,49 +475,6 @@ export async function fetchSocketCrossChainQuote(
       },
       elapsedMs
     );
-  }
-
-  // Scenario 5D: Testnet Cross-Chain Bridge Route (Sepolia / Base Sepolia / Arbitrum Sepolia / OP Sepolia / Polygon Amoy)
-  if (
-    isTestnetChain(params.originChainId) ||
-    isTestnetChain(params.destinationChainId)
-  ) {
-    const elapsedMs = Number((performance.now() - startPerf).toFixed(2));
-    const fallback = buildDeterministicFallbackQuote(
-      { ...params, inputToken: inMeta.address, outputToken: outMeta.address },
-      'Testnet Cross-Chain Relay (Circle CCTP / Across Sepolia SpokePool)',
-      elapsedMs
-    );
-    const originName = getChainDisplayName(params.originChainId);
-    const destName = getChainDisplayName(params.destinationChainId);
-    const isNative =
-      inMeta.address.toLowerCase() === NATIVE_TOKEN_ADDRESS.toLowerCase();
-
-    fallback.source = 'TESTNET_BRIDGE_ROUTE';
-    fallback.result.routes[0] = {
-      ...fallback.result.routes[0],
-      usedBridgeNames: [
-        `Testnet Cross-Chain Relay (${originName} → ${destName})`,
-      ],
-      bridgeProtocolName: 'testnet-cctp-spokepool',
-      bridgeDisplayName: `Testnet Cross-Chain Relay (${originName} → ${destName})`,
-      routeTags: ['TESTNET_ROUTE', 'ZERO_MAINNET_RISK'],
-      txData: {
-        kind: 'evm_tx',
-        object: {
-          chainId: params.originChainId,
-          to: isNative ? params.receiverAddress : inMeta.address,
-          data: isNative
-            ? '0x'
-            : encodeErc20TransferCalldata(
-                params.receiverAddress,
-                params.inputAmount
-              ),
-          value: isNative ? params.inputAmount : '0',
-        },
-      },
-    };
-    return fallback;
   }
 
   // Scenario 5A: Cross-Chain or Cross-Token Swap via Socket Swap V3 API

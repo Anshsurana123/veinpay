@@ -31,6 +31,7 @@ import {
   getChainExplorerUrl,
   isTestnetChain,
 } from '@/lib/socket/tokens';
+import { useCctpTransfer } from '@/hooks/useCctpTransfer';
 import type { VaultSettlementMode } from '@/types/veilpay';
 
 export function CakeWalletSettlementModal() {
@@ -51,6 +52,17 @@ export function CakeWalletSettlementModal() {
   const { switchChainAsync } = useSwitchChain();
   const { sendTransactionAsync, isPending: isBroadcastingTx } =
     useSendTransaction();
+
+  const {
+    activeTransfer: cctpTransfer,
+    resumableTransfers,
+    isBusy: isCctpBusy,
+    startBurnTransfer,
+    completeMintOnDestination,
+  } = useCctpTransfer({
+    linkId: linkConfig.handle,
+    receiverVaultAddress: linkConfig.vaultAddresses.EVM_SOCKET,
+  });
 
   const [btcLegacyFormat, setBtcLegacyFormat] = useState(false);
   const [qrDataUrl, setQrDataUrl] = useState<string>('');
@@ -163,6 +175,17 @@ export function CakeWalletSettlementModal() {
     if (!primaryRoute?.txData?.object) return;
     setBroadcastError(null);
     try {
+      if (activeQuote?.source === 'CCTP_V2_TESTNET' && activeQuote.cctpRoute) {
+        const rec = await startBurnTransfer(activeQuote.cctpRoute);
+        if (rec.burnTxHash) {
+          setBroadcastedTxHash(rec.burnTxHash);
+        }
+        if (rec.status === 'FAILED' && rec.failureReason) {
+          setBroadcastError(rec.failureReason);
+        }
+        return;
+      }
+
       if (walletChainId !== payerChainId && switchChainAsync) {
         await switchChainAsync({ chainId: payerChainId });
       }
@@ -272,29 +295,86 @@ export function CakeWalletSettlementModal() {
                     </div>
                     <div>
                       <div className="text-[10px] text-[#9499A3]">
-                        ESTIMATED OUTPUT
+                        NET RECEIVER OUTPUT
                       </div>
                       <div className="font-bold tabular-nums text-[#1F9D68]">
-                        {primaryRoute.outputAmountFormatted} {linkConfig.asset}
+                        {primaryRoute.outputAmountFormatted}
                       </div>
                     </div>
                     <div>
                       <div className="text-[10px] text-[#9499A3]">
-                        SETTLEMENT TIME
+                        EXPECTED FINALITY
                       </div>
                       <div className="font-bold tabular-nums text-[#F3F1EC]">
-                        ~{primaryRoute.serviceTime}s
+                        {activeQuote?.cctpRoute
+                          ? `${activeQuote.cctpRoute.expectedTimeSeconds}s (${activeQuote.cctpRoute.finalityMode})`
+                          : `${primaryRoute.serviceTime}s`}
                       </div>
                     </div>
                     <div>
                       <div className="text-[10px] text-[#9499A3]">
-                        GAS FEE ESTIMATE
+                        {activeQuote?.cctpRoute ? 'CCTP BURN FEE' : 'GAS FEE ESTIMATE'}
                       </div>
                       <div className="font-bold tabular-nums text-[#E5A93C]">
-                        ${primaryRoute.totalGasFeesInUsd.toFixed(4)}
+                        {activeQuote?.cctpRoute
+                          ? `${activeQuote.cctpRoute.feeFormatted} USDC`
+                          : `$${primaryRoute.totalGasFeesInUsd.toFixed(4)}`}
                       </div>
                     </div>
                   </div>
+
+                  {activeQuote?.cctpRoute && (
+                    <div className="mt-2 border border-[#262A33] bg-[#131519] p-2.5 text-[11px]">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="font-bold text-[#E5A93C]">
+                          CIRCLE CCTP V2 BURN &amp; MINT STATE MACHINE
+                        </span>
+                        <span className="border border-[#D97736] bg-[#261810] px-1.5 py-0.5 text-[10px] font-bold text-[#E5A93C]">
+                          STATUS: {cctpTransfer?.status ?? 'QUOTED'}
+                        </span>
+                      </div>
+                      <div className="mt-1.5 grid grid-cols-1 gap-1 text-[10px] text-[#9499A3] sm:grid-cols-2">
+                        <div>
+                          GROSS IN: {activeQuote.cctpRoute.amountInFormatted} USDC → NET OUT:{' '}
+                          <span className="text-[#1F9D68]">
+                            {activeQuote.cctpRoute.netAmountOutFormatted} USDC
+                          </span>
+                        </div>
+                        <div>
+                          DOMAINS: {activeQuote.cctpRoute.sourceDomain} →{' '}
+                          {activeQuote.cctpRoute.destinationDomain} (minFinality:{' '}
+                          {activeQuote.cctpRoute.minFinalityThreshold})
+                        </div>
+                        <div className="truncate">
+                          TokenMessengerV2: {activeQuote.cctpRoute.contracts.tokenMessengerV2}
+                        </div>
+                        <div className="truncate">
+                          MessageTransmitterV2:{' '}
+                          {activeQuote.cctpRoute.contracts.messageTransmitterV2}
+                        </div>
+                      </div>
+                      {(cctpTransfer?.status === 'ATTESTED' ||
+                        resumableTransfers.some((t) => t.status === 'ATTESTED' || t.status === 'BURN_CONFIRMED')) && (
+                        <div className="mt-2 flex items-center justify-between border-t border-[#262A33] pt-2">
+                          <span className="text-[10px] text-[#1F9D68]">
+                            Iris Attestation Ready — Complete Mint on Destination Chain
+                          </span>
+                          <button
+                            type="button"
+                            disabled={isCctpBusy}
+                            onClick={() =>
+                              void completeMintOnDestination(
+                                cctpTransfer ?? resumableTransfers[0]
+                              )
+                            }
+                            className="border border-[#1F9D68] bg-[#1F9D68] px-2.5 py-1 text-[10px] font-bold text-[#0B0C0E] hover:bg-[#25b87b] disabled:opacity-50"
+                          >
+                            {isCctpBusy ? 'COMPLETING MINT...' : 'COMPLETE TRANSFER (MINT USDC)'}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   {primaryRoute.txData?.object && (
                     <div className="mt-2 border-t border-[#262A33] pt-2 text-[11px]">

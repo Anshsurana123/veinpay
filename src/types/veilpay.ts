@@ -256,6 +256,99 @@ export interface OutboundPoisonScanResult {
   summaryNarrative: string;
 }
 
+export type CctpFinalityMode = 'FAST' | 'STANDARD';
+
+export type CctpTransferStatus =
+  | 'QUOTED'
+  | 'APPROVING'
+  | 'BURN_PENDING'
+  | 'BURN_CONFIRMED'
+  | 'ATTESTATION_PENDING'
+  | 'ATTESTED'
+  | 'MINT_PENDING'
+  | 'MINTED'
+  | 'FAILED';
+
+export interface CctpContractSet {
+  usdcSource: `0x${string}`;
+  usdcDestination: `0x${string}`;
+  tokenMessengerV2: `0x${string}`;
+  messageTransmitterV2: `0x${string}`;
+  tokenMinterV2: `0x${string}`;
+}
+
+export interface CctpRoute {
+  sourceChainId: SupportedEvmChainId;
+  destinationChainId: SupportedEvmChainId;
+  sourceDomain: number;
+  destinationDomain: number;
+  amountInAtomic: string;
+  amountInFormatted: string;
+  protocolFeeBps: number;
+  protocolFeeAtomic: string;
+  forwardingFeeAtomic: string;
+  totalFeeAtomic: string;
+  feeFormatted: string;
+  maxFeeAtomic: string;
+  netAmountOutAtomic: string;
+  netAmountOutFormatted: string;
+  expectedTimeSeconds: number;
+  expectedTimeDisplay: string;
+  finalityMode: CctpFinalityMode;
+  minFinalityThreshold: 1000 | 2000;
+  fastTransferAvailableOnSource: boolean;
+  useForwardingService: boolean;
+  mintRecipientAddress: `0x${string}`;
+  mintRecipientBytes32: `0x${string}`;
+  destinationCallerBytes32: `0x${string}`;
+  contracts: CctpContractSet;
+  approval: {
+    spenderAddress: `0x${string}`;
+    amount: string;
+    tokenAddress: `0x${string}`;
+    userAddress: string;
+  };
+  burnTxData: {
+    chainId: number;
+    to: `0x${string}`;
+    data: `0x${string}`;
+    value: string;
+  };
+}
+
+export interface CctpTransferRecord {
+  id: string;
+  linkId?: string;
+  route?: CctpRoute;
+  approvalTxHash?: `0x${string}` | null;
+  burnTxHash: `0x${string}`;
+  mintTxHash?: `0x${string}` | null;
+  status: CctpTransferStatus;
+  failureReason?: string | null;
+  payerAddress: string;
+  receiverVaultAddress: `0x${string}`;
+  sourceChainId: SupportedEvmChainId;
+  destinationChainId: SupportedEvmChainId;
+  sourceDomain: number;
+  destinationDomain: number;
+  amountInAtomic: string;
+  totalFeeAtomic: string;
+  netAmountOutAtomic: string;
+  finalityMode: CctpFinalityMode;
+  minFinalityThreshold: 1000 | 2000;
+  useForwardingService: boolean;
+  messageBytes?: `0x${string}` | null;
+  attestationHex?: `0x${string}` | null;
+  cctpNonce?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  history: Array<{
+    status: CctpTransferStatus;
+    timestamp: string;
+    detail?: string;
+  }>;
+}
+
 export interface NormalizedSocketRoute {
   quoteId: string;
   userOp: string;
@@ -279,6 +372,7 @@ export interface NormalizedSocketRoute {
   bridgeProtocolName: string;
   bridgeDisplayName: string;
   bridgeIcon?: string;
+  cctpRoute?: CctpRoute;
   approval: {
     spenderAddress: string;
     amount: string;
@@ -307,10 +401,15 @@ export interface VeilPayQuoteResponse {
   source:
     | 'SOCKET_V3_LIVE'
     | 'SAME_CHAIN_DIRECT'
-    | 'TESTNET_BRIDGE_ROUTE'
-    | 'FALLBACK_DETERMINISTIC';
+    | 'CCTP_V2_TESTNET'
+    | 'FALLBACK_DETERMINISTIC'
+    | 'UNSUPPORTED_ON_TESTNET';
+  error?: string;
+  message?: string;
   fallbackReason?: string;
   executionTimeMs: number;
+  cctp?: CctpRoute;
+  cctpRoute?: CctpRoute;
   result: {
     originChainId: number;
     destinationChainId: number;
