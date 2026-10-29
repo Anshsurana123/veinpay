@@ -121,7 +121,8 @@ export function TopologicalGraphCanvas() {
   const isBlocked = !activeScan.socketUnlocked;
   const isWarningOrBypass =
     activeScan.verdict === 'WARNING_SYBIL' ||
-    activeScan.verdict === 'ADVISORY_BYPASSED';
+    activeScan.verdict === 'ADVISORY_BYPASSED' ||
+    (activeScan.verdict === 'INCONCLUSIVE' && activeScan.socketUnlocked);
 
   return (
     <div className="border border-[#262A33] bg-[#131519]">

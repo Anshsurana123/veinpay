@@ -186,6 +186,15 @@ export function generateAigiForensicReceipt(
     badgeTitle = 'POLICY BYPASSED: FIREWALL MASTER TOGGLE OFF';
     badgeSummary = `Advisory Only: Firewall enforcement disabled by receiver (${scan.taintHits} taint hits, ${scan.sybilClusterSize} sybil size observed)`;
     deterministicNarrative = `Master Firewall Toggle is currently OFF. TigerGraph traversal still inspected ${scan.nodesScanned} vertices and ${scan.edgesTraversed} edges across ${scan.maxHopsQueried} hops (recording ${scan.taintHits} taint hits and sybil cluster size ${scan.sybilClusterSize}), but enforcement is bypassed to permit SOCKET quote generation.`;
+  } else if (scan.verdict === 'INCONCLUSIVE') {
+    const isBlock = (scan.policyApplied.inconclusivePolicy ?? 'BLOCK') === 'BLOCK';
+    badgeTitle = isBlock
+      ? 'LINEAGE INCONCLUSIVE: BLOCKED BY POLICY'
+      : 'LINEAGE INCONCLUSIVE: WARNING ADVISORY';
+    badgeSummary = scan.inconclusiveReason
+      ? `Inconclusive: ${scan.inconclusiveReason}`
+      : `Unable to fully verify lineage (${scan.nodesScanned} Wallets Inspected)`;
+    deterministicNarrative = `Lineage inspection returned INCONCLUSIVE for ${scan.targetWallet}. Reason: ${scan.inconclusiveReason ?? 'Incomplete or unverified lineage data'}. Link policy 'inconclusivePolicy' is set to ${scan.policyApplied.inconclusivePolicy ?? 'BLOCK'}, so settlement access is ${isBlock ? 'locked (fail-closed)' : 'unlocked with warning'}.`;
   } else {
     deterministicNarrative = `TigerGraph 3-in-1 Pre-Sign Firewall completed ${scan.maxHopsQueried}-hop backward lineage and sybil cluster inspection on ${scan.targetWallet} in ${scan.executionTimeMs}ms (${scan.nodesScanned} vertices, ${scan.edgesTraversed} directed edges). Confirmed 0 drainer/mixer taint links, 0 sybil bundle violations, and 0 dust-factory anomalies.${scan.shallowScanAdvisory ? ` Note: ${scan.shallowScanAdvisory}` : ''}`;
   }
@@ -204,7 +213,9 @@ export function generateAigiForensicReceipt(
       cleanLinkEnabled: scan.policyApplied.cleanLinkEnabled,
       unbundleEnabled: scan.policyApplied.unbundleEnabled,
       sybilBlockThreshold: scan.policyApplied.sybilBlockThreshold,
+      inconclusivePolicy: scan.policyApplied.inconclusivePolicy ?? 'BLOCK',
     },
+    inconclusiveReason: scan.inconclusiveReason ?? null,
     metrics: {
       minTaintHop: scan.minTaintHop,
       taintHits: scan.taintHits,
@@ -236,6 +247,7 @@ export function generateAigiForensicReceipt(
     badgeSummary,
     targetWallet: scan.targetWallet,
     merchantWallet: scan.merchantWallet,
+    inconclusiveReason: scan.inconclusiveReason ?? null,
     telemetry: {
       nodesScanned: scan.nodesScanned,
       edgesTraversed: scan.edgesTraversed,

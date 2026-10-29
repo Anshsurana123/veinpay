@@ -22,7 +22,8 @@ export type VerdictStatus =
   | 'INTERCEPTED_SYBIL'
   | 'WARNING_SYBIL'
   | 'INTERCEPTED_POISONING'
-  | 'ADVISORY_BYPASSED';
+  | 'ADVISORY_BYPASSED'
+  | 'INCONCLUSIVE';
 
 export type ExecutionEngineSource =
   | 'IN_MEMORY_GSQL_ENGINE'
@@ -183,6 +184,7 @@ export interface FirewallScanResult {
   shallowScanAdvisory: string | null;
   liveCrawlNotes: string | null;
   crawlTruncated?: boolean;
+  inconclusiveReason?: string | null;
   vertices: GraphVertex[];
   edges: GraphEdge[];
   evidenceEdges: GraphEdge[];
@@ -214,6 +216,7 @@ export interface AigiForensicReceipt {
   badgeSummary: string;
   targetWallet: string;
   merchantWallet: string;
+  inconclusiveReason?: string | null;
   telemetry: {
     nodesScanned: number;
     edgesTraversed: number;

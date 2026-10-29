@@ -76,6 +76,8 @@ export interface RunTraversalOptions {
   executionSource?: ExecutionEngineSource;
   liveCrawlNotes?: string | null;
   crawlTruncated?: boolean;
+  isInconclusive?: boolean;
+  inconclusiveReason?: string | null;
   precomputedElapsedMs?: number;
 }
 
@@ -421,6 +423,11 @@ export function runVeilPayFirewallTraversal(
     verdict = 'INTERCEPTED_SYBIL';
     socketUnlocked = false;
     vaultUriUnlocked = false;
+  } else if (options.isInconclusive || options.crawlTruncated) {
+    verdict = 'INCONCLUSIVE';
+    const isBlock = (policy.inconclusivePolicy ?? 'BLOCK') === 'BLOCK';
+    socketUnlocked = !isBlock;
+    vaultUriUnlocked = !isBlock;
   } else if (
     policy.unbundleEnabled &&
     (sybilClusterSize >= 3 || cyclicLoopDetected)
@@ -507,6 +514,13 @@ export function runVeilPayFirewallTraversal(
     shallowScanAdvisory,
     liveCrawlNotes: options.liveCrawlNotes ?? null,
     crawlTruncated: options.crawlTruncated,
+    inconclusiveReason:
+      options.inconclusiveReason ??
+      (verdict === 'INCONCLUSIVE'
+        ? options.crawlTruncated
+          ? 'Crawl truncated before completing full ancestor lineage inspection.'
+          : 'Inconclusive scan telemetry.'
+        : null),
     vertices: Array.from(workingVertices.values()),
     edges: allTraversedEdges,
     evidenceEdges,

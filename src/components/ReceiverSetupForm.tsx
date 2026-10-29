@@ -12,6 +12,7 @@ import {
   Shuffle,
   KeyRound,
   Ban,
+  ShieldAlert,
 } from 'lucide-react';
 import { useAccount, useSignTypedData } from 'wagmi';
 import { useVeilPayStore } from '@/store/veilpay-store';
@@ -667,6 +668,48 @@ export function ReceiverSetupForm() {
             </div>
             <span className="font-mono text-[10px] text-[#1F9D68]">V3 API</span>
           </label>
+
+          <div className="border border-[#262A33] bg-[#1A1D23] p-2.5">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <div className="flex items-center gap-1.5 font-mono text-xs font-semibold text-[#F3F1EC]">
+                  <ShieldAlert className="h-3.5 w-3.5 text-[#E5A93C]" />
+                  Inconclusive Lineage Fail-Closed Policy
+                </div>
+                <p className="text-[11px] text-[#9499A3]">
+                  Action when unknown wallet crawl is truncated, times out, or lacks crawler API key.
+                </p>
+              </div>
+              <div className="flex items-center gap-1 border border-[#262A33] bg-[#0B0C0E] p-0.5">
+                <button
+                  type="button"
+                  onClick={() =>
+                    updateFirewallPolicy({ inconclusivePolicy: 'BLOCK' })
+                  }
+                  className={`px-2 py-1 font-mono text-[10px] font-bold ${
+                    (linkConfig.policy.inconclusivePolicy ?? 'BLOCK') === 'BLOCK'
+                      ? 'border border-[#D97736] bg-[#261810] text-[#E5A93C]'
+                      : 'text-[#9499A3] hover:text-[#F3F1EC]'
+                  }`}
+                >
+                  BLOCK (FAIL CLOSED)
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    updateFirewallPolicy({ inconclusivePolicy: 'WARN' })
+                  }
+                  className={`px-2 py-1 font-mono text-[10px] font-bold ${
+                    linkConfig.policy.inconclusivePolicy === 'WARN'
+                      ? 'border border-[#D99B26] bg-[#2B210D] text-[#D99B26]'
+                      : 'text-[#9499A3] hover:text-[#F3F1EC]'
+                  }`}
+                >
+                  WARN (PERMIT)
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 

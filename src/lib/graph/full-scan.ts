@@ -23,6 +23,7 @@ export const AUTHORITATIVE_DEFAULT_POLICY: FirewallPolicyConfig = {
   unbundleEnabled: true,
   socketAutoBridgeEnabled: true,
   sybilBlockThreshold: 10,
+  inconclusivePolicy: 'BLOCK',
 };
 
 export interface RunFullScanParams {

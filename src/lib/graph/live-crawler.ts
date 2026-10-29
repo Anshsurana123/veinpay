@@ -84,6 +84,8 @@ async function checkGoPlusAddressSecurity(
   riskCategory: RiskCategory;
   label: string;
   source: string;
+  failed?: boolean;
+  failureReason?: string;
 }> {
   const key = `${chainId}:${address.toLowerCase()}`;
   const cached = goPlusLruCache.get(key);
@@ -106,14 +108,32 @@ async function checkGoPlusAddressSecurity(
     const url = `https://api.gopluslabs.io/api/v1/address_security/${address}?chain_id=${chainId}`;
     const response = await fetch(url, { signal: AbortSignal.timeout(2200) });
     if (!response.ok) {
-      return { isThreat: false, riskCategory: 'CLEAN', label: '', source: '' };
+      return {
+        isThreat: false,
+        riskCategory: 'CLEAN',
+        label: '',
+        source: '',
+        failed: true,
+        failureReason: `GoPlus API responded with HTTP status ${response.status}`,
+      };
     }
     const json = (await response.json()) as {
       code?: number;
       result?: Record<string, string>;
+      message?: string;
     };
     const r = json.result;
     if (!r) {
+      if (json.code !== undefined && json.code !== 1) {
+        return {
+          isThreat: false,
+          riskCategory: 'CLEAN',
+          label: '',
+          source: '',
+          failed: true,
+          failureReason: json.message || `GoPlus code ${json.code}`,
+        };
+      }
       return { isThreat: false, riskCategory: 'CLEAN', label: '', source: '' };
     }
 
@@ -166,8 +186,18 @@ async function checkGoPlusAddressSecurity(
     };
     goPlusLruCache.set(key, cleanRes);
     return cleanRes;
-  } catch {
-    return { isThreat: false, riskCategory: 'CLEAN', label: '', source: '' };
+  } catch (err) {
+    return {
+      isThreat: false,
+      riskCategory: 'CLEAN',
+      label: '',
+      source: '',
+      failed: true,
+      failureReason:
+        err instanceof Error
+          ? err.message
+          : 'GoPlus API request failed or timed out',
+    };
   }
 }
 
@@ -179,6 +209,8 @@ async function fetchEtherscanInboundTransactions(params: {
   txs: EtherscanTxItem[];
   usedChainId: number;
   tierFallbackNote: string | null;
+  failed?: boolean;
+  failureReason?: string;
 }> {
   const { address, chainId, apiKey } = params;
   const targetChainId = ETHERSCAN_FREE_TIER_CHAINS.has(chainId) ? chainId : 42161;
@@ -198,52 +230,100 @@ async function fetchEtherscanInboundTransactions(params: {
 
   const url = `https://api.etherscan.io/v2/api?chainid=${targetChainId}&module=account&action=txlist&address=${address}&startblock=0&endblock=99999999&page=1&offset=25&sort=desc&apikey=${apiKey}`;
 
-  const res = await fetch(url, { signal: AbortSignal.timeout(4000) });
-  if (!res.ok) {
-    return { txs: [], usedChainId: targetChainId, tierFallbackNote };
-  }
-  const data = (await res.json()) as {
-    status?: string;
-    message?: string;
-    result?: EtherscanTxItem[] | string;
-  };
-
-  if (Array.isArray(data.result)) {
-    if (txListLruCache.size > 200) {
-      const oldestKey = txListLruCache.keys().next().value;
-      if (oldestKey) txListLruCache.delete(oldestKey);
-    }
-    txListLruCache.set(cacheKey, { timestamp: Date.now(), txs: data.result });
-    return {
-      txs: data.result,
-      usedChainId: targetChainId,
-      tierFallbackNote,
-    };
-  }
-
-  // If Arbitrum had 0 txs, try Ethereum Mainnet (chainId 1)
-  if (targetChainId !== 1) {
-    const ethUrl = `https://api.etherscan.io/v2/api?chainid=1&module=account&action=txlist&address=${address}&startblock=0&endblock=99999999&page=1&offset=25&sort=desc&apikey=${apiKey}`;
-    const ethRes = await fetch(ethUrl, { signal: AbortSignal.timeout(4000) });
-    if (ethRes.ok) {
-      const ethData = (await ethRes.json()) as {
-        result?: EtherscanTxItem[] | string;
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(4000) });
+    if (!res.ok) {
+      return {
+        txs: [],
+        usedChainId: targetChainId,
+        tierFallbackNote,
+        failed: true,
+        failureReason: `Etherscan API HTTP status ${res.status}`,
       };
-      if (Array.isArray(ethData.result)) {
-        txListLruCache.set(`1:${address.toLowerCase()}`, {
-          timestamp: Date.now(),
-          txs: ethData.result,
-        });
-        return {
-          txs: ethData.result,
-          usedChainId: 1,
-          tierFallbackNote,
+    }
+    const data = (await res.json()) as {
+      status?: string;
+      message?: string;
+      result?: EtherscanTxItem[] | string;
+    };
+
+    if (
+      data.status === '0' &&
+      typeof data.result === 'string' &&
+      !data.result.toLowerCase().includes('no transactions found')
+    ) {
+      return {
+        txs: [],
+        usedChainId: targetChainId,
+        tierFallbackNote,
+        failed: true,
+        failureReason: `Etherscan API error: ${data.result}`,
+      };
+    }
+
+    if (Array.isArray(data.result)) {
+      if (txListLruCache.size > 200) {
+        const oldestKey = txListLruCache.keys().next().value;
+        if (oldestKey) txListLruCache.delete(oldestKey);
+      }
+      txListLruCache.set(cacheKey, { timestamp: Date.now(), txs: data.result });
+      return {
+        txs: data.result,
+        usedChainId: targetChainId,
+        tierFallbackNote,
+      };
+    }
+
+    // If Arbitrum had 0 txs, try Ethereum Mainnet (chainId 1)
+    if (targetChainId !== 1) {
+      const ethUrl = `https://api.etherscan.io/v2/api?chainid=1&module=account&action=txlist&address=${address}&startblock=0&endblock=99999999&page=1&offset=25&sort=desc&apikey=${apiKey}`;
+      const ethRes = await fetch(ethUrl, { signal: AbortSignal.timeout(4000) });
+      if (ethRes.ok) {
+        const ethData = (await ethRes.json()) as {
+          status?: string;
+          message?: string;
+          result?: EtherscanTxItem[] | string;
         };
+        if (
+          ethData.status === '0' &&
+          typeof ethData.result === 'string' &&
+          !ethData.result.toLowerCase().includes('no transactions found')
+        ) {
+          return {
+            txs: [],
+            usedChainId: 1,
+            tierFallbackNote,
+            failed: true,
+            failureReason: `Etherscan API error on ETH fallback: ${ethData.result}`,
+          };
+        }
+        if (Array.isArray(ethData.result)) {
+          txListLruCache.set(`1:${address.toLowerCase()}`, {
+            timestamp: Date.now(),
+            txs: ethData.result,
+          });
+          return {
+            txs: ethData.result,
+            usedChainId: 1,
+            tierFallbackNote,
+          };
+        }
       }
     }
-  }
 
-  return { txs: [], usedChainId: targetChainId, tierFallbackNote };
+    return { txs: [], usedChainId: targetChainId, tierFallbackNote };
+  } catch (err) {
+    return {
+      txs: [],
+      usedChainId: targetChainId,
+      tierFallbackNote,
+      failed: true,
+      failureReason:
+        err instanceof Error
+          ? err.message
+          : 'Etherscan API request timed out or failed',
+    };
+  }
 }
 
 export async function crawlLiveAddressAndScan(params: {
@@ -270,14 +350,17 @@ export async function crawlLiveAddressAndScan(params: {
 
   const apiKey = process.env.ETHERSCAN_API_KEY?.trim();
   if (!apiKey) {
+    const reason =
+      'Custom address not found in seeded graph and ETHERSCAN_API_KEY is unset; unable to index upstream funding lineage.';
     return runVeilPayFirewallTraversal({
       targetWallet: params.targetWallet,
       merchantWallet: params.merchantWallet,
       policy: params.policy,
       customDataset: seededDataset,
       executionSource: 'IN_MEMORY_GSQL_ENGINE',
-      liveCrawlNotes:
-        'Custom address not found in seeded graph and ETHERSCAN_API_KEY is unset; evaluated with 0 indexed lineage edges.',
+      liveCrawlNotes: reason,
+      isInconclusive: true,
+      inconclusiveReason: reason,
     });
   }
 
@@ -300,6 +383,13 @@ export async function crawlLiveAddressAndScan(params: {
     canonicalTarget,
     params.chainId
   );
+
+  let crawlFailed = false;
+  let crawlFailureReason: string | null = null;
+  if (targetSecurity.failed) {
+    crawlFailed = true;
+    crawlFailureReason = `GoPlus security check failed or timed out: ${targetSecurity.failureReason}`;
+  }
 
   vertices.set(targetLower, {
     id: canonicalTarget,
@@ -347,12 +437,17 @@ export async function crawlLiveAddressAndScan(params: {
       }
       apiCallsUsed += 1;
 
-      const { txs, usedChainId, tierFallbackNote } =
+      const { txs, usedChainId, tierFallbackNote, failed, failureReason } =
         await fetchEtherscanInboundTransactions({
           address: addr,
           chainId: params.chainId,
           apiKey,
         });
+
+      if (failed && !crawlFailed) {
+        crawlFailed = true;
+        crawlFailureReason = `Etherscan API query failed or timed out: ${failureReason}`;
+      }
 
       if (tierFallbackNote && !tierNote) {
         tierNote = tierFallbackNote;
@@ -399,6 +494,11 @@ export async function crawlLiveAddressAndScan(params: {
           funderCanonical,
           usedChainId
         );
+
+        if (threatInfo.failed && !crawlFailed) {
+          crawlFailed = true;
+          crawlFailureReason = `GoPlus security check on ancestor failed or timed out: ${threatInfo.failureReason}`;
+        }
 
         if (!vertices.has(funderLower)) {
           vertices.set(funderLower, {
@@ -455,6 +555,9 @@ export async function crawlLiveAddressAndScan(params: {
     summaryNoteParts.push(
       `TRUNCATED: Reached crawl safety budget (${settings.maxApiCallsPerScan} calls / ${settings.crawlTimeoutMs}ms).`
     );
+    if (!crawlFailureReason) {
+      crawlFailureReason = `Crawl truncated: reached maximum API query or execution timeout budget (${settings.maxApiCallsPerScan} calls / ${settings.crawlTimeoutMs}ms).`;
+    }
   }
 
   const customDataset: SeedGraphDataset = {
@@ -462,6 +565,8 @@ export async function crawlLiveAddressAndScan(params: {
     edges,
     poisonDustDegreeByAddress,
   };
+
+  const isInconclusive = crawlTruncated || crawlFailed;
 
   return runVeilPayFirewallTraversal({
     targetWallet: canonicalTarget,
@@ -471,6 +576,8 @@ export async function crawlLiveAddressAndScan(params: {
     executionSource: 'ETHERSCAN_V2_LIVE_CRAWL',
     liveCrawlNotes: summaryNoteParts.join(' '),
     crawlTruncated,
+    isInconclusive,
+    inconclusiveReason: crawlFailureReason,
     precomputedElapsedMs: crawlElapsedMs,
   });
 }

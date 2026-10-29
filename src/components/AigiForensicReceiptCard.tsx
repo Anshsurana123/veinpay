@@ -31,9 +31,12 @@ export function AigiForensicReceiptCard() {
   const isBlocked =
     verdict === 'INTERCEPTED_TAINT' ||
     verdict === 'INTERCEPTED_SYBIL' ||
-    verdict === 'INTERCEPTED_POISONING';
+    verdict === 'INTERCEPTED_POISONING' ||
+    (verdict === 'INCONCLUSIVE' && !activeScan.socketUnlocked);
   const isWarning =
-    verdict === 'WARNING_SYBIL' || verdict === 'ADVISORY_BYPASSED';
+    verdict === 'WARNING_SYBIL' ||
+    verdict === 'ADVISORY_BYPASSED' ||
+    (verdict === 'INCONCLUSIVE' && activeScan.socketUnlocked);
 
   const handleDownloadJson = () => {
     const blob = new Blob([JSON.stringify(activeReceipt, null, 2)], {
