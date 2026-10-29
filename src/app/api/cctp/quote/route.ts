@@ -18,6 +18,10 @@ import {
   checkRateLimit,
   getClientIp,
 } from '@/lib/security/rate-limit';
+import {
+  cctpQuoteQuerySchema,
+  validateWithZod,
+} from '@/lib/validation/schemas';
 
 export async function GET(request: NextRequest) {
   const ip = getClientIp(request);
@@ -32,36 +36,57 @@ export async function GET(request: NextRequest) {
   const startPerf = performance.now();
   const { searchParams } = new URL(request.url);
 
-  const originChainId = Number(
-    searchParams.get('originChainId') ?? searchParams.get('fromChainId') ?? '84532'
-  );
-  const destinationChainId = Number(
-    searchParams.get('destinationChainId') ?? searchParams.get('toChainId') ?? '421614'
-  );
-  const inputToken = (
-    searchParams.get('inputToken') ??
-    searchParams.get('tokenSymbol') ??
-    'USDC'
-  ).trim();
-  const outputToken = (
-    searchParams.get('outputToken') ??
-    searchParams.get('tokenSymbol') ??
-    'USDC'
-  ).trim();
-  const inputAmount = (
-    searchParams.get('inputAmount') ??
-    searchParams.get('fromAmount') ??
-    '25000000'
-  ).trim();
-  const userAddress = (searchParams.get('userAddress') ?? '').trim();
-  const linkId = (searchParams.get('linkId') ?? 'default').trim() || 'default';
-  const c = searchParams.get('c');
-  const sig = searchParams.get('sig');
-  const scanAttestation =
-    searchParams.get('scanAttestation') ??
-    request.headers.get('x-veilpay-scan-attestation');
-  const finalityModeParam = (searchParams.get('finalityMode') ?? 'FAST').toUpperCase();
-  const useForwardingService = searchParams.get('useForwardingService') === 'true';
+  const rawParams = {
+    originChainId:
+      searchParams.get('originChainId') ??
+      searchParams.get('fromChainId') ??
+      '84532',
+    destinationChainId:
+      searchParams.get('destinationChainId') ??
+      searchParams.get('toChainId') ??
+      '421614',
+    inputToken:
+      searchParams.get('inputToken') ??
+      searchParams.get('tokenSymbol') ??
+      'USDC',
+    outputToken:
+      searchParams.get('outputToken') ??
+      searchParams.get('tokenSymbol') ??
+      'USDC',
+    inputAmount:
+      searchParams.get('inputAmount') ??
+      searchParams.get('fromAmount') ??
+      '25000000',
+    userAddress: searchParams.get('userAddress') ?? '',
+    linkId: (searchParams.get('linkId') ?? 'default').trim() || 'default',
+    c: searchParams.get('c'),
+    sig: searchParams.get('sig'),
+    scanAttestation:
+      searchParams.get('scanAttestation') ??
+      request.headers.get('x-veilpay-scan-attestation'),
+    finalityMode: (searchParams.get('finalityMode') ?? 'FAST').toUpperCase(),
+    useForwardingService: searchParams.get('useForwardingService'),
+  };
+
+  const validation = validateWithZod(cctpQuoteQuerySchema, rawParams);
+  if (!validation.success) {
+    return NextResponse.json(validation, { status: 400 });
+  }
+
+  const {
+    originChainId,
+    destinationChainId,
+    inputToken,
+    outputToken,
+    inputAmount,
+    userAddress,
+    linkId,
+    c,
+    sig,
+    scanAttestation,
+    finalityMode,
+    useForwardingService,
+  } = validation.data;
 
   // Load policy and destination vault ONLY from the verified link authority (never from client query string)
   const authority = await resolveVerifiedLinkAuthority({ linkId, c, sig });
@@ -89,7 +114,7 @@ export async function GET(request: NextRequest) {
     inputAmount,
     userAddress,
     receiverAddress,
-    finalityMode: finalityModeParam === 'STANDARD' ? 'STANDARD' : 'FAST',
+    finalityMode: finalityMode === 'STANDARD' ? 'STANDARD' : 'FAST',
     useForwardingService,
   };
 
@@ -262,7 +287,7 @@ export async function GET(request: NextRequest) {
   }
 
   const requestedFinality: CctpFinalityMode =
-    finalityModeParam === 'STANDARD' ? 'STANDARD' : 'FAST';
+    finalityMode === 'STANDARD' ? 'STANDARD' : 'FAST';
   const outcome = await computeCctpV2Quote({
     sourceChainId: originChainId,
     destinationChainId,

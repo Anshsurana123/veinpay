@@ -10,6 +10,11 @@ import {
   checkRateLimit,
   getClientIp,
 } from '@/lib/security/rate-limit';
+import {
+  scanBodySchema,
+  scanQuerySchema,
+  validateWithZod,
+} from '@/lib/validation/schemas';
 
 async function handleScan(params: {
   targetWallet: string;
@@ -120,15 +125,37 @@ export async function GET(request: NextRequest) {
   }
 
   const sp = request.nextUrl.searchParams;
-  const targetWallet =
-    sp.get('targetWallet') ||
-    sp.get('target_wallet') ||
-    sp.get('wallet') ||
-    '0x4F2a9c117034e8B1200499A1c3f88200000188E1';
-  const linkId = (sp.get('linkId') || 'default').trim() || 'default';
-  const chainId = Number(sp.get('chainId') || 42161);
+  const rawParams = {
+    targetWallet:
+      sp.get('targetWallet') ||
+      sp.get('target_wallet') ||
+      sp.get('wallet') ||
+      undefined,
+    chainId: sp.get('chainId') || undefined,
+    linkId: sp.get('linkId') || undefined,
+    c: sp.get('c'),
+    sig: sp.get('sig'),
+    includeGemini: sp.get('includeGemini'),
+    proofOfControlToken: sp.get('proofOfControlToken'),
+    simulated: sp.get('simulated'),
+  };
 
-  const includeGemini = sp.get('includeGemini') === 'true';
+  const validation = validateWithZod(scanQuerySchema, rawParams);
+  if (!validation.success) {
+    return NextResponse.json(validation, { status: 400 });
+  }
+
+  const {
+    targetWallet,
+    chainId,
+    linkId,
+    c,
+    sig,
+    includeGemini,
+    proofOfControlToken,
+    simulated,
+  } = validation.data;
+
   if (includeGemini) {
     const geminiLimit = await checkRateLimit('gemini-narration', ip, {
       limit: 5,
@@ -146,11 +173,11 @@ export async function GET(request: NextRequest) {
     targetWallet,
     chainId,
     linkId,
-    c: sp.get('c'),
-    sig: sp.get('sig'),
+    c,
+    sig,
     includeGemini,
-    proofOfControlToken: sp.get('proofOfControlToken'),
-    simulated: sp.get('simulated') === 'true',
+    proofOfControlToken,
+    simulated,
   });
 }
 
@@ -165,27 +192,24 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const body = (await request.json()) as Record<string, unknown>;
-    const targetWallet = String(
-      body.targetWallet ??
-        body.target_wallet ??
-        body.wallet ??
-        '0x4F2a9c117034e8B1200499A1c3f88200000188E1'
-    );
-    const linkId = String(body.linkId ?? 'default').trim() || 'default';
-    const chainId = Number(body.chainId ?? 42161);
-    const crawlSettings =
-      body.crawlSettings && typeof body.crawlSettings === 'object'
-        ? (body.crawlSettings as Partial<LiveCrawlSettings>)
-        : undefined;
-    const proofOfControlToken =
-      typeof body.proofOfControlToken === 'string'
-        ? body.proofOfControlToken
-        : null;
-    const c = typeof body.c === 'string' ? body.c : null;
-    const sig = typeof body.sig === 'string' ? body.sig : null;
+    const rawBody = (await request.json()) as Record<string, unknown>;
+    const validation = validateWithZod(scanBodySchema, rawBody);
+    if (!validation.success) {
+      return NextResponse.json(validation, { status: 400 });
+    }
 
-    const includeGemini = Boolean(body.includeGemini);
+    const {
+      targetWallet,
+      chainId,
+      linkId,
+      c,
+      sig,
+      crawlSettings,
+      includeGemini,
+      proofOfControlToken,
+      simulated,
+    } = validation.data;
+
     if (includeGemini) {
       const geminiLimit = await checkRateLimit('gemini-narration', ip, {
         limit: 5,
@@ -210,7 +234,7 @@ export async function POST(request: NextRequest) {
       crawlSettings,
       includeGemini,
       proofOfControlToken,
-      simulated: Boolean(body.simulated),
+      simulated,
     });
   } catch (err) {
     return NextResponse.json(

@@ -9,6 +9,10 @@ import {
   checkRateLimit,
   getClientIp,
 } from '@/lib/security/rate-limit';
+import {
+  socketQuoteQuerySchema,
+  validateWithZod,
+} from '@/lib/validation/schemas';
 
 function isUsdtInput(tokenStr: string): boolean {
   const t = tokenStr.trim().toUpperCase();
@@ -29,7 +33,7 @@ async function executeGatedQuoteRequest(params: {
   linkId: string;
   c?: string | null;
   sig?: string | null;
-  scanAttestation: string | null;
+  scanAttestation?: string | null;
   slippage?: string;
   sort?: 'output' | 'time';
 }) {
@@ -148,28 +152,50 @@ export async function GET(request: NextRequest) {
 
   const sp = request.nextUrl.searchParams;
 
-  const originChainId = Number(
-    sp.get('originChainId') || sp.get('fromChainId') || 42161
-  );
-  const destinationChainId = Number(
-    sp.get('destinationChainId') || sp.get('toChainId') || 8453
-  );
-  const inputToken =
-    sp.get('inputToken') ||
-    sp.get('fromTokenAddress') ||
-    EVM_TOKEN_REGISTRY.USDC.addressesByChain[42161]!;
-  const outputToken =
-    sp.get('outputToken') ||
-    sp.get('toTokenAddress') ||
-    EVM_TOKEN_REGISTRY.USDC.addressesByChain[8453]!;
-  const inputAmount =
-    sp.get('inputAmount') || sp.get('fromAmount') || '250000000';
-  const userAddress =
-    sp.get('userAddress') || '0x4F2a9c117034e8B1200499A1c3f88200000188E1';
-  const linkId = (sp.get('linkId') || 'default').trim() || 'default';
-  const scanAttestation =
-    sp.get('scanAttestation') ||
-    request.headers.get('x-veilpay-scan-attestation');
+  const rawParams = {
+    originChainId: sp.get('originChainId') || sp.get('fromChainId') || 42161,
+    destinationChainId:
+      sp.get('destinationChainId') || sp.get('toChainId') || 8453,
+    inputToken:
+      sp.get('inputToken') ||
+      sp.get('fromTokenAddress') ||
+      EVM_TOKEN_REGISTRY.USDC.addressesByChain[42161]!,
+    outputToken:
+      sp.get('outputToken') ||
+      sp.get('toTokenAddress') ||
+      EVM_TOKEN_REGISTRY.USDC.addressesByChain[8453]!,
+    inputAmount: sp.get('inputAmount') || sp.get('fromAmount') || '250000000',
+    userAddress:
+      sp.get('userAddress') || '0x4F2a9c117034e8B1200499A1c3f88200000188E1',
+    linkId: (sp.get('linkId') || 'default').trim() || 'default',
+    c: sp.get('c'),
+    sig: sp.get('sig'),
+    scanAttestation:
+      sp.get('scanAttestation') ||
+      request.headers.get('x-veilpay-scan-attestation'),
+    slippage: sp.get('slippage') || '1',
+    sort: sp.get('sort') || 'output',
+  };
+
+  const validation = validateWithZod(socketQuoteQuerySchema, rawParams);
+  if (!validation.success) {
+    return NextResponse.json(validation, { status: 400 });
+  }
+
+  const {
+    originChainId,
+    destinationChainId,
+    inputToken,
+    outputToken,
+    inputAmount,
+    userAddress,
+    linkId,
+    c,
+    sig,
+    scanAttestation,
+    slippage,
+    sort,
+  } = validation.data;
 
   // Policy and receiver vault are loaded strictly from the verified link (never from query string)
   return executeGatedQuoteRequest({
@@ -180,11 +206,11 @@ export async function GET(request: NextRequest) {
     inputAmount,
     userAddress,
     linkId,
-    c: sp.get('c'),
-    sig: sp.get('sig'),
+    c,
+    sig,
     scanAttestation,
-    slippage: sp.get('slippage') || '1',
-    sort: sp.get('sort') === 'time' ? 'time' : 'output',
+    slippage,
+    sort,
   });
 }
 
@@ -199,36 +225,53 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const body = (await request.json()) as Record<string, unknown>;
-    const originChainId = Number(
-      body.originChainId ?? body.fromChainId ?? 42161
-    );
-    const destinationChainId = Number(
-      body.destinationChainId ?? body.toChainId ?? 8453
-    );
-    const inputToken = String(
-      body.inputToken ??
-        body.fromTokenAddress ??
-        EVM_TOKEN_REGISTRY.USDC.addressesByChain[42161]
-    );
-    const outputToken = String(
-      body.outputToken ??
-        body.toTokenAddress ??
-        EVM_TOKEN_REGISTRY.USDC.addressesByChain[8453]
-    );
-    const inputAmount = String(
-      body.inputAmount ?? body.fromAmount ?? '250000000'
-    );
-    const userAddress = String(
-      body.userAddress ?? '0x4F2a9c117034e8B1200499A1c3f88200000188E1'
-    );
-    const linkId = String(body.linkId ?? 'default').trim() || 'default';
-    const c = typeof body.c === 'string' ? body.c : null;
-    const sig = typeof body.sig === 'string' ? body.sig : null;
-    const scanAttestation =
-      typeof body.scanAttestation === 'string'
-        ? body.scanAttestation
-        : request.headers.get('x-veilpay-scan-attestation');
+    const rawBody = (await request.json()) as Record<string, unknown>;
+    const rawParams = {
+      originChainId: rawBody.originChainId ?? rawBody.fromChainId ?? 42161,
+      destinationChainId:
+        rawBody.destinationChainId ?? rawBody.toChainId ?? 8453,
+      inputToken:
+        rawBody.inputToken ??
+        rawBody.fromTokenAddress ??
+        EVM_TOKEN_REGISTRY.USDC.addressesByChain[42161]!,
+      outputToken:
+        rawBody.outputToken ??
+        rawBody.toTokenAddress ??
+        EVM_TOKEN_REGISTRY.USDC.addressesByChain[8453]!,
+      inputAmount:
+        rawBody.inputAmount ?? rawBody.fromAmount ?? '250000000',
+      userAddress:
+        rawBody.userAddress ?? '0x4F2a9c117034e8B1200499A1c3f88200000188E1',
+      linkId: String(rawBody.linkId ?? 'default').trim() || 'default',
+      c: typeof rawBody.c === 'string' ? rawBody.c : null,
+      sig: typeof rawBody.sig === 'string' ? rawBody.sig : null,
+      scanAttestation:
+        typeof rawBody.scanAttestation === 'string'
+          ? rawBody.scanAttestation
+          : request.headers.get('x-veilpay-scan-attestation'),
+      slippage: String(rawBody.slippage ?? '1'),
+      sort: rawBody.sort === 'time' ? 'time' : 'output',
+    };
+
+    const validation = validateWithZod(socketQuoteQuerySchema, rawParams);
+    if (!validation.success) {
+      return NextResponse.json(validation, { status: 400 });
+    }
+
+    const {
+      originChainId,
+      destinationChainId,
+      inputToken,
+      outputToken,
+      inputAmount,
+      userAddress,
+      linkId,
+      c,
+      sig,
+      scanAttestation,
+      slippage,
+      sort,
+    } = validation.data;
 
     // Policy and receiver vault are loaded strictly from the verified link (never from request body)
     return executeGatedQuoteRequest({
@@ -242,8 +285,8 @@ export async function POST(request: NextRequest) {
       c,
       sig,
       scanAttestation,
-      slippage: String(body.slippage ?? '1'),
-      sort: body.sort === 'time' ? 'time' : 'output',
+      slippage,
+      sort,
     });
   } catch (err) {
     return NextResponse.json(

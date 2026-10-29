@@ -295,4 +295,38 @@ Flags a discovered ancestor as a `ThreatEntity` if any of the following fields e
   2. Click **Create Project** and select **App** (AppKit) — *do NOT select Wallet (WalletKit)*.
   3. Copy the **Project ID** and set `NEXT_PUBLIC_PROJECT_ID=<your_id>` in `.env.local` and in Vercel Environment Variables.
   4. Under **Domain Whitelist / Allowed Origins**, add `http://localhost:3000` and your Vercel URL (`https://<your-project>.vercel.app`).
-  5. If `NEXT_PUBLIC_PROJECT_ID` is not set during local development, VeilPay falls back to Reown's official localhost testing ID (`b56e18d47c72ab683b10814fe9495694`).
+  5. If `NEXT_PUBLIC_PROJECT_ID` is missing, wallet connection is disabled with a visible notice, and production builds emit a loud warning.
+
+---
+
+## 6. VeilPay Internal API Endpoints & Cryptographic Protocol Suite
+
+### 6.1 Circle CCTP V2 Testnet Routing (`GET /api/cctp/quote`, `POST /api/cctp/attestation`)
+- **GET /api/cctp/quote**: Computes authoritative net received amount, Circle burn fee, finality mode (Fast / Standard), and returns official testnet TokenMessengerV2 contract addresses (`Ethereum Sepolia`, `OP Sepolia`, `Arbitrum Sepolia`, `Base Sepolia`, `Polygon Amoy`). Requires verified link authority + scan attestation with `proofOfControl=true`.
+- **POST /api/cctp/attestation**: Server-side polling proxy for Circle Iris sandbox attestation API (`GET /v2/messages/{domain}?transactionHash=...`) with exponential backoff and timeout.
+
+### 6.2 Proof of Control (`POST /api/session/nonce`, `POST /api/session/verify`)
+- **POST /api/session/nonce**: Issues an unguessable 32-byte session nonce with 5-minute expiry.
+- **POST /api/session/verify**: Verifies an EIP-191 personal signature binding connected wallet, scanned wallet, nonce, and link ID. Personas and unverified addresses remain strictly scan-only.
+
+### 6.3 EIP-712 Receiver-Signed Payment Links (`POST /api/links`, `POST /api/links/revoke`)
+- **Format**: `?c=<base64url-payload>&sig=<0x-signature>`.
+- **Primary Type**: `PaymentLink(version, linkId, handle, amount, openAmount, asset, destinationChainId, settlementMode, vaultAddress, policyHash, createdAt, expiresAt, signer)`.
+- **Trust Level**: `PROVEN` for EVM settlement where `signer == vaultAddress` (or ERC-1271 verified contract); `SIGNED_UNPROVEN` for BTC Silent Payments and Monero.
+- **POST /api/links**: Creates and indexes a verified link; returns link URL and a one-time `manageToken` for private activity access.
+- **POST /api/links/revoke**: Revokes a link via signed EIP-712 `RevokeLink(linkId, signer, issuedAt)`.
+
+### 6.4 Ed25519 Signed Forensic Receipts & Public Key Verification
+- **GET /.well-known/veilpay-receipt-key**: Serves VeilPay's Ed25519 public key in JWK and SPKI PEM format (`veilpay-ed25519-v1`).
+- **POST /api/aigi/verify**: Cryptographically verifies that `sha256HexSync(canonicalPayloadJson) === commitmentHash` and validates the Ed25519 signature against the published public key.
+
+### 6.5 Real Integration Diagnostics (`GET /api/health`)
+- Returns boolean `healthy` and individual status (`ok` / `not_configured` / `degraded`) for Socket, TigerGraph, Etherscan, GoPlus, Gemini, Reown, and Redis with an optional cached 1.5s ping. Zero credentials leaked.
+
+### 6.6 Live Rates Oracle (`GET /api/rates`)
+- Fetches live spot prices for ETH, BTC, XMR, and USDT from public price oracles with a 30s in-memory cache and timestamp. Fails closed with "rate unavailable" rather than falling back to hardcoded numbers.
+
+### 6.7 Server-Backed Event Store & Receipt Verification (`GET /api/events`, `POST /api/events`)
+- Stores immutable security events (`SCAN_RESULT`, `SETTLEMENT_INITIATED`, `SETTLEMENT_CONFIRMED`, `SETTLEMENT_FAILED`) in Upstash Redis REST (or in-memory dev fallback).
+- `GET /api/events?linkId=...`: Private receiver feed protected by `manageToken`.
+- `POST /api/events`: For EVM settlements, verifies transaction receipts with viem public client before marking `CONFIRMED`. Excludes simulated events from production threat counters.

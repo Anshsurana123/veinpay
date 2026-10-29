@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { useAppKit, useAppKitAccount } from '@reown/appkit/react';
 import { useVeilPayStore } from '@/store/veilpay-store';
+import { isReownConfigured } from '@/config/wagmi';
 
 export function TopTelemetryBar() {
   const { open } = useAppKit();
@@ -173,13 +174,29 @@ export function TopTelemetryBar() {
 
           <button
             type="button"
-            onClick={() => open()}
-            className="flex items-center gap-2 border border-[#D97736]/60 bg-[#261810] px-3 py-1.5 font-mono text-xs font-medium text-[#F3F1EC] transition-colors hover:border-[#E5A93C] hover:bg-[#D97736]/25"
+            disabled={!isReownConfigured}
+            title={
+              !isReownConfigured
+                ? 'NEXT_PUBLIC_PROJECT_ID is not configured. Wallet connection is disabled.'
+                : undefined
+            }
+            onClick={() => {
+              if (isReownConfigured) open();
+            }}
+            className={`flex items-center gap-2 border px-3 py-1.5 font-mono text-xs font-medium transition-colors ${
+              !isReownConfigured
+                ? 'cursor-not-allowed border-[#262A33] bg-[#131519] text-[#9499A3]/50'
+                : 'border-[#D97736]/60 bg-[#261810] text-[#F3F1EC] hover:border-[#E5A93C] hover:bg-[#D97736]/25'
+            }`}
           >
             <Wallet className="h-3.5 w-3.5 text-[#E5A93C]" />
             {isConnected && address ? (
               <span className="tabular-nums text-[#1F9D68]">
                 {address.slice(0, 6)}...{address.slice(-4)}
+              </span>
+            ) : !isReownConfigured ? (
+              <span className="text-[11px] text-[#9499A3]">
+                CONNECT DISABLED (NO PROJECT ID)
               </span>
             ) : (
               <span>CONNECT WALLET (REOWN)</span>

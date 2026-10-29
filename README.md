@@ -183,10 +183,15 @@ Open **[http://localhost:3000](http://localhost:3000)** in your browser.
 
 | Variable | Required? | Purpose |
 | :--- | :--- | :--- |
-| `NEXT_PUBLIC_PROJECT_ID` | Recommended | Reown AppKit Project ID from [dashboard.reown.com](https://dashboard.reown.com) for WalletConnect / MetaMask connection. Falls back to Reown's official localhost test ID in dev. |
+| `NEXT_PUBLIC_PROJECT_ID` | Required for WalletConnect | Reown AppKit Project ID from [dashboard.reown.com](https://dashboard.reown.com). If missing, wallet connect is disabled with a visible notice and production builds warn. |
+| `NEXT_PUBLIC_DEMO_MODE` | Optional (dev only) | Set to `true` to enable pre-populated demo destination vault addresses for testing. Production defaults to empty vaults. |
 | `NEXT_PUBLIC_MAX_MAINNET_USD` | Optional | Default per-transaction USD safety cap on Mainnet (defaults to `5`). Adjustable live in the UI Settings drawer. |
-| `ETHERSCAN_API_KEY` | Optional | Enables live N-hop inbound wallet crawling via Etherscan API V2 (`https://api.etherscan.io/v2/api`) across 60+ Mainnet & Testnet chains when scanning custom addresses. |
-| `GEMINI_API_KEY` | Optional | Enables optional `@google/genai` (`gemini-2.5-flash`) executive narration on top of the deterministic AIGI receipt. |
+| `ETHERSCAN_API_KEY` | Optional | Enables live N-hop inbound wallet crawling via Etherscan API V2 (`https://api.etherscan.io/v2/api`) across 60+ Mainnet & Testnet chains when scanning custom addresses. When missing, unknown wallets return `INCONCLUSIVE` (fails closed by policy). |
+| `GEMINI_API_KEY` | Optional | Google Gemini API key for structured compliance summaries. |
+| `ENABLE_GEMINI_NARRATION` | Optional (default `false`) | Master server gate to prevent credit exhaustion. Set to `true` to enable Gemini AI narration. |
+| `RECEIPT_SIGNING_KEY` | Optional | Ed25519 private key (PKCS#8 PEM or hex seed) for signing compliance receipts. Automatically derives a deterministic keypair if unset. |
+| `UPSTASH_REDIS_REST_URL` / `TOKEN` | Optional | Upstash Redis REST credentials for distributed per-IP rate limiting and persistent activity events. Falls back to in-memory store in dev. |
+| `MAX_CRAWL_API_CALLS` / `TIMEOUT_MS` | Optional | Server-side hard maxima clamping client-submitted crawl parameters to prevent denial-of-service. |
 | `SOCKET_API_KEY` | Optional | Optional dedicated SOCKET key (`public-backend.socket.tech/v3/swap/quote` works without a key). |
 | `TIGERGRAPH_HOST` / `TIGERGRAPH_GRAPH` / `TIGERGRAPH_TOKEN` | Optional | Connects `/api/firewall/scan` to a live TigerGraph 4.x RESTPP cluster (`POST /restpp/query/{graph}/veilpay_firewall_check`). Automatically falls back to the in-process TypeScript GSQL engine when unset. |
 

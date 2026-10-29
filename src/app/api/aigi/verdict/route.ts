@@ -14,6 +14,11 @@ import {
   checkRateLimit,
   getClientIp,
 } from '@/lib/security/rate-limit';
+import {
+  aigiVerdictBodySchema,
+  aigiVerdictQuerySchema,
+  validateWithZod,
+} from '@/lib/validation/schemas';
 
 export async function GET(request: NextRequest) {
   const ip = getClientIp(request);
@@ -26,7 +31,29 @@ export async function GET(request: NextRequest) {
   }
 
   const sp = request.nextUrl.searchParams;
-  const includeGemini = sp.get('includeGemini') === 'true';
+  const rawParams = {
+    targetWallet:
+      sp.get('targetWallet') ||
+      sp.get('wallet') ||
+      '0x99B1c402881a77e3d90123456789aB00000FDead',
+    merchantWallet: sp.get('merchantWallet') || '',
+    maxHops: sp.get('maxHops') || 3,
+    firewallEnabled: sp.get('firewallEnabled') || true,
+    includeGemini: sp.get('includeGemini'),
+  };
+
+  const validation = validateWithZod(aigiVerdictQuerySchema, rawParams);
+  if (!validation.success) {
+    return NextResponse.json(validation, { status: 400 });
+  }
+
+  const {
+    targetWallet,
+    merchantWallet,
+    maxHops,
+    firewallEnabled,
+    includeGemini,
+  } = validation.data;
 
   if (includeGemini) {
     const geminiLimit = await checkRateLimit('gemini-narration', ip, {
@@ -40,21 +67,13 @@ export async function GET(request: NextRequest) {
       );
     }
   }
-  const targetWallet =
-    sp.get('targetWallet') ||
-    sp.get('wallet') ||
-    '0x99B1c402881a77e3d90123456789aB00000FDead';
-  const maxHops = Math.min(
-    5,
-    Math.max(1, Number(sp.get('maxHops') || 3))
-  ) as HopDepth;
 
   const scan = runVeilPayFirewallTraversal({
     targetWallet,
-    merchantWallet: sp.get('merchantWallet') || '',
+    merchantWallet,
     policy: {
-      firewallEnabled: sp.get('firewallEnabled') !== 'false',
-      maxHops,
+      firewallEnabled,
+      maxHops: maxHops as HopDepth,
       cleanLinkEnabled: true,
       unbundleEnabled: true,
       socketAutoBridgeEnabled: true,
@@ -63,7 +82,7 @@ export async function GET(request: NextRequest) {
   });
 
   let receipt = generateAigiForensicReceipt(scan);
-  if (sp.get('includeGemini') === 'true') {
+  if (includeGemini) {
     receipt = await maybeEnrichReceiptWithGemini(receipt);
   }
 
@@ -84,24 +103,23 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const body = (await request.json()) as {
-      scan?: FirewallScanResult;
-      targetWallet?: string;
-      merchantWallet?: string;
-      maxHops?: number;
-      policy?: Partial<FirewallPolicyConfig>;
-      includeGemini?: boolean;
-    };
+    const rawBody = await request.json();
+    const validation = validateWithZod(aigiVerdictBodySchema, rawBody);
+    if (!validation.success) {
+      return NextResponse.json(validation, { status: 400 });
+    }
+    const body = validation.data;
 
     let scanResult: FirewallScanResult;
 
-    if (body.scan && body.scan.verdict && Array.isArray(body.scan.evidenceEdges)) {
-      scanResult = body.scan;
+    if (
+      body.scan &&
+      typeof body.scan.verdict === 'string' &&
+      Array.isArray(body.scan.evidenceEdges)
+    ) {
+      scanResult = body.scan as unknown as FirewallScanResult;
     } else {
-      const maxHops = Math.min(
-        5,
-        Math.max(1, Number(body.policy?.maxHops ?? body.maxHops ?? 3))
-      ) as HopDepth;
+      const maxHops = (body.policy?.maxHops ?? body.maxHops ?? 3) as HopDepth;
 
       scanResult = runVeilPayFirewallTraversal({
         targetWallet:

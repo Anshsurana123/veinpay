@@ -13,8 +13,20 @@ import {
 } from '@reown/appkit/networks';
 import type { AppKitNetwork } from '@reown/appkit/networks';
 
-export const projectId =
-  process.env.NEXT_PUBLIC_PROJECT_ID || 'b56e18d47c72ab683b10814fe9495694';
+export const projectId = process.env.NEXT_PUBLIC_PROJECT_ID?.trim() || '';
+
+export const isReownConfigured = Boolean(projectId);
+
+if (!isReownConfigured) {
+  if (
+    process.env.NODE_ENV === 'production' ||
+    process.env.NEXT_PHASE === 'phase-production-build'
+  ) {
+    console.warn(
+      '⚠️ [VeilPay CRITICAL WARNING]: NEXT_PUBLIC_PROJECT_ID is missing in production build! Wallet connect is disabled. Configure NEXT_PUBLIC_PROJECT_ID at dashboard.reown.com.'
+    );
+  }
+}
 
 export const networks: [AppKitNetwork, ...AppKitNetwork[]] = [
   // Mainnets
