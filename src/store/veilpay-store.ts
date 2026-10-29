@@ -28,6 +28,7 @@ import {
 } from '@/lib/demo-fixtures';
 import { DEFAULT_LINK_CONFIG } from '@/lib/utils/link-codec';
 import { buildSimulatorSignedPreviewLink } from '@/lib/links/eip712';
+import type { SpotRatesPayload } from '@/lib/rates';
 import {
   EVM_TOKEN_REGISTRY,
   isTestnetChain,
@@ -118,6 +119,10 @@ export interface VeilPayStoreState {
   scannerStep: 0 | 1 | 2 | 3;
   scanError: string | null;
 
+  // Spot Rates Oracle
+  spotRates: SpotRatesPayload | null;
+  ratesError: string | null;
+
   // Graph Canvas Interactive State
   selectedGraphNodeId: string | null;
   selectedGraphEdgeId: string | null;
@@ -181,6 +186,7 @@ export interface VeilPayStoreState {
   runFirewallAndQuotePipeline: () => Promise<void>;
   requestGeminiExecutiveSummary: () => Promise<void>;
   recordSimulatedSettlement: (txHash?: string) => void;
+  fetchRates: () => Promise<void>;
 
   // Module E Outbound Guard Actions
   setOutboundCandidateInput: (input: string) => void;
@@ -233,6 +239,8 @@ export const useVeilPayStore = create<VeilPayStoreState>((set, get) => ({
   isGeneratingAiNarrative: false,
   scannerStep: 0,
   scanError: null,
+  spotRates: null,
+  ratesError: null,
 
   selectedGraphNodeId: null,
   selectedGraphEdgeId: null,
@@ -583,7 +591,27 @@ export const useVeilPayStore = create<VeilPayStoreState>((set, get) => ({
         const toTokenCfg = EVM_TOKEN_REGISTRY[destAssetKey];
 
         const usdVal = Math.max(1, Number(signedLink.payload.amount) || 250);
-        const tokenHumanAmount = usdVal / fromTokenCfg.approxUsdPrice;
+        let tokenPrice = 1.0;
+        if (payerTokenSymbol === 'ETH') {
+          let currentRates = latestState.spotRates;
+          if (!currentRates) {
+            await get().fetchRates();
+            currentRates = get().spotRates;
+          }
+          if (!currentRates?.rates.ETH || get().ratesError) {
+            set({
+              isLoadingQuote: false,
+              scanError:
+                'ETH spot rate is currently unavailable from public price oracle. Unable to compute input amount.',
+            });
+            return;
+          }
+          tokenPrice = currentRates.rates.ETH;
+        } else if (payerTokenSymbol === 'USDT' || payerTokenSymbol === 'USDC') {
+          tokenPrice = latestState.spotRates?.rates[payerTokenSymbol] ?? 1.0;
+        }
+
+        const tokenHumanAmount = usdVal / tokenPrice;
         const inputAmountAtomic = toAtomicUnits(
           tokenHumanAmount,
           fromTokenCfg.decimals
@@ -769,6 +797,31 @@ export const useVeilPayStore = create<VeilPayStoreState>((set, get) => ({
       }
     } catch {
       // Non-blocking
+    }
+  },
+
+  fetchRates: async () => {
+    try {
+      const res = await fetch('/api/rates');
+      if (res.ok) {
+        const data: SpotRatesPayload = await res.json();
+        set({ spotRates: data, ratesError: null });
+      } else {
+        const errJson = await res.json().catch(() => ({}));
+        set({
+          spotRates: null,
+          ratesError:
+            errJson.error || 'Spot rate oracle unavailable from server.',
+        });
+      }
+    } catch (err) {
+      set({
+        spotRates: null,
+        ratesError:
+          err instanceof Error
+            ? err.message
+            : 'Failed to query live spot rates.',
+      });
     }
   },
 

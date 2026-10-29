@@ -100,7 +100,7 @@ export function buildSameChainDirectRoute(
   );
   const humanAmt = fromAtomicUnits(params.inputAmount, tokenMeta.decimals);
   const usdValue = Number(
-    (Number(humanAmt) * tokenMeta.approxUsdPrice).toFixed(2)
+    (Number(humanAmt) * (tokenMeta.approxUsdPrice ?? 1.0)).toFixed(2)
   );
   const isNative =
     tokenMeta.address.toLowerCase() === NATIVE_TOKEN_ADDRESS.toLowerCase();
@@ -181,10 +181,12 @@ export function buildDeterministicFallbackQuote(
   );
 
   const inHuman = Number(fromAtomicUnits(params.inputAmount, inMeta.decimals));
-  const inputUsd = Number((inHuman * inMeta.approxUsdPrice).toFixed(2));
+  const inputUsd = Number(
+    (inHuman * (inMeta.approxUsdPrice ?? 1.0)).toFixed(2)
+  );
   const netUsdAfterBridgeFee = Number((inputUsd * 0.9979).toFixed(2));
   const outHuman = Number(
-    (netUsdAfterBridgeFee / outMeta.approxUsdPrice).toFixed(
+    (netUsdAfterBridgeFee / (outMeta.approxUsdPrice ?? 1.0)).toFixed(
       outMeta.decimals === 6 ? 6 : 5
     )
   );
@@ -550,7 +552,9 @@ export async function fetchSocketCrossChainQuote(
     const inHuman = fromAtomicUnits(params.inputAmount, inDecimals);
     const inUsd =
       payload.result?.input?.valueInUsd ??
-      Number((Number(inHuman) * inMeta.approxUsdPrice).toFixed(2));
+      Number(
+        (Number(inHuman) * (inMeta.approxUsdPrice ?? 1.0)).toFixed(2)
+      );
 
     const normalizedRoutes: NormalizedSocketRoute[] = rawRoutes.map((r, idx) => {
       const outDecimals = r.output?.token?.decimals ?? outMeta.decimals;
@@ -586,7 +590,9 @@ export async function fetchSocketCrossChainQuote(
         minAmountOutFormatted: `${minOutHumanStr} ${outSymbol}`,
         outputValueInUsd:
           r.output?.valueInUsd ??
-          Number((Number(outHumanStr) * outMeta.approxUsdPrice).toFixed(2)),
+          Number(
+            (Number(outHumanStr) * (outMeta.approxUsdPrice ?? 1.0)).toFixed(2)
+          ),
         inputAmountFormatted: `${inHuman} ${inSymbol}`,
         inputValueInUsd: inUsd,
         estimatedTime: serviceTime,

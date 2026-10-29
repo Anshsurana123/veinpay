@@ -52,6 +52,9 @@ export function CakeWalletSettlementModal() {
     crawlSettings,
     recordSimulatedSettlement,
     activeSignedLink,
+    spotRates,
+    ratesError,
+    fetchRates,
   } = useVeilPayStore();
 
   const { address: connectedWallet, isConnected } = useAccount();
@@ -117,57 +120,83 @@ export function CakeWalletSettlementModal() {
   );
   const [broadcastError, setBroadcastError] = useState<string | null>(null);
 
+  const isBtcMode = linkConfig.settlementMode === 'BTC_SILENT_PAYMENT';
+  const isXmrMode = linkConfig.settlementMode === 'XMR_SUBADDRESS';
+
+  useEffect(() => {
+    if (settlementModalOpen && !spotRates) {
+      void fetchRates();
+    }
+  }, [settlementModalOpen, spotRates, fetchRates]);
+
+  const btcRate = spotRates?.rates?.BTC ?? null;
+  const xmrRate = spotRates?.rates?.XMR ?? null;
+
+  const isRateAvailable = isBtcMode
+    ? Boolean(btcRate && !ratesError)
+    : isXmrMode
+      ? Boolean(xmrRate && !ratesError)
+      : true;
+
   const amountNum = Math.max(0.01, Number(linkConfig.amount) || 250);
-  const amountBtc = (amountNum / 92000).toFixed(6);
-  const amountXmr = (amountNum / 175).toFixed(4);
+  const amountBtc = btcRate ? (amountNum / btcRate).toFixed(8) : '';
+  const amountXmr = xmrRate ? (amountNum / xmrRate).toFixed(6) : '';
+  const rateExpiresAt = spotRates?.expiresAt ?? null;
+  const rateExpiryTimeFormatted = rateExpiresAt
+    ? new Date(rateExpiresAt).toLocaleTimeString()
+    : '';
 
   const spAddress = linkConfig.vaultAddresses.BTC_SILENT_PAYMENT || '';
   const xmrSubaddress = linkConfig.vaultAddresses.XMR_SUBADDRESS || '';
 
   const hasVaultConfigured = Boolean(
-    linkConfig.settlementMode === 'BTC_SILENT_PAYMENT'
+    isBtcMode
       ? spAddress
-      : linkConfig.settlementMode === 'XMR_SUBADDRESS'
+      : isXmrMode
         ? xmrSubaddress
         : linkConfig.vaultAddresses.EVM_SOCKET
   );
 
-  const bip321Uri = spAddress
-    ? buildBip321SilentPaymentUri({
-        spAddress,
-        amountBtc,
-        label: `VeilPay:${linkConfig.handle}`,
-        message: `VeilPay Verified Clean Settlement ($${linkConfig.amount})`,
-      })
-    : '';
+  const bip321Uri =
+    spAddress && isRateAvailable && amountBtc
+      ? buildBip321SilentPaymentUri({
+          spAddress,
+          amountBtc,
+          label: `VeilPay:${linkConfig.handle}`,
+          message: `VeilPay Clean Settlement ($${linkConfig.amount} USD @ $${btcRate?.toLocaleString()} BTC/USD, expires ${rateExpiryTimeFormatted})`,
+        })
+      : '';
 
-  const legacyBtcUri = spAddress
-    ? buildLegacySilentPaymentUri({
-        spAddress,
-        amountBtc,
-        label: `VeilPay:${linkConfig.handle}`,
-      })
-    : '';
+  const legacyBtcUri =
+    spAddress && isRateAvailable && amountBtc
+      ? buildLegacySilentPaymentUri({
+          spAddress,
+          amountBtc,
+          label: `VeilPay:${linkConfig.handle}`,
+        })
+      : '';
 
-  const xmrUri = xmrSubaddress
-    ? buildMoneroPaymentUri({
-        subaddress: xmrSubaddress,
-        amountXmr,
-        recipientName: `VeilPay:${linkConfig.handle}`,
-        description: `VeilPay Verified Clean Settlement ($${linkConfig.amount})`,
-      })
-    : '';
+  const xmrUri =
+    xmrSubaddress && isRateAvailable && amountXmr
+      ? buildMoneroPaymentUri({
+          subaddress: xmrSubaddress,
+          amountXmr,
+          recipientName: `VeilPay:${linkConfig.handle}`,
+          description: `VeilPay Clean Settlement ($${linkConfig.amount} USD @ $${xmrRate?.toLocaleString()} XMR/USD, expires ${rateExpiryTimeFormatted})`,
+        })
+      : '';
 
-  const activeUri = !hasVaultConfigured
-    ? ''
-    : linkConfig.settlementMode === 'BTC_SILENT_PAYMENT'
-      ? btcLegacyFormat
-        ? legacyBtcUri
-        : bip321Uri
-      : linkConfig.settlementMode === 'XMR_SUBADDRESS'
-        ? xmrUri
-        : primaryRoute?.txData?.object?.to ??
-          linkConfig.vaultAddresses.EVM_SOCKET;
+  const activeUri =
+    !hasVaultConfigured || !isRateAvailable
+      ? ''
+      : isBtcMode
+        ? btcLegacyFormat
+          ? legacyBtcUri
+          : bip321Uri
+        : isXmrMode
+          ? xmrUri
+          : primaryRoute?.txData?.object?.to ??
+            linkConfig.vaultAddresses.EVM_SOCKET;
 
   useEffect(() => {
     if (!settlementModalOpen || !activeScan?.socketUnlocked || !activeUri) {
@@ -217,6 +246,12 @@ export function CakeWalletSettlementModal() {
     if (!hasVaultConfigured) {
       setBroadcastError(
         'Cannot settle: no destination vault address configured for this mode.'
+      );
+      return;
+    }
+    if (!isRateAvailable) {
+      setBroadcastError(
+        'Cannot settle: exchange rate is unavailable for this currency from the live price oracle.'
       );
       return;
     }
@@ -576,6 +611,21 @@ export function CakeWalletSettlementModal() {
               Payment links must specify a valid destination vault before QR codes and settlement URIs can be generated.
             </p>
           </div>
+        ) : !isRateAvailable ? (
+          <div className="mt-4 border border-[#D6453A] bg-[#2D1412] p-4 font-mono text-xs">
+            <div className="font-bold text-[#D6453A]">EXCHANGE RATE UNAVAILABLE</div>
+            <p className="mt-1 text-[11px] text-[#F3F1EC]">
+              Live spot price oracle is currently unavailable for {isBtcMode ? 'BTC' : 'XMR'}.
+              Settlement and QR generation are disabled until real-time market exchange rates are restored.
+            </p>
+            <button
+              type="button"
+              onClick={() => void fetchRates()}
+              className="mt-2.5 border border-[#D97736] bg-[#261810] px-3 py-1 font-mono text-[10px] font-bold text-[#E5A93C] hover:bg-[#D97736] hover:text-[#0B0C0E]"
+            >
+              RETRY PRICE ORACLE
+            </button>
+          </div>
         ) : (
           <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-5">
             <div className="flex flex-col items-center justify-center border border-[#262A33] bg-[#0B0C0E] p-3 sm:col-span-2">
@@ -619,11 +669,21 @@ export function CakeWalletSettlementModal() {
                 <div className="text-xs text-[#9499A3]">
                   AMOUNT:{' '}
                   <span className="font-bold text-[#1F9D68]">
-                    {linkConfig.settlementMode === 'BTC_SILENT_PAYMENT'
-                      ? `${amountBtc} BTC`
-                      : `${amountXmr} XMR`}{' '}
+                    {isBtcMode ? `${amountBtc} BTC` : `${amountXmr} XMR`}{' '}
                     (${linkConfig.amount} USD)
                   </span>
+                  <div className="mt-1 text-[10px] text-[#9499A3]">
+                    ORACLE SPOT RATE: 1 {isBtcMode ? 'BTC' : 'XMR'} = $
+                    {isBtcMode
+                      ? btcRate?.toLocaleString()
+                      : xmrRate?.toLocaleString()}{' '}
+                    USD
+                    {rateExpiresAt && (
+                      <span className="ml-2 text-[#E5A93C]">
+                        (EXPIRES: {rateExpiryTimeFormatted})
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 <div>
@@ -704,7 +764,7 @@ export function CakeWalletSettlementModal() {
 
             <button
               type="button"
-              disabled={!hasVaultConfigured}
+              disabled={!hasVaultConfigured || !isRateAvailable}
               onClick={handleConfirmSettlement}
               className="flex items-center gap-2 border border-[#1F9D68] bg-[#1F9D68] px-4 py-2.5 font-mono text-xs font-bold text-[#0B0C0E] transition-colors hover:bg-[#25b87b] disabled:opacity-50 disabled:cursor-not-allowed"
             >

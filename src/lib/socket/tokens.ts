@@ -130,7 +130,7 @@ export interface TokenConfig {
   symbol: 'USDC' | 'ETH' | 'USDT';
   name: string;
   decimals: number;
-  approxUsdPrice: number;
+  approxUsdPrice?: number;
   addressesByChain: Record<SupportedEvmChainId, string>;
 }
 
@@ -179,7 +179,6 @@ export const EVM_TOKEN_REGISTRY: Record<'USDC' | 'ETH' | 'USDT', TokenConfig> = 
     symbol: 'ETH',
     name: 'Native Ether',
     decimals: 18,
-    approxUsdPrice: 2500.0,
     addressesByChain: {
       1: NATIVE_TOKEN_ADDRESS,
       42161: NATIVE_TOKEN_ADDRESS,
@@ -195,14 +194,6 @@ export const EVM_TOKEN_REGISTRY: Record<'USDC' | 'ETH' | 'USDT', TokenConfig> = 
   },
 };
 
-export const ASSET_APPROX_USD_PRICE: Record<PaymentAssetSymbol, number> = {
-  USDC: 1.0,
-  USDT: 1.0,
-  ETH: 2500.0,
-  BTC: 92000.0,
-  XMR: 175.0,
-};
-
 export function resolveTokenByAddressOrSymbol(
   chainId: number,
   tokenInput: string
@@ -210,7 +201,7 @@ export function resolveTokenByAddressOrSymbol(
   address: string;
   symbol: 'USDC' | 'ETH' | 'USDT';
   decimals: number;
-  approxUsdPrice: number;
+  approxUsdPrice?: number;
 } {
   const cId = (SUPPORTED_EVM_CHAINS.some((c) => c.chainId === chainId)
     ? chainId
