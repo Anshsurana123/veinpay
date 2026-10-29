@@ -1,17 +1,30 @@
 import { describe, expect, it, beforeEach } from 'vitest';
+import { privateKeyToAccount } from 'viem/accounts';
 import { InMemoryEventStore } from '@/lib/events/store';
 import { verifyOnChainSettlementReceipt } from '@/lib/events/verify-receipt';
 import {
   clearLinkStoreForTests,
+  clearReadActivityStoreForTests,
+  issueReadActivityChallenge,
   storeSignedLinkRecord,
-  verifyManageTokenForLink,
+  verifyReadActivitySignature,
+  buildReadActivityTypedData,
 } from '@/lib/links';
 import { createPaymentLinkPayload } from '@/lib/links/eip712';
 import { encodeSignedLinkPayloadToBase64Url } from '@/lib/links/canonical';
 
+const TEST_RECEIVER_PK =
+  '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80' as const;
+const TEST_OTHER_PK =
+  '0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d' as const;
+
+const receiverAccount = privateKeyToAccount(TEST_RECEIVER_PK);
+const otherAccount = privateKeyToAccount(TEST_OTHER_PK);
+
 describe('Issue 8: Server-backed Activity feed & On-chain receipt verification', () => {
   beforeEach(() => {
     clearLinkStoreForTests();
+    clearReadActivityStoreForTests();
   });
 
   describe('EventStore In-Memory Implementation', () => {
@@ -215,16 +228,16 @@ describe('Issue 8: Server-backed Activity feed & On-chain receipt verification',
     });
   });
 
-  describe('Receiver Access Auth via manageToken', () => {
-    it('Requires valid manageToken to access private receiver link feed', () => {
+  describe('Receiver Access Auth via EIP-712 ReadActivity', () => {
+    it('Requires short-lived EIP-712 ReadActivity signature from link signer to access receiver feed', async () => {
       const payload = createPaymentLinkPayload({
         handle: 'secure-receiver',
         amount: '100.00',
         asset: 'USDC',
         destinationChainId: 8453,
         settlementMode: 'EVM_SOCKET',
-        vaultAddress: '0x742d35Cc6634C0532925a3b844Bc454e4438f44e',
-        signer: '0x4F2a9c117034e8B1200499A1c3f88200000188E1',
+        vaultAddress: receiverAccount.address,
+        signer: receiverAccount.address,
         policy: {
           firewallEnabled: true,
           maxHops: 3,
@@ -237,29 +250,133 @@ describe('Issue 8: Server-backed Activity feed & On-chain receipt verification',
       });
 
       const canonicalEncoded = encodeSignedLinkPayloadToBase64Url(payload);
-      const { manageToken } = storeSignedLinkRecord({
+      storeSignedLinkRecord({
         payload,
         encodedPayload: canonicalEncoded,
         signature: '0x1234',
-        trustLevel: 'SIGNED_UNPROVEN',
+        trustLevel: 'PROVEN',
       });
 
-      expect(manageToken).toBeDefined();
+      // Issue challenge
+      const challenge = issueReadActivityChallenge(payload.linkId);
+      expect(challenge.linkId).toBe(payload.linkId);
+      expect(challenge.nonce).toMatch(/^0x[0-9a-f]{32}$/);
 
-      // Valid token matches
-      const isValid = verifyManageTokenForLink(payload.linkId, manageToken);
-      expect(isValid).toBe(true);
+      // Sign typed data with registered receiver account
+      const typedData = buildReadActivityTypedData(challenge);
+      const signature = await receiverAccount.signTypedData(typedData);
 
-      // Wrong token fails
-      const isWrongValid = verifyManageTokenForLink(
-        payload.linkId,
-        'wrong_token_123'
-      );
-      expect(isWrongValid).toBe(false);
+      // Verification with registered signer succeeds
+      const checkValid = await verifyReadActivitySignature({
+        linkId: challenge.linkId,
+        nonce: challenge.nonce,
+        expiresAt: challenge.expiresAt,
+        signature,
+        expectedSigner: receiverAccount.address,
+      });
+      expect(checkValid.valid).toBe(true);
 
-      // Missing token fails
-      const isMissingValid = verifyManageTokenForLink(payload.linkId, null);
-      expect(isMissingValid).toBe(false);
+      // Replay of same nonce fails
+      const replayCheck = await verifyReadActivitySignature({
+        linkId: challenge.linkId,
+        nonce: challenge.nonce,
+        expiresAt: challenge.expiresAt,
+        signature,
+        expectedSigner: receiverAccount.address,
+      });
+      expect(replayCheck.valid).toBe(false);
+      expect(replayCheck.reason).toContain('already been consumed');
+
+      // Signature from a different wallet is rejected
+      const newChallenge = issueReadActivityChallenge(payload.linkId);
+      const wrongTypedData = buildReadActivityTypedData(newChallenge);
+      const wrongSignature = await otherAccount.signTypedData(wrongTypedData);
+
+      const wrongSignerCheck = await verifyReadActivitySignature({
+        linkId: newChallenge.linkId,
+        nonce: newChallenge.nonce,
+        expiresAt: newChallenge.expiresAt,
+        signature: wrongSignature,
+        expectedSigner: receiverAccount.address,
+      });
+      expect(wrongSignerCheck.valid).toBe(false);
+      expect(wrongSignerCheck.reason).toContain('does not match link signer');
+
+      // Expired challenge is rejected
+      const expiredCheck = await verifyReadActivitySignature({
+        linkId: newChallenge.linkId,
+        nonce: newChallenge.nonce,
+        expiresAt: (Math.floor(Date.now() / 1000) - 10).toString(),
+        signature: wrongSignature,
+        expectedSigner: receiverAccount.address,
+        requireStoredNonce: false,
+      });
+      expect(expiredCheck.valid).toBe(false);
+      expect(expiredCheck.reason).toContain('expired');
+    });
+
+    it('Stores link revocations and CCTP transfer state transitions in the same events store', async () => {
+      const store = new InMemoryEventStore();
+
+      // Record link revocation
+      const revEvent = await store.recordEvent({
+        linkId: 'revocable-link-1',
+        eventType: 'LINK_REVOCATION',
+        status: 'REVOKED',
+        simulated: false,
+        payerAddress: '0x0000000000000000000000000000000000000000',
+        receiverVault: receiverAccount.address,
+        amount: '0.00',
+        asset: 'USDC',
+        sourceChainId: 0,
+        sourceChainName: 'Network',
+        errorMessage: 'Link revocable-link-1 revoked by receiver',
+      });
+
+      expect(revEvent.eventType).toBe('LINK_REVOCATION');
+      expect(revEvent.status).toBe('REVOKED');
+
+      // Record CCTP transfer states: BURN_PENDING -> ATTESTED -> MINTED
+      const burnEvent = await store.recordEvent({
+        id: 'cctp_0xburn123_BURN_PENDING',
+        linkId: 'cctp-link-1',
+        eventType: 'CCTP_TRANSFER_STATE',
+        status: 'BURN_PENDING',
+        simulated: false,
+        payerAddress: receiverAccount.address,
+        receiverVault: otherAccount.address,
+        amount: '50.00',
+        asset: 'USDC',
+        sourceChainId: 84532,
+        sourceChainName: 'Base Sepolia',
+        destinationChainId: 421614,
+        txHash: '0xburn123',
+      });
+
+      const mintEvent = await store.recordEvent({
+        id: 'cctp_0xburn123_MINTED',
+        linkId: 'cctp-link-1',
+        eventType: 'CCTP_TRANSFER_STATE',
+        status: 'MINTED',
+        simulated: false,
+        payerAddress: receiverAccount.address,
+        receiverVault: otherAccount.address,
+        amount: '50.00',
+        asset: 'USDC',
+        sourceChainId: 84532,
+        sourceChainName: 'Base Sepolia',
+        destinationChainId: 421614,
+        txHash: '0xmint456',
+      });
+
+      expect(burnEvent.eventType).toBe('CCTP_TRANSFER_STATE');
+      expect(burnEvent.status).toBe('BURN_PENDING');
+      expect(mintEvent.status).toBe('MINTED');
+
+      const cctpEvents = await store.getEvents({ linkId: 'cctp-link-1' });
+      expect(cctpEvents.length).toBe(2);
+      expect(cctpEvents[0].status).toBe('MINTED');
+      expect(cctpEvents[1].status).toBe('BURN_PENDING');
     });
   });
 });

@@ -44,7 +44,7 @@ async function executeGatedQuoteRequest(params: {
     sig: params.sig,
   });
 
-  if (!authority.ok || !authority.vaultAddress) {
+  if (!authority.ok || !authority.vaultAddress || !authority.signer) {
     return NextResponse.json(
       {
         success: false,
@@ -82,6 +82,7 @@ async function executeGatedQuoteRequest(params: {
   const attestationCheck = verifyScanAttestation(params.scanAttestation, {
     payer: params.userAddress,
     linkId: authority.linkId,
+    linkSigner: authority.signer,
     policy: authoritativePolicy,
     requireProofOfControl: true,
   });

@@ -306,15 +306,16 @@ Flags a discovered ancestor as a `ThreatEntity` if any of the following fields e
 - **POST /api/cctp/attestation**: Server-side polling proxy for Circle Iris sandbox attestation API (`GET /v2/messages/{domain}?transactionHash=...`) with exponential backoff and timeout.
 
 ### 6.2 Proof of Control (`POST /api/session/nonce`, `POST /api/session/verify`)
-- **POST /api/session/nonce**: Issues an unguessable 32-byte session nonce with 5-minute expiry.
-- **POST /api/session/verify**: Verifies an EIP-191 personal signature binding connected wallet, scanned wallet, nonce, and link ID. Personas and unverified addresses remain strictly scan-only.
+- **POST /api/session/nonce**: Issues an unguessable 32-byte session nonce with 5-minute expiry, binding the scanned wallet, origin chain, `linkId`, and recipient's verified `vaultAddress` from the signed link.
+- **POST /api/session/verify**: Verifies an EIP-191 personal signature over the SIWE-style challenge binding connected wallet, scanned wallet, `vaultAddress`, `linkId`, chainId, and nonce. Personas and unverified addresses remain strictly scan-only.
 
 ### 6.3 EIP-712 Receiver-Signed Payment Links (`POST /api/links`, `POST /api/links/revoke`)
 - **Format**: `?c=<base64url-payload>&sig=<0x-signature>`.
 - **Primary Type**: `PaymentLink(version, linkId, handle, amount, openAmount, asset, destinationChainId, settlementMode, vaultAddress, policyHash, createdAt, expiresAt, signer)`.
 - **Trust Level**: `PROVEN` for EVM settlement where `signer == vaultAddress` (or ERC-1271 verified contract); `SIGNED_UNPROVEN` for BTC Silent Payments and Monero.
-- **POST /api/links**: Creates and indexes a verified link; returns link URL and a one-time `manageToken` for private activity access.
-- **POST /api/links/revoke**: Revokes a link via signed EIP-712 `RevokeLink(linkId, signer, issuedAt)`.
+- **POST /api/links**: Creates and indexes a verified link; returns canonical link URL. Requires a non-empty, valid destination vault address for the chosen settlement mode and a valid EIP-712 signature.
+- **POST /api/links/revoke**: Revokes a link via signed EIP-712 `RevokeLink(linkId, signer, issuedAt)`. Revocations are immediately stored in the persistent event log.
+- **Server HMAC Attestation**: Quote routes (`/api/socket/quote` and `/api/cctp/quote`) require an HMAC attestation that covers `linkId`, `policyHash`, and the verified link's `signer`. Both routes refuse execution with HTTP 403 if link verification fails.
 
 ### 6.4 Ed25519 Signed Forensic Receipts & Public Key Verification
 - **GET /.well-known/veilpay-receipt-key**: Serves VeilPay's Ed25519 public key in JWK and SPKI PEM format (`veilpay-ed25519-v1`).
@@ -326,7 +327,7 @@ Flags a discovered ancestor as a `ThreatEntity` if any of the following fields e
 ### 6.6 Live Rates Oracle (`GET /api/rates`)
 - Fetches live spot prices for ETH, BTC, XMR, and USDT from public price oracles with a 30s in-memory cache and timestamp. Fails closed with "rate unavailable" rather than falling back to hardcoded numbers.
 
-### 6.7 Server-Backed Event Store & Receipt Verification (`GET /api/events`, `POST /api/events`)
-- Stores immutable security events (`SCAN_RESULT`, `SETTLEMENT_INITIATED`, `SETTLEMENT_CONFIRMED`, `SETTLEMENT_FAILED`) in Upstash Redis REST (or in-memory dev fallback).
-- `GET /api/events?linkId=...`: Private receiver feed protected by `manageToken`.
-- `POST /api/events`: For EVM settlements, verifies transaction receipts with viem public client before marking `CONFIRMED`. Excludes simulated events from production threat counters.
+### 6.7 Server-Backed Event Store & Receiver Wallet Auth (`GET /api/events`, `POST /api/events`)
+- Stores immutable security events (`SCAN_RESULT`, `SETTLEMENT_ATTEMPT`, `SETTLEMENT_CONFIRMED`, `LINK_REVOCATION`, `CCTP_TRANSFER_STATE`) in Upstash Redis REST (or in-memory dev fallback).
+- `GET /api/events?linkId=...`: Private receiver feed protected by short-lived EIP-712 `ReadActivity(linkId, nonce, expiresAt)` signed by the link signer (dropping static manageToken in favor of cryptographic wallet auth).
+- `POST /api/events`: For EVM settlements, verifies transaction receipts with viem public client before marking `CONFIRMED`. Excludes simulated events from production threat counters. Also stores link revocations and CCTP state transitions.

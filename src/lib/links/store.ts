@@ -1,4 +1,3 @@
-import { createHash, randomBytes, timingSafeEqual } from 'crypto';
 import type {
   LinkTrustLevel,
   SignedPaymentLinkPayload,
@@ -12,7 +11,6 @@ export interface StoredPaymentLinkRecord {
   encodedPayload: string;
   signature: `0x${string}`;
   trustLevel: LinkTrustLevel;
-  manageTokenHash: string;
   revoked: boolean;
   revokedAt?: string;
   createdAt: string;
@@ -22,49 +20,16 @@ const linkRecordById = new Map<string, StoredPaymentLinkRecord>();
 const linkRecordByHandle = new Map<string, StoredPaymentLinkRecord>();
 const revokedLinkSet = new Map<string, { revokedAt: string; signer: string }>();
 
-export function hashManageToken(token: string): string {
-  return createHash('sha256').update(token.trim(), 'utf8').digest('hex');
-}
-
-export function generateManageToken(): {
-  manageToken: string;
-  manageTokenHash: string;
-} {
-  const manageToken = `vpm_${randomBytes(24).toString('base64url')}`;
-  return {
-    manageToken,
-    manageTokenHash: hashManageToken(manageToken),
-  };
-}
-
-export function verifyManageTokenForLink(
-  linkId: string,
-  candidateToken: string | null | undefined
-): boolean {
-  if (!candidateToken || typeof candidateToken !== 'string') return false;
-  const rec = getStoredLinkRecord(linkId);
-  if (!rec) return false;
-  const candidateHash = hashManageToken(candidateToken);
-  const a = Buffer.from(candidateHash, 'utf8');
-  const b = Buffer.from(rec.manageTokenHash, 'utf8');
-  return a.length === b.length && timingSafeEqual(a, b);
-}
-
 export function storeSignedLinkRecord(params: {
   payload: SignedPaymentLinkPayload;
   encodedPayload: string;
   signature: `0x${string}`;
   trustLevel: LinkTrustLevel;
-  manageTokenHash?: string;
 }): {
   record: StoredPaymentLinkRecord;
-  manageToken?: string;
 } {
   const key = params.payload.linkId.trim().toLowerCase();
   const handleKey = params.payload.handle.trim().toLowerCase();
-  const generated = params.manageTokenHash
-    ? { manageToken: undefined, manageTokenHash: params.manageTokenHash }
-    : generateManageToken();
 
   const existingRevocation = revokedLinkSet.get(key);
 
@@ -75,7 +40,6 @@ export function storeSignedLinkRecord(params: {
     encodedPayload: params.encodedPayload,
     signature: params.signature,
     trustLevel: params.trustLevel,
-    manageTokenHash: generated.manageTokenHash,
     revoked: Boolean(existingRevocation),
     revokedAt: existingRevocation?.revokedAt,
     createdAt: params.payload.createdAt,
@@ -89,17 +53,18 @@ export function storeSignedLinkRecord(params: {
       linkId: key,
       policy: params.payload.policy,
       vaultAddress: params.payload.vaultAddress,
+      signer: params.payload.signer,
     });
     registerVerifiedLinkPolicy({
       linkId: params.payload.handle.trim(),
       policy: params.payload.policy,
       vaultAddress: params.payload.vaultAddress,
+      signer: params.payload.signer,
     });
   }
 
   return {
     record,
-    manageToken: generated.manageToken,
   };
 }
 

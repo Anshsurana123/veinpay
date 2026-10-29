@@ -119,7 +119,6 @@ export function ReceiverSetupForm() {
         sig?: `0x${string}`;
         url?: string;
         trustLevel?: LinkTrustLevel;
-        manageToken?: string;
         payload?: SignedPaymentLinkPayload;
       };
       if (!res.ok || !data.c || !data.sig || !data.payload || !data.trustLevel) {
@@ -132,7 +131,6 @@ export function ReceiverSetupForm() {
         sig: data.sig,
         trustLevel: data.trustLevel,
         url: data.url,
-        manageToken: data.manageToken,
       });
       await runFirewallAndQuotePipeline();
     } catch (err) {

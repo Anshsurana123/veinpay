@@ -11,12 +11,23 @@ export type VeilPayEventStatus =
   | 'CONFIRMED'
   | 'FAILED'
   | 'AWAITING_PAYMENT'
-  | 'CLAIMED_UNVERIFIED';
+  | 'CLAIMED_UNVERIFIED'
+  | 'REVOKED'
+  | 'QUOTED'
+  | 'APPROVING'
+  | 'BURN_PENDING'
+  | 'BURN_CONFIRMED'
+  | 'ATTESTATION_PENDING'
+  | 'ATTESTED'
+  | 'MINT_PENDING'
+  | 'MINTED';
 
 export type VeilPayEventType =
   | 'SCAN_RESULT'
   | 'SETTLEMENT_ATTEMPT'
-  | 'SETTLEMENT_CONFIRMED';
+  | 'SETTLEMENT_CONFIRMED'
+  | 'LINK_REVOCATION'
+  | 'CCTP_TRANSFER_STATE';
 
 export interface VeilPayEvent {
   id: string;

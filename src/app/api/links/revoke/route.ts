@@ -4,6 +4,7 @@ import {
   verifyRevokeLinkSignature,
   type RevokeLinkMessage,
 } from '@/lib/links';
+import { getEventStore } from '@/lib/events/store';
 
 export async function POST(request: NextRequest) {
   try {
@@ -56,6 +57,26 @@ export async function POST(request: NextRequest) {
       signer,
       issuedAt,
     });
+
+    try {
+      const store = getEventStore();
+      await store.recordEvent({
+        id: `rev_${linkId}_${Date.now()}`,
+        linkId,
+        eventType: 'LINK_REVOCATION',
+        status: 'REVOKED',
+        simulated: false,
+        payerAddress: '0x0000000000000000000000000000000000000000',
+        receiverVault: '',
+        amount: '0.00',
+        asset: 'USDC',
+        sourceChainId: 0,
+        sourceChainName: 'Network',
+        errorMessage: `Payment link ${linkId} has been revoked by signer ${signer}.`,
+      });
+    } catch {
+      // Non-blocking event recording
+    }
 
     return NextResponse.json(
       {

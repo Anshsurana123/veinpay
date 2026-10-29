@@ -92,6 +92,12 @@ export function PayerCheckoutPanel() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           linkId: activeSignedLink?.payload.linkId || linkConfig.handle || 'default',
+          vaultAddress:
+            activeSignedLink?.payload.vaultAddress ||
+            linkConfig.vaultAddresses[linkConfig.settlementMode] ||
+            '',
+          c: activeSignedLink?.c,
+          sig: activeSignedLink?.sig,
           scannedAddress: activePayerAddress,
           chainId: payerChainId,
         }),
@@ -111,6 +117,9 @@ export function PayerCheckoutPanel() {
         body: JSON.stringify({
           nonce: nonceData.nonce,
           linkId: nonceData.linkId,
+          vaultAddress: nonceData.vaultAddress,
+          c: activeSignedLink?.c,
+          sig: activeSignedLink?.sig,
           scannedAddress: nonceData.scannedAddress,
           chainId: nonceData.chainId,
           expiresAt: nonceData.expiresAt,

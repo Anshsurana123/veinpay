@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getEventStore } from '@/lib/events/store';
-import { verifyManageTokenForLink } from '@/lib/links';
+import {
+  issueReadActivityChallenge,
+  resolveVerifiedLinkAuthority,
+  verifyReadActivitySignature,
+} from '@/lib/links';
 import { verifyOnChainSettlementReceipt } from '@/lib/events/verify-receipt';
+import type { VeilPayEventStatus } from '@/lib/events/types';
 import type {
   PaymentAssetSymbol,
   VaultSettlementMode,
@@ -11,20 +16,72 @@ import type {
 export async function GET(request: NextRequest) {
   const sp = request.nextUrl.searchParams;
   const linkId = sp.get('linkId');
-  const manageToken =
-    request.headers.get('x-manage-token') || sp.get('manageToken');
+
+  if (sp.get('challenge') === 'true' || sp.get('action') === 'challenge') {
+    const targetLinkId = (linkId ?? 'default').trim();
+    const challenge = issueReadActivityChallenge(targetLinkId);
+    return NextResponse.json({ ok: true, challenge }, { status: 200 });
+  }
 
   const store = getEventStore();
 
   if (linkId) {
-    const isAuthorized = verifyManageTokenForLink(linkId, manageToken);
-    if (!isAuthorized) {
+    const sig =
+      request.headers.get('x-read-auth-signature') ||
+      request.headers.get('x-auth-signature') ||
+      sp.get('sig');
+    const nonce =
+      request.headers.get('x-read-auth-nonce') ||
+      request.headers.get('x-auth-nonce') ||
+      sp.get('nonce');
+    const expiresAt =
+      request.headers.get('x-read-auth-expires-at') ||
+      request.headers.get('x-auth-expires-at') ||
+      sp.get('expiresAt');
+    const c = sp.get('c');
+
+    const authority = await resolveVerifiedLinkAuthority({ linkId, c });
+    const expectedSigner = authority.signer;
+
+    if (!expectedSigner) {
+      return NextResponse.json(
+        {
+          ok: false,
+          errorCode: 'UNAUTHORIZED_RECEIVER_ACCESS',
+          reason: `No registered or verified signer found for payment link "${linkId}".`,
+        },
+        { status: 401 }
+      );
+    }
+
+    if (!sig || !nonce || !expiresAt) {
       return NextResponse.json(
         {
           ok: false,
           errorCode: 'UNAUTHORIZED_RECEIVER_ACCESS',
           reason:
-            'A valid one-time manageToken is required to inspect this private receiver event feed.',
+            'Receiver wallet authentication required: sign an EIP-712 ReadActivity challenge with the link signer wallet.',
+        },
+        { status: 401 }
+      );
+    }
+
+    const authResult = await verifyReadActivitySignature({
+      linkId,
+      nonce,
+      expiresAt,
+      signature: sig as `0x${string}`,
+      expectedSigner,
+    });
+
+    if (!authResult.valid) {
+      return NextResponse.json(
+        {
+          ok: false,
+          errorCode: 'UNAUTHORIZED_RECEIVER_ACCESS',
+          reason:
+            authResult.reason ??
+            'Invalid EIP-712 ReadActivity signature from link signer.',
         },
         { status: 401 }
       );
@@ -45,7 +102,12 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = (await request.json()) as {
-      action?: 'record_scan' | 'record_settlement' | 'verify_receipt';
+      action?:
+        | 'record_scan'
+        | 'record_settlement'
+        | 'verify_receipt'
+        | 'record_link_revocation'
+        | 'record_cctp_state';
       linkId?: string;
       eventId?: string;
       simulated?: boolean;
@@ -61,15 +123,64 @@ export async function POST(request: NextRequest) {
       hopDistance?: number | null;
       latencyMs?: number;
       txHash?: string;
+      burnTxHash?: string;
+      mintTxHash?: string;
+      cctpState?: VeilPayEventStatus;
       bridgeUsed?: string;
       sha256Hash?: string;
       settlementMode?: VaultSettlementMode;
+      errorMessage?: string;
     };
 
     const action = body.action ?? 'record_scan';
     const store = getEventStore();
     const linkId = body.linkId || 'default-session';
     const simulated = Boolean(body.simulated);
+
+    if (action === 'record_link_revocation') {
+      const event = await store.recordEvent({
+        id: body.eventId ?? `rev_${linkId}_${Date.now()}`,
+        linkId,
+        eventType: 'LINK_REVOCATION',
+        status: 'REVOKED',
+        simulated: false,
+        payerAddress: '0x0000000000000000000000000000000000000000',
+        receiverVault: body.receiverVault || '',
+        amount: '0.00',
+        asset: body.asset || 'USDC',
+        sourceChainId: 0,
+        sourceChainName: 'Network',
+        errorMessage:
+          body.errorMessage || `Payment link ${linkId} has been revoked.`,
+      });
+
+      return NextResponse.json({ ok: true, event }, { status: 201 });
+    }
+
+    if (action === 'record_cctp_state') {
+      const cctpState = (body.cctpState ?? 'BURN_PENDING') as VeilPayEventStatus;
+      const event = await store.recordEvent({
+        id: body.burnTxHash
+          ? `cctp_${body.burnTxHash}_${cctpState}`
+          : body.eventId,
+        linkId,
+        eventType: 'CCTP_TRANSFER_STATE',
+        status: cctpState,
+        simulated,
+        payerAddress:
+          body.payerAddress || '0x0000000000000000000000000000000000000000',
+        receiverVault: body.receiverVault || '',
+        amount: body.amount || '0.00',
+        asset: 'USDC',
+        sourceChainId: body.sourceChainId || 84532,
+        sourceChainName: body.sourceChainName || 'CCTP Testnet',
+        destinationChainId: body.destinationChainId,
+        txHash: body.txHash || body.mintTxHash || body.burnTxHash,
+        errorMessage: body.errorMessage,
+      });
+
+      return NextResponse.json({ ok: true, event }, { status: 201 });
+    }
 
     if (action === 'record_scan') {
       const isBlocked =

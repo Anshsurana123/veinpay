@@ -4,6 +4,7 @@ import { getAddress, isAddress, verifyMessage } from 'viem';
 export interface ProofOfControlChallenge {
   nonce: string;
   linkId: string;
+  vaultAddress: string;
   scannedAddress: `0x${string}`;
   chainId: number;
   issuedAt: string;
@@ -14,6 +15,7 @@ export interface ProofOfControlChallenge {
 export interface ProofOfControlTokenPayload {
   nonce: string;
   linkId: string;
+  vaultAddress: string;
   scannedAddress: string;
   chainId: number;
   expiresAt: string;
@@ -37,23 +39,32 @@ function getSessionSecret(): string {
 export function buildProofOfControlMessage(params: {
   nonce: string;
   linkId: string;
+  vaultAddress?: string;
   scannedAddress: string;
   chainId: number;
   expiresAt: string;
 }): string {
   const normalizedAddr = params.scannedAddress.trim().toLowerCase();
-  return [
+  const normalizedVault = (params.vaultAddress ?? '').trim().toLowerCase();
+  const lines = [
     'VeilPay Pre-Sign Firewall — Proof of Wallet Control',
     `Link ID: ${params.linkId.trim()}`,
+  ];
+  if (normalizedVault) {
+    lines.push(`Vault Address: ${normalizedVault}`);
+  }
+  lines.push(
     `Scanned Wallet: ${normalizedAddr}`,
     `Origin Chain ID: ${params.chainId}`,
     `Nonce: ${params.nonce.trim()}`,
-    `Expires At: ${params.expiresAt.trim()}`,
-  ].join('\n');
+    `Expires At: ${params.expiresAt.trim()}`
+  );
+  return lines.join('\n');
 }
 
 export function issueProofOfControlNonce(params: {
   linkId: string;
+  vaultAddress?: string;
   scannedAddress: string;
   chainId: number;
   ttlMs?: number;
@@ -65,6 +76,7 @@ export function issueProofOfControlNonce(params: {
   }
   const checksumAddr = getAddress(trimmedAddr);
   const linkId = params.linkId.trim() || 'default';
+  const vaultAddress = (params.vaultAddress ?? '').trim();
   const chainId = Number(params.chainId);
   if (!Number.isInteger(chainId) || chainId <= 0) {
     throw new Error(`Invalid chainId for proof of control: ${params.chainId}`);
@@ -79,6 +91,7 @@ export function issueProofOfControlNonce(params: {
   const message = buildProofOfControlMessage({
     nonce,
     linkId,
+    vaultAddress,
     scannedAddress: checksumAddr,
     chainId,
     expiresAt,
@@ -87,6 +100,7 @@ export function issueProofOfControlNonce(params: {
   const challenge: ProofOfControlChallenge = {
     nonce,
     linkId,
+    vaultAddress,
     scannedAddress: checksumAddr,
     chainId,
     issuedAt,
@@ -108,6 +122,7 @@ export function signProofOfControlToken(
     nonce: payload.nonce,
     proofOfControl: true,
     scannedAddress: payload.scannedAddress.toLowerCase(),
+    vaultAddress: (payload.vaultAddress || '').toLowerCase(),
   });
   const encoded = Buffer.from(canonicalJson, 'utf8').toString('base64url');
   const mac = createHmac('sha256', getSessionSecret())
@@ -121,6 +136,7 @@ export function verifyProofOfControlToken(
   expected: {
     scannedAddress: string;
     linkId?: string;
+    vaultAddress?: string;
     chainId?: number;
     nowMs?: number;
   }
@@ -184,6 +200,17 @@ export function verifyProofOfControlToken(
     }
 
     if (
+      expected.vaultAddress &&
+      parsed.vaultAddress &&
+      parsed.vaultAddress.toLowerCase() !== expected.vaultAddress.trim().toLowerCase()
+    ) {
+      return {
+        valid: false,
+        reason: `Proof of control vaultAddress (${parsed.vaultAddress}) does not match expected destination vault (${expected.vaultAddress}).`,
+      };
+    }
+
+    if (
       expected.chainId !== undefined &&
       Number(parsed.chainId) !== Number(expected.chainId)
     ) {
@@ -202,6 +229,7 @@ export function verifyProofOfControlToken(
 export async function verifyProofOfControlSignature(params: {
   nonce: string;
   linkId: string;
+  vaultAddress?: string;
   scannedAddress: string;
   chainId: number;
   expiresAt: string;
@@ -226,6 +254,7 @@ export async function verifyProofOfControlSignature(params: {
     return { valid: false, reason: 'Proof of control challenge has expired.' };
   }
 
+  let effectiveVaultAddress = (params.vaultAddress ?? '').trim();
   const requireNonce = params.requireStoredNonce ?? true;
   if (requireNonce) {
     const stored = nonceStore.get(params.nonce);
@@ -252,11 +281,15 @@ export async function verifyProofOfControlSignature(params: {
         reason: 'Challenge parameters do not match issued nonce record.',
       };
     }
+    if (!effectiveVaultAddress && stored.vaultAddress) {
+      effectiveVaultAddress = stored.vaultAddress;
+    }
   }
 
   const message = buildProofOfControlMessage({
     nonce: params.nonce,
     linkId: params.linkId,
+    vaultAddress: effectiveVaultAddress,
     scannedAddress: checksumAddr,
     chainId: Number(params.chainId),
     expiresAt: params.expiresAt,
@@ -286,6 +319,7 @@ export async function verifyProofOfControlSignature(params: {
     const payload: ProofOfControlTokenPayload = {
       nonce: params.nonce,
       linkId: params.linkId.trim(),
+      vaultAddress: effectiveVaultAddress,
       scannedAddress: checksumAddr.toLowerCase(),
       chainId: Number(params.chainId),
       expiresAt: params.expiresAt.trim(),

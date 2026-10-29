@@ -1,18 +1,36 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { isAddress } from 'viem';
 import { issueProofOfControlNonce } from '@/lib/session/proof-of-control';
+import { resolveVerifiedLinkAuthority } from '@/lib/links';
 
 export async function POST(request: NextRequest) {
   try {
     const body = (await request.json()) as {
       linkId?: string;
+      vaultAddress?: string;
+      c?: string;
+      sig?: string;
       scannedAddress?: string;
       chainId?: number;
     };
 
-    const linkId = (body.linkId ?? 'default').trim();
+    let linkId = (body.linkId ?? 'default').trim();
+    let vaultAddress = (body.vaultAddress ?? '').trim();
     const scannedAddress = (body.scannedAddress ?? '').trim();
     const chainId = Number(body.chainId ?? 8453);
+
+    // If signed link parameters are provided, bind the verified authority linkId and vaultAddress
+    if (body.c || body.sig || linkId !== 'default') {
+      const authority = await resolveVerifiedLinkAuthority({
+        linkId,
+        c: body.c,
+        sig: body.sig,
+      });
+      if (authority.ok && authority.vaultAddress) {
+        linkId = authority.linkId;
+        vaultAddress = authority.vaultAddress;
+      }
+    }
 
     if (!isAddress(scannedAddress, { strict: false })) {
       return NextResponse.json(
@@ -30,6 +48,7 @@ export async function POST(request: NextRequest) {
 
     const challenge = issueProofOfControlNonce({
       linkId,
+      vaultAddress,
       scannedAddress,
       chainId,
     });

@@ -31,6 +31,7 @@ describe('Proof of Control & Signer-to-Scanned-Wallet Binding (Issue 2)', () => 
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         linkId: 'ansh-audit',
+        vaultAddress: account2.address,
         scannedAddress: account1.address,
         chainId: 8453,
       }),
@@ -41,7 +42,9 @@ describe('Proof of Control & Signer-to-Scanned-Wallet Binding (Issue 2)', () => 
     const challenge = await nonceRes.json();
     expect(challenge.nonce).toMatch(/^0x[0-9a-f]{32}$/);
     expect(challenge.scannedAddress).toBe(account1.address);
+    expect(challenge.vaultAddress).toBe(account2.address);
     expect(challenge.message).toContain(account1.address.toLowerCase());
+    expect(challenge.message).toContain(`Vault Address: ${account2.address.toLowerCase()}`);
     expect(challenge.message).toContain('Link ID: ansh-audit');
 
     const signature = await account1.signMessage({
@@ -54,6 +57,7 @@ describe('Proof of Control & Signer-to-Scanned-Wallet Binding (Issue 2)', () => 
       body: JSON.stringify({
         nonce: challenge.nonce,
         linkId: challenge.linkId,
+        vaultAddress: challenge.vaultAddress,
         scannedAddress: challenge.scannedAddress,
         chainId: challenge.chainId,
         expiresAt: challenge.expiresAt,
@@ -67,14 +71,26 @@ describe('Proof of Control & Signer-to-Scanned-Wallet Binding (Issue 2)', () => 
     expect(verifyData.valid).toBe(true);
     expect(typeof verifyData.token).toBe('string');
 
-    // Verify token binds scannedAddress, linkId, and chainId
+    // Verify token binds scannedAddress, vaultAddress, linkId, and chainId
     const tokenCheck = verifyProofOfControlToken(verifyData.token, {
       scannedAddress: account1.address.toLowerCase(),
+      vaultAddress: account2.address,
       linkId: 'ansh-audit',
       chainId: 8453,
     });
     expect(tokenCheck.valid).toBe(true);
     expect(tokenCheck.payload?.proofOfControl).toBe(true);
+    expect(tokenCheck.payload?.vaultAddress.toLowerCase()).toBe(account2.address.toLowerCase());
+
+    // Mismatched vault address check
+    const mismatchVaultCheck = verifyProofOfControlToken(verifyData.token, {
+      scannedAddress: account1.address.toLowerCase(),
+      vaultAddress: '0x1111111111111111111111111111111111111111',
+      linkId: 'ansh-audit',
+      chainId: 8453,
+    });
+    expect(mismatchVaultCheck.valid).toBe(false);
+    expect(mismatchVaultCheck.reason).toContain('does not match expected destination vault');
 
     // Replay of the same nonce must be rejected
     const replayRes = await verifyProofOfControlSignature({

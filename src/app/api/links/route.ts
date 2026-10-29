@@ -108,7 +108,7 @@ export async function POST(request: NextRequest) {
       verification.payload
     );
 
-    const { record, manageToken } = storeSignedLinkRecord({
+    const { record } = storeSignedLinkRecord({
       payload: verification.payload,
       encodedPayload: canonicalEncoded,
       signature: signature as `0x${string}`,
@@ -132,7 +132,6 @@ export async function POST(request: NextRequest) {
         c: canonicalEncoded,
         sig: record.signature,
         url,
-        manageToken,
         payload: record.payload,
       },
       { status: 201 }

@@ -2,6 +2,7 @@ export * from './canonical';
 export * from './eip712';
 export * from './store';
 export * from './verify';
+export * from './read-activity';
 
 import type { FirewallPolicyConfig, LinkTrustLevel } from '@/types/veilpay';
 import { getVerifiedLinkPolicy } from '@/lib/security/attestation';
@@ -120,5 +121,9 @@ export async function resolveVerifiedLinkAuthority(params: {
     handle: verifiedPolicyRec.linkId,
     vaultAddress: verifiedPolicyRec.vaultAddress ?? '',
     policy: verifiedPolicyRec.policy,
+    signer:
+      (verifiedPolicyRec.signer as `0x${string}`) ||
+      (verifiedPolicyRec.vaultAddress as `0x${string}`) ||
+      undefined,
   };
 }

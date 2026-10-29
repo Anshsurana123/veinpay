@@ -5,6 +5,7 @@ import { AUTHORITATIVE_DEFAULT_POLICY } from '@/lib/graph/full-scan';
 export interface ScanAttestationPayload {
   payer: string;
   linkId: string;
+  linkSigner: string;
   verdict: VerdictStatus;
   socketUnlocked: boolean;
   proofOfControl: boolean;
@@ -53,6 +54,7 @@ export function isVerdictAllowedForQuote(
 export function signScanAttestation(params: {
   payer: string;
   linkId: string;
+  linkSigner?: string;
   verdict: VerdictStatus;
   socketUnlocked: boolean;
   proofOfControl: boolean;
@@ -65,6 +67,7 @@ export function signScanAttestation(params: {
   const payload: ScanAttestationPayload = {
     payer: params.payer.trim().toLowerCase(),
     linkId: params.linkId.trim() || 'default',
+    linkSigner: (params.linkSigner ?? '').trim().toLowerCase(),
     verdict: params.verdict,
     socketUnlocked: Boolean(params.socketUnlocked),
     proofOfControl: Boolean(params.proofOfControl),
@@ -77,6 +80,7 @@ export function signScanAttestation(params: {
     expiresAt: payload.expiresAt,
     issuedAt: payload.issuedAt,
     linkId: payload.linkId,
+    linkSigner: payload.linkSigner,
     payer: payload.payer,
     policyHash: payload.policyHash,
     proofOfControl: payload.proofOfControl,
@@ -97,6 +101,7 @@ export function verifyScanAttestation(
   expected: {
     payer: string;
     linkId?: string;
+    linkSigner?: string;
     policy?: FirewallPolicyConfig;
     requireProofOfControl?: boolean;
     nowMs?: number;
@@ -162,6 +167,15 @@ export function verifyScanAttestation(
       };
     }
 
+    if (expected.linkSigner && parsed.linkSigner) {
+      if (parsed.linkSigner.toLowerCase() !== expected.linkSigner.trim().toLowerCase()) {
+        return {
+          valid: false,
+          reason: `Scan attestation linkSigner (${parsed.linkSigner}) does not match verified link signer (${expected.linkSigner}).`,
+        };
+      }
+    }
+
     if (expected.policy) {
       const expectedHash = computeCanonicalPolicyHash(expected.policy);
       if (parsed.policyHash !== expectedHash) {
@@ -201,6 +215,7 @@ export interface VerifiedLinkPolicyRecord {
   linkId: string;
   policy: FirewallPolicyConfig;
   vaultAddress?: string;
+  signer?: string;
 }
 
 const verifiedLinkPolicyStore = new Map<string, VerifiedLinkPolicyRecord>();

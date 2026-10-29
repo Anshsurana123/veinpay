@@ -90,7 +90,7 @@ export async function GET(request: NextRequest) {
 
   // Load policy and destination vault ONLY from the verified link authority (never from client query string)
   const authority = await resolveVerifiedLinkAuthority({ linkId, c, sig });
-  if (!authority.ok || !authority.vaultAddress) {
+  if (!authority.ok || !authority.vaultAddress || !authority.signer) {
     return NextResponse.json(
       {
         success: false,
@@ -134,6 +134,7 @@ export async function GET(request: NextRequest) {
   const attestationCheck = verifyScanAttestation(scanAttestation, {
     payer: userAddress,
     linkId: authority.linkId,
+    linkSigner: authority.signer,
     policy: authority.policy,
     requireProofOfControl: true,
   });

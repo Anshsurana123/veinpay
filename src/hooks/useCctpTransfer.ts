@@ -43,6 +43,27 @@ export function useCctpTransfer({ linkId, receiverVaultAddress }: UseCctpTransfe
       const saved = saveCctpTransferRecord(next);
       setActiveTransfer(saved);
       refreshSavedTransfers();
+
+      // Persist CCTP transfer state transition in server events store
+      fetch('/api/events', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'record_cctp_state',
+          linkId: next.linkId ?? 'cctp-transfer',
+          cctpState: next.status,
+          burnTxHash: next.burnTxHash,
+          mintTxHash: next.mintTxHash,
+          amount: next.route?.netAmountOutFormatted ?? next.route?.amountInFormatted ?? '0.00',
+          asset: 'USDC',
+          sourceChainId: next.sourceChainId,
+          destinationChainId: next.destinationChainId,
+          payerAddress: next.payerAddress,
+          receiverVault: next.receiverVaultAddress,
+          errorMessage: next.failureReason,
+        }),
+      }).catch(() => {});
+
       return saved;
     },
     [refreshSavedTransfers]

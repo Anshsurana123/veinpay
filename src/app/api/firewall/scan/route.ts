@@ -93,6 +93,7 @@ async function handleScan(params: {
   const scanAttestation = signScanAttestation({
     payer: scan.targetWallet,
     linkId: authority.linkId,
+    linkSigner: authority.signer || '',
     verdict: scan.verdict,
     socketUnlocked: scan.socketUnlocked,
     proofOfControl,

@@ -92,6 +92,34 @@ describe('Shared runFullScan() & Server Scan Attestation Gate (Issue 3)', () => 
     });
     expect(checkExpired.valid).toBe(false);
     expect(checkExpired.reason).toContain('expired');
+
+    // Attestation binds linkSigner; wrong linkSigner is rejected
+    const signerAttestation = signScanAttestation({
+      payer: CLEAN_WALLET,
+      linkId: 'ansh-audit',
+      linkSigner: SAMPLE_VAULT,
+      verdict: 'VERIFIED_CLEAN',
+      socketUnlocked: true,
+      proofOfControl: true,
+      policy: AUTHORITATIVE_DEFAULT_POLICY,
+    });
+
+    const checkCorrectSigner = verifyScanAttestation(signerAttestation, {
+      payer: CLEAN_WALLET,
+      linkId: 'ansh-audit',
+      linkSigner: SAMPLE_VAULT,
+      policy: AUTHORITATIVE_DEFAULT_POLICY,
+    });
+    expect(checkCorrectSigner.valid).toBe(true);
+
+    const checkMismatchedSigner = verifyScanAttestation(signerAttestation, {
+      payer: CLEAN_WALLET,
+      linkId: 'ansh-audit',
+      linkSigner: '0x0000000000000000000000000000000000000001',
+      policy: AUTHORITATIVE_DEFAULT_POLICY,
+    });
+    expect(checkMismatchedSigner.valid).toBe(false);
+    expect(checkMismatchedSigner.reason).toContain('linkSigner');
   });
 
   it('Ignores client-supplied firewallEnabled=false / maxHops=1 on /api/socket/quote and enforces verified link policy + attestation', async () => {
@@ -162,5 +190,16 @@ describe('Shared runFullScan() & Server Scan Attestation Gate (Issue 3)', () => 
     const quoteBody = await cleanRes.json();
     expect(quoteBody.success).toBe(true);
     expect(quoteBody.source).toBe('SAME_CHAIN_DIRECT');
+  });
+
+  it('Refuses to run /api/socket/quote if payment link verification fails', async () => {
+    // Malformed/invalid ?c=&sig= causes quote route to refuse execution with 403
+    const badLinkReq = new NextRequest(
+      `http://localhost:3000/api/socket/quote?originChainId=8453&destinationChainId=8453&inputToken=USDC&outputToken=USDC&inputAmount=10000000&userAddress=${CLEAN_WALLET}&linkId=bad-link&c=invalid_payload&sig=0x1234567890`
+    );
+    const badLinkRes = await getSocketQuote(badLinkReq);
+    expect(badLinkRes.status).toBe(403);
+    const errBody = await badLinkRes.json();
+    expect(errBody.error).toBe('MALFORMED_LINK_PAYLOAD');
   });
 });

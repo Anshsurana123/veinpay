@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyProofOfControlSignature } from '@/lib/session/proof-of-control';
+import { resolveVerifiedLinkAuthority } from '@/lib/links';
 
 export async function POST(request: NextRequest) {
   try {
     const body = (await request.json()) as {
       nonce?: string;
       linkId?: string;
+      vaultAddress?: string;
+      c?: string;
+      sig?: string;
       scannedAddress?: string;
       chainId?: number;
       expiresAt?: string;
@@ -13,11 +17,24 @@ export async function POST(request: NextRequest) {
     };
 
     const nonce = (body.nonce ?? '').trim();
-    const linkId = (body.linkId ?? 'default').trim();
+    let linkId = (body.linkId ?? 'default').trim();
+    let vaultAddress = (body.vaultAddress ?? '').trim();
     const scannedAddress = (body.scannedAddress ?? '').trim();
     const chainId = Number(body.chainId ?? 0);
     const expiresAt = (body.expiresAt ?? '').trim();
     const signature = (body.signature ?? '').trim();
+
+    if (body.c || body.sig || linkId !== 'default') {
+      const authority = await resolveVerifiedLinkAuthority({
+        linkId,
+        c: body.c,
+        sig: body.sig,
+      });
+      if (authority.ok && authority.vaultAddress) {
+        linkId = authority.linkId;
+        vaultAddress = authority.vaultAddress;
+      }
+    }
 
     if (
       !nonce ||
@@ -40,6 +57,7 @@ export async function POST(request: NextRequest) {
     const verification = await verifyProofOfControlSignature({
       nonce,
       linkId,
+      vaultAddress,
       scannedAddress,
       chainId,
       expiresAt,

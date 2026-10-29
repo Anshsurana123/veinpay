@@ -46,7 +46,6 @@ export interface ActiveSignedLinkState {
   sig: `0x${string}`;
   trustLevel: LinkTrustLevel;
   url?: string;
-  manageToken?: string;
 }
 
 export type ActivePersonaId =
@@ -801,9 +800,6 @@ export const useVeilPayStore = create<VeilPayStoreState>((set, get) => ({
       : '/api/events';
     try {
       const headers: Record<string, string> = {};
-      if (state.activeSignedLink?.manageToken) {
-        headers['x-manage-token'] = state.activeSignedLink.manageToken;
-      }
       const res = await fetch(url, { headers });
       if (res.ok) {
         const data = await res.json();
