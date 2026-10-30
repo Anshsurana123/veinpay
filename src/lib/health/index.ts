@@ -87,7 +87,7 @@ export async function checkIntegrationsHealth(
       let pingUrl: string;
       try {
         const u = new URL(normalizedHost);
-        if (!u.port) {
+        if (!u.port && (u.hostname === 'localhost' || u.hostname === '127.0.0.1')) {
           u.port = '14240';
         }
         u.pathname = '/restpp/echo';
