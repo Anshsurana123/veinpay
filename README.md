@@ -61,11 +61,15 @@ VeilPay puts a **sub-50ms TigerGraph Pre-Sign Firewall** and **AIGI Forensic Com
                 └── Mode 3: Monero Subaddress (RingCT 888... via monero: QR/URI)
 ```
 
-### Pillar 1: TigerGraph 3-in-1 Pre-Sign Graph Firewall
-Implemented both as a production GSQL query ([`/tigergraph/veilpay_firewall.gsql`](./tigergraph/veilpay_firewall.gsql)) and a cycle-safe, in-process TypeScript graph engine ([`src/lib/graph/engine.ts`](./src/lib/graph/engine.ts)) using GSQL-equivalent accumulators (`OrAccum`, `MinAccum`, `SumAccum`, `SetAccum`):
-- **`CleanLink` (Upstream Taint Traversal):** Walks `1` to `5` hops backward along inbound funding edges to detect drainer contracts (`PinkDrainer`, `Inferno Drainer`), protocol exploits (`Bybit Lazarus`), and OFAC-sanctioned mixers (`Tornado Cash Router`).
-- **`Unbundle` (Sybil & Wash-Ring Collapse):** Detects when seemingly independent wallets trace back to a single shared root funder (e.g., a 24-wallet Sybil distributor) or trade in a cyclic wash loop (`Mule_A -> Mule_B -> Mule_C -> Mule_A`).
-- **`PoisonGraph` (Vanity Address-Poisoning Guard):** Compares all 42 characters of an outbound recipient address against known safe contacts, flagging identical prefix/suffix lookalikes (`0x71C9...89A2`) and high-out-degree dust factories (`out_degree >= 500`).
+### Pillar 1: TigerGraph 3-in-1 Pre-Sign Graph Firewall (Two-Sided Protection)
+Implemented both as a production GSQL query ([`/tigergraph/veilpay_firewall.gsql`](./tigergraph/veilpay_firewall.gsql)) and a cycle-safe, in-process TypeScript graph engine ([`src/lib/graph/engine.ts`](./src/lib/graph/engine.ts)) using GSQL-equivalent accumulators (`OrAccum`, `MinAccum`, `SumAccum`, `SetAccum`).
+
+VeilPay operates as a **two-sided pre-sign firewall**:
+1. **Inbound Guard (Payer Screening — protects Merchant):**
+   - **`CleanLink` (Upstream Taint Traversal):** Walks `1` to `5` hops backward along the **payer's** inbound funding edges to detect drainer contracts (`PinkDrainer`, `Inferno Drainer`), protocol exploits (`Bybit Lazarus`), and OFAC-sanctioned mixers (`Tornado Cash Router`).
+   - **`Unbundle` (Sybil & Wash-Ring Collapse):** Detects when the **payer's** wallet traces back to a shared root funder (e.g., a 24-wallet Sybil distributor) or trades in a cyclic wash loop (`Mule_A -> Mule_B -> Mule_C -> Mule_A`).
+2. **Outbound Guard (Receiver Screening — protects Payer):**
+   - **`PoisonGraph` (Safe Send & Address-Poisoning Defense):** Compares all 42 characters of a candidate **receiver address** against actual counterparty history derived from the graph, flagging lookalike prefix/suffix clones (`0x71C9...89A2`) and high-out-degree automated dust factories (`out_degree >= 50`).
 
 ### Pillar 2: AIGI Forensic Agent & Compliance Receipt
 - Consumes the raw subgraph telemetry (`hop_distance`, `taint_hits`, `sybil_cluster_size`, `evidence_edges`) and produces a **100% deterministic Forensic Security Verdict** (`VERIFIED_CLEAN`, `INTERCEPTED_TAINT`, `INTERCEPTED_SYBIL`, `WARNING_SYBIL`, `INTERCEPTED_POISONING`, or `ADVISORY_BYPASSED`).

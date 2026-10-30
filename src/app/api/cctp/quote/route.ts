@@ -23,6 +23,8 @@ import {
   validateWithZod,
 } from '@/lib/validation/schemas';
 
+export const maxDuration = 30;
+
 export async function GET(request: NextRequest) {
   const ip = getClientIp(request);
   const rateLimit = await checkRateLimit('cctp-quote', ip, {
@@ -105,6 +107,24 @@ export async function GET(request: NextRequest) {
   }
 
   const receiverAddress = authority.vaultAddress;
+
+  // Enforce invoice amount if link is NOT openAmount (P1-8)
+  if (authority.amount && !authority.openAmount) {
+    const rawInvoice = parseFloat(authority.amount);
+    const invoiceHuman = rawInvoice >= 100_000 ? rawInvoice / 1e6 : rawInvoice;
+    const inputHuman = parseFloat(inputAmount) / 1e6;
+    if (!isNaN(invoiceHuman) && !isNaN(inputHuman) && inputHuman < invoiceHuman) {
+      return NextResponse.json(
+        {
+          success: false,
+          statusCode: 400,
+          error: 'AMOUNT_BELOW_INVOICE',
+          message: `Requested quote amount (${inputHuman} ${authority.asset || 'USDC'}) is below the required invoice amount (${invoiceHuman} ${authority.asset || 'USDC'}).`,
+        },
+        { status: 400 }
+      );
+    }
+  }
 
   const baseParams: SocketQuoteRequestParams = {
     originChainId,

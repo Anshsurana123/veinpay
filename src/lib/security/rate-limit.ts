@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getStorage } from '@/lib/storage';
 
 export interface RateLimitResult {
   allowed: boolean;
@@ -24,36 +25,48 @@ export function clearRateLimitsForTesting(): void {
 }
 
 export function getClientIp(request: Request | NextRequest): string {
-  // 1. Direct NextRequest.ip (provided reliably by Next.js / Vercel Edge Runtime)
-  if ('ip' in request && typeof (request as { ip?: string }).ip === 'string') {
-    const directIp = (request as { ip?: string }).ip?.trim();
-    if (directIp) return directIp;
+  // 1. Explicitly trusted header via TRUSTED_IP_HEADER env var
+  const trustedHeader = process.env.TRUSTED_IP_HEADER?.trim().toLowerCase();
+  if (trustedHeader) {
+    const val = request.headers.get(trustedHeader);
+    if (val?.trim()) {
+      const parts = val.split(',').map((s) => s.trim()).filter(Boolean);
+      return parts[0] || '127.0.0.1';
+    }
   }
 
-  // 2. Vercel Edge Forwarded IP
+  // 2. Platform-set trusted headers (cannot be forged by clients behind edge proxies)
+  const cfIp = request.headers.get('cf-connecting-ip');
+  if (cfIp?.trim()) return cfIp.trim();
+
   const vercelIp = request.headers.get('x-vercel-forwarded-for');
   if (vercelIp?.trim()) {
     const first = vercelIp.split(',')[0].trim();
     if (first) return first;
   }
 
-  // 3. Cloudflare Connecting IP
-  const cfIp = request.headers.get('cf-connecting-ip');
-  if (cfIp?.trim()) return cfIp.trim();
-
-  // 4. True-Client-IP (Cloudflare Enterprise / Akamai)
   const trueClientIp = request.headers.get('true-client-ip');
   if (trueClientIp?.trim()) return trueClientIp.trim();
 
-  // 5. Standard X-Real-IP
   const realIp = request.headers.get('x-real-ip');
   if (realIp?.trim()) return realIp.trim();
 
-  // 6. X-Forwarded-For (take the client-most address)
+  // 3. Direct NextRequest.ip (provided by Next.js / Edge Runtime)
+  if ('ip' in request && typeof (request as { ip?: string }).ip === 'string') {
+    const directIp = (request as { ip?: string }).ip?.trim();
+    if (directIp) return directIp;
+  }
+
+  // 4. X-Forwarded-For
   const forwarded = request.headers.get('x-forwarded-for');
   if (forwarded) {
-    const first = forwarded.split(',')[0].trim();
-    if (first) return first;
+    const hops = forwarded.split(',').map((s) => s.trim()).filter(Boolean);
+    if (process.env.TRUSTED_PROXY_HOPS) {
+      const proxyHops = Math.max(1, parseInt(process.env.TRUSTED_PROXY_HOPS, 10));
+      const targetIdx = Math.max(0, hops.length - proxyHops);
+      return hops[targetIdx] || hops[0] || '127.0.0.1';
+    }
+    return hops[0] || '127.0.0.1';
   }
 
   return '127.0.0.1';
@@ -71,34 +84,25 @@ export async function checkRateLimit(
   const restUrl = process.env.UPSTASH_REDIS_REST_URL?.replace(/\/+$/, '');
   const restToken = process.env.UPSTASH_REDIS_REST_TOKEN;
 
+  // Use Upstash Redis pipeline for atomic INCR + EXPIRE if configured
   if (restUrl && restToken) {
     try {
-      const res = await fetch(restUrl, {
+      const pipelineRes = await fetch(`${restUrl}/pipeline`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${restToken}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(['INCR', cacheKey]),
+        body: JSON.stringify([
+          ['INCR', cacheKey],
+          ['EXPIRE', cacheKey, windowSeconds],
+        ]),
         signal: AbortSignal.timeout(2000),
       });
 
-      if (res.ok) {
-        const data = (await res.json()) as { result: number };
-        const currentCount = Number(data.result);
-
-        if (currentCount === 1) {
-          // Set TTL on first hit in window
-          void fetch(restUrl, {
-            method: 'POST',
-            headers: {
-              Authorization: `Bearer ${restToken}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(['EXPIRE', cacheKey, windowSeconds]),
-            signal: AbortSignal.timeout(1500),
-          }).catch(() => {});
-        }
+      if (pipelineRes.ok) {
+        const data = (await pipelineRes.json()) as Array<{ result: number }>;
+        const currentCount = Number(data[0]?.result ?? 1);
 
         if (currentCount > limit) {
           return {
@@ -117,7 +121,7 @@ export async function checkRateLimit(
         };
       }
     } catch {
-      // Fallback to in-memory store if Redis REST fails or times out
+      // Fallback to in-memory store if Redis REST times out
     }
   }
 

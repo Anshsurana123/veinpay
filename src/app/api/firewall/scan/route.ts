@@ -5,6 +5,7 @@ import { resolveVerifiedLinkAuthority } from '@/lib/links';
 import { verifyProofOfControlToken } from '@/lib/session/proof-of-control';
 import { signScanAttestation } from '@/lib/security/attestation';
 import { getEventStore } from '@/lib/events/store';
+import { createScanJob, updateScanJob } from '@/lib/storage/jobs';
 import {
   buildRateLimitExceededResponse,
   checkRateLimit,
@@ -15,6 +16,8 @@ import {
   scanQuerySchema,
   validateWithZod,
 } from '@/lib/validation/schemas';
+
+export const maxDuration = 30;
 
 async function handleScan(params: {
   targetWallet: string;
@@ -183,6 +186,52 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  const isAsync = sp.get('async') === 'true' || sp.get('mode') === 'async';
+  if (isAsync) {
+    const jobId = `scan_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+    await createScanJob(jobId);
+
+    // Kick off execution in background
+    (async () => {
+      try {
+        await updateScanJob(jobId, { status: 'RUNNING' });
+        const scanRes = await handleScan({
+          targetWallet,
+          chainId,
+          linkId,
+          c,
+          sig,
+          includeGemini,
+          proofOfControlToken,
+          simulated,
+        });
+        const json = await scanRes.json();
+        if (scanRes.ok) {
+          await updateScanJob(jobId, { status: 'COMPLETED', result: json });
+        } else {
+          await updateScanJob(jobId, {
+            status: 'FAILED',
+            error: json.error || 'Scan failed',
+          });
+        }
+      } catch (err) {
+        await updateScanJob(jobId, {
+          status: 'FAILED',
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    })();
+
+    return NextResponse.json(
+      {
+        jobId,
+        status: 'PENDING',
+        statusUrl: `/api/firewall/scan/jobs/${jobId}`,
+      },
+      { status: 202 }
+    );
+  }
+
   return handleScan({
     targetWallet,
     chainId,
@@ -235,6 +284,58 @@ export async function POST(request: NextRequest) {
           'Gemini narration rate limit exceeded (maximum 5 requests per minute).'
         );
       }
+    }
+
+    const isAsync =
+      rawBody.mode === 'async' ||
+      rawBody.async === 'true' ||
+      rawBody.async === true ||
+      request.nextUrl.searchParams.get('async') === 'true' ||
+      request.nextUrl.searchParams.get('mode') === 'async';
+
+    if (isAsync) {
+      const jobId = `scan_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+      await createScanJob(jobId);
+
+      (async () => {
+        try {
+          await updateScanJob(jobId, { status: 'RUNNING' });
+          const scanRes = await handleScan({
+            targetWallet,
+            chainId,
+            linkId,
+            c,
+            sig,
+            crawlSettings,
+            includeGemini,
+            proofOfControlToken,
+            simulated,
+          });
+          const json = await scanRes.json();
+          if (scanRes.ok) {
+            await updateScanJob(jobId, { status: 'COMPLETED', result: json });
+          } else {
+            await updateScanJob(jobId, {
+              status: 'FAILED',
+              error: json.error || 'Scan failed',
+            });
+          }
+        } catch (err) {
+          await updateScanJob(jobId, {
+            status: 'FAILED',
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
+      })();
+
+      return NextResponse.json(
+        {
+          jobId,
+          status: 'PENDING',
+          statusUrl: `/api/firewall/scan/jobs/${jobId}`,
+        },
+        { status: 202 }
+      );
     }
 
     // Any client-supplied policy or merchantWallet/vault in the request body is ignored;

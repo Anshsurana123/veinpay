@@ -560,6 +560,16 @@ export async function fetchSocketCrossChainQuote(
       );
 
     const normalizedRoutes: NormalizedSocketRoute[] = rawRoutes.map((r, idx) => {
+      // Validate calldata recipient does not divert from authoritative verified receiver vault
+      if (r.txData?.object?.data && r.txData.object.data.startsWith('0xa9059cbb') && r.txData.object.data.length >= 74) {
+        const calldataRecipient = '0x' + r.txData.object.data.slice(34, 74).toLowerCase();
+        if (calldataRecipient !== params.receiverAddress.toLowerCase()) {
+          throw new Error(
+            `Security Intercept: Socket router calldata recipient (${calldataRecipient}) diverged from verified vault (${params.receiverAddress}).`
+          );
+        }
+      }
+
       const outDecimals = r.output?.token?.decimals ?? outMeta.decimals;
       const outSymbol = r.output?.token?.symbol ?? outMeta.symbol;
       const toAmountStr = r.output?.amount ?? params.inputAmount;

@@ -14,6 +14,8 @@ import {
   validateWithZod,
 } from '@/lib/validation/schemas';
 
+export const maxDuration = 30;
+
 function isUsdtInput(tokenStr: string): boolean {
   const t = tokenStr.trim().toUpperCase();
   if (t === 'USDT') return true;
@@ -60,6 +62,24 @@ async function executeGatedQuoteRequest(params: {
 
   const authoritativePolicy = authority.policy;
   const authoritativeReceiver = authority.vaultAddress;
+
+  // Enforce invoice amount if link is NOT openAmount (P1-8)
+  if (authority.amount && !authority.openAmount) {
+    const rawInvoice = parseFloat(authority.amount);
+    const invoiceHuman = rawInvoice >= 100_000 ? rawInvoice / 1e6 : rawInvoice;
+    const inputHuman = parseFloat(params.inputAmount) / 1e6;
+    if (!isNaN(invoiceHuman) && !isNaN(inputHuman) && inputHuman < invoiceHuman) {
+      return NextResponse.json(
+        {
+          success: false,
+          statusCode: 400,
+          error: 'AMOUNT_BELOW_INVOICE',
+          message: `Requested quote amount (${inputHuman} ${authority.asset || 'USDC'}) is below the required invoice amount (${invoiceHuman} ${authority.asset || 'USDC'}).`,
+        },
+        { status: 400 }
+      );
+    }
+  }
 
   // Enforce authoritative destinationChainId from verified payment link
   const authoritativeDestinationChainId =
