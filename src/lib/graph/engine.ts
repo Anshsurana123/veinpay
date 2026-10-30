@@ -59,7 +59,7 @@ export function buildGsqlQuerySnippet(
   maxHops: HopDepth,
   sybilThreshold: number
 ): string {
-  return `// Executed on TigerGraph Graph: VeilPayGraph (SYNTAX v2)
+  return `// Executed on TigerGraph Graph: VeilPayGraph (SYNTAX v1)
 INTERPRET QUERY veilpay_firewall_check(
   target_wallet    = "${targetWallet}",
   merchant_wallet  = "${merchantWallet}",

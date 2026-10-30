@@ -116,7 +116,7 @@ CREATE OR REPLACE DISTRIBUTED QUERY veilpay_firewall_check(
   BOOL clean_link_enabled = true,
   BOOL unbundle_enabled = true,
   BOOL firewall_enabled = true
-) FOR GRAPH VeilPayGraph SYNTAX v2 {
+) FOR GRAPH VeilPayGraph SYNTAX v1 {
 
   // --- Vertex-Attached & Global Accumulators ---
   OrAccum  @visited = false;
@@ -277,7 +277,7 @@ CREATE OR REPLACE DISTRIBUTED QUERY veilpay_firewall_check(
 
 CREATE OR REPLACE DISTRIBUTED QUERY veilpay_trusted_contacts(
   VERTEX target_wallet
-) FOR GRAPH VeilPayGraph SYNTAX v2 {
+) FOR GRAPH VeilPayGraph SYNTAX v1 {
   SumAccum<INT> @tx_count = 0;
   SumAccum<DOUBLE> @total_volume_usd = 0.0;
   OrAccum @is_trusted = false;
@@ -313,7 +313,7 @@ CREATE OR REPLACE DISTRIBUTED QUERY veilpay_poison_check(
   VERTEX target_wallet,
   VERTEX candidate_wallet,
   DOUBLE similarity_threshold = 0.8
-) FOR GRAPH VeilPayGraph SYNTAX v2 {
+) FOR GRAPH VeilPayGraph SYNTAX v1 {
   OrAccum @@lookalike_found = false;
   STRING lookalike_contact = "";
   INT dust_sent_count = 0;
@@ -341,7 +341,7 @@ CREATE OR REPLACE DISTRIBUTED QUERY veilpay_neighbors(
   VERTEX target_wallet,
   INT hops = 1,
   INT result_limit = 50
-) FOR GRAPH VeilPayGraph SYNTAX v2 {
+) FOR GRAPH VeilPayGraph SYNTAX v1 {
   SetAccum<EDGE> @@subgraph_edges;
   SetAccum<VERTEX> @@subgraph_vertices;
 
