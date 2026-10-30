@@ -9,6 +9,11 @@
 //   3. PoisonGraph: Outbound Zero/Micro-Value Dust-Factory Out-Degree & Lookalike Detection
 // ============================================================================
 
+// Note for TigerGraph execution:
+// 1. To reset an existing schema if recreating from scratch, run: DROP ALL
+// 2. Top-level GSQL DDL commands (CREATE VERTEX, CREATE GRAPH, USE GRAPH) do not
+//    use trailing semicolons in TigerGraph batch scripts.
+
 // ----------------------------------------------------------------------------
 // 1. VERTEX & DIRECTED EDGE SCHEMA DEFINITIONS
 // ----------------------------------------------------------------------------
@@ -20,7 +25,7 @@ CREATE VERTEX Wallet (
   chain_id INT,
   is_flagged_threat BOOL,
   first_seen DATETIME
-) WITH STATS="OUTDEGREE_BY_EDGETYPE", PRIMARY_ID_AS_ATTRIBUTE="true";
+) WITH primary_id_as_attribute="true"
 
 CREATE VERTEX Merchant (
   PRIMARY_ID address STRING,
@@ -28,7 +33,7 @@ CREATE VERTEX Merchant (
   vault_type STRING,
   default_chain_id INT,
   created_at DATETIME
-) WITH STATS="OUTDEGREE_BY_EDGETYPE", PRIMARY_ID_AS_ATTRIBUTE="true";
+) WITH primary_id_as_attribute="true"
 
 CREATE VERTEX ThreatEntity (
   PRIMARY_ID address STRING,
@@ -37,41 +42,65 @@ CREATE VERTEX ThreatEntity (
   threat_source STRING,
   severity_score INT,
   reported_at DATETIME
-) WITH STATS="OUTDEGREE_BY_EDGETYPE", PRIMARY_ID_AS_ATTRIBUTE="true";
+) WITH primary_id_as_attribute="true"
+
+CREATE VERTEX Address (
+  PRIMARY_ID address STRING,
+  label STRING,
+  risk_category STRING,
+  is_flagged_threat BOOL,
+  is_hub BOOL,
+  is_contract BOOL,
+  inbound_complete BOOL
+) WITH primary_id_as_attribute="true"
 
 CREATE DIRECTED EDGE TRANSFERRED_TO (
-  FROM Wallet | ThreatEntity | Merchant,
-  TO Wallet | Merchant | ThreatEntity,
+  FROM Wallet | ThreatEntity | Merchant | Address,
+  TO Wallet | Merchant | ThreatEntity | Address,
   amount DOUBLE,
   amount_usd DOUBLE,
   token STRING,
   tx_hash STRING,
   block_number INT,
   tx_timestamp DATETIME
-) WITH REVERSE_EDGE="REVERSE_TRANSFERRED_TO";
+) WITH REVERSE_EDGE="REVERSE_TRANSFERRED_TO"
 
 CREATE DIRECTED EDGE DUSTED (
-  FROM Wallet | ThreatEntity,
-  TO Wallet | Merchant,
+  FROM Wallet | ThreatEntity | Address,
+  TO Wallet | Merchant | Address,
   amount DOUBLE,
   amount_usd DOUBLE,
   token STRING,
   tx_hash STRING,
   block_number INT,
   tx_timestamp DATETIME
-) WITH REVERSE_EDGE="REVERSE_DUSTED";
+) WITH REVERSE_EDGE="REVERSE_DUSTED"
+
+CREATE DIRECTED EDGE FUNDED (
+  FROM Wallet | ThreatEntity | Merchant | Address,
+  TO Wallet | Merchant | ThreatEntity | Address,
+  amount DOUBLE,
+  amount_usd DOUBLE,
+  token STRING,
+  block_number INT,
+  tx_timestamp DATETIME,
+  is_taint_path BOOL
+) WITH REVERSE_EDGE="REVERSE_FUNDED"
 
 CREATE GRAPH VeilPayGraph (
   Wallet,
   Merchant,
   ThreatEntity,
+  Address,
   TRANSFERRED_TO,
   REVERSE_TRANSFERRED_TO,
   DUSTED,
-  REVERSE_DUSTED
-);
+  REVERSE_DUSTED,
+  FUNDED,
+  REVERSE_FUNDED
+)
 
-USE GRAPH VeilPayGraph;
+USE GRAPH VeilPayGraph
 
 // ----------------------------------------------------------------------------
 // 2. 3-IN-1 PRE-SIGN GRAPH FIREWALL QUERY: veilpay_firewall_check
@@ -130,7 +159,7 @@ CREATE OR REPLACE DISTRIBUTED QUERY veilpay_firewall_check(
     current_hop = current_hop + 1;
 
     NextFrontier = SELECT u
-                   FROM Frontier:v -(REVERSE_TRANSFERRED_TO:e)- (Wallet|ThreatEntity|Merchant):u
+                   FROM Frontier:v -(REVERSE_TRANSFERRED_TO|REVERSE_FUNDED:e)- (Wallet|ThreatEntity|Merchant|Address):u
                    ACCUM
                      @@edges_traversed += 1,
                      u.@funded_children += v,
@@ -141,7 +170,7 @@ CREATE OR REPLACE DISTRIBUTED QUERY veilpay_firewall_check(
                        @@evidence_edges += e
                      END,
                      // CleanLink Threat Detection (Drainers, Sanctions, Exploits)
-                     IF u.type == "ThreatEntity" OR (u.type == "Wallet" AND u.is_flagged_threat == true) THEN
+                     IF u.type == "ThreatEntity" OR (u.type == "Wallet" AND u.is_flagged_threat == true) OR (u.type == "Address" AND u.is_flagged_threat == true) THEN
                        u.@is_tainted += true,
                        @@taint_hits += 1,
                        @@min_taint_hop += current_hop,
@@ -166,9 +195,10 @@ CREATE OR REPLACE DISTRIBUTED QUERY veilpay_firewall_check(
 
   // Check for return edges forming wash cycles (Ancestor -> Target or Descendant)
   Ancestors = {@@visited_vertices};
+  TargetSet = {target_wallet};
   CycleCheck = SELECT s
-               FROM Ancestors:s -(TRANSFERRED_TO:e)- Frontier:t
-               WHERE s != t AND t == target_wallet
+               FROM Ancestors:s -(TRANSFERRED_TO|FUNDED:e)- TargetSet:t
+               WHERE s != t
                ACCUM
                  @@cyclic_loop_detected += true,
                  @@evidence_edges += e;
@@ -177,31 +207,30 @@ CREATE OR REPLACE DISTRIBUTED QUERY veilpay_firewall_check(
   // MODULE 2: Unbundle Shared Root-Funder & Sybil Fan-Out Collapse (Case 3)
   // ==========================================================================
   SybilRoots = SELECT r
-               FROM Ancestors:r -(TRANSFERRED_TO:e)- Wallet:child
+               FROM Ancestors:r -(TRANSFERRED_TO|FUNDED:e)- (Wallet|Address):child
                WHERE r != target_wallet
                  AND (r.type != "Wallet" OR r.risk_tag != "CLEAN_INSTITUTIONAL")
+                 AND (r.type != "Address" OR r.risk_category != "CLEAN_INSTITUTIONAL")
                ACCUM
                  r.@funded_children += child
                POST-ACCUM (r)
                  IF r.@funded_children.size() >= 3 THEN
                    @@sybil_cluster_size += (r.@funded_children.size() - 1),
-                   @@sybil_root_funders += to_string(r.address)
+                   @@sybil_root_funders += r.address
                  END;
 
   // ==========================================================================
   // MODULE 3: PoisonGraph Outbound Dust-Factory & Merchant History (Case 4)
   // ==========================================================================
-  TargetSet = {target_wallet};
-
   DustCheck = SELECT s
-              FROM TargetSet:s -(DUSTED:e)- (Wallet|Merchant):victim
+              FROM TargetSet:s -(DUSTED:e)- (Wallet|Merchant|Address):victim
               WHERE e.amount_usd <= 0.01
               ACCUM
                 @@dust_out_degree += 1,
                 @@evidence_edges += e;
 
   MerchantHistory = SELECT m
-                    FROM {merchant_wallet}:m -(TRANSFERRED_TO:e)- TargetSet:t
+                    FROM {merchant_wallet}:m -(TRANSFERRED_TO|FUNDED:e)- TargetSet:t
                     WHERE e.amount_usd > 0.01
                     ACCUM
                       @@prior_merchant_transfers += 1;
@@ -254,7 +283,7 @@ CREATE OR REPLACE DISTRIBUTED QUERY veilpay_trusted_contacts(
 
   // Check counterparties with >= 2 successful non-dust transfers
   Counterparties = SELECT c
-                   FROM Target:t -(TRANSFERRED_TO:e)- (Wallet|Merchant):c
+                   FROM Target:t -(TRANSFERRED_TO|FUNDED:e)- (Wallet|Merchant|Address):c
                    WHERE e.amount_usd > 0.01
                    ACCUM
                      c.@tx_count += 1,
@@ -291,7 +320,7 @@ CREATE OR REPLACE DISTRIBUTED QUERY veilpay_poison_check(
 
   // Inspect target counterparties and candidate dust history
   DustEdges = SELECT c
-              FROM Candidate:c -(DUSTED:e)- (Wallet|Merchant):victim
+              FROM Candidate:c -(DUSTED:e)- (Wallet|Merchant|Address):victim
               WHERE e.amount_usd <= 0.01;
 
   dust_sent_count = DustEdges.size();
@@ -320,7 +349,7 @@ CREATE OR REPLACE DISTRIBUTED QUERY veilpay_neighbors(
   WHILE (CurrentFrontier.size() > 0 AND step < hops) DO
     step = step + 1;
     NextFrontier = SELECT u
-                   FROM CurrentFrontier:v -(TRANSFERRED_TO|REVERSE_TRANSFERRED_TO|DUSTED:e)- (Wallet|ThreatEntity|Merchant):u
+                   FROM CurrentFrontier:v -(TRANSFERRED_TO|REVERSE_TRANSFERRED_TO|DUSTED|FUNDED|REVERSE_FUNDED:e)- (Wallet|ThreatEntity|Merchant|Address):u
                    ACCUM
                      @@subgraph_edges += e,
                      @@subgraph_vertices += u;
@@ -334,4 +363,4 @@ CREATE OR REPLACE DISTRIBUTED QUERY veilpay_neighbors(
 INSTALL QUERY veilpay_firewall_check,
               veilpay_trusted_contacts,
               veilpay_poison_check,
-              veilpay_neighbors;
+              veilpay_neighbors

@@ -72,7 +72,7 @@ export async function batchUpsertToTigerGraph(
 
   for (const e of params.edges) {
     const isDust = Boolean(e.attributes?.is_dust);
-    const edgeType = isDust ? 'DUSTED' : 'FUNDED';
+    const edgeType = isDust ? 'DUSTED' : (e.e_type || 'FUNDED');
     const txHash = e.attributes?.tx_hash || 'tx_default';
 
     ensureEdgePath(e.from_id, edgeType, e.to_id);

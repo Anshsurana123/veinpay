@@ -29,19 +29,34 @@ TIGERGRAPH_TIMEOUT_MS=4000
 
 ## 2. Deploy Schema & Install GSQL Queries
 
-Deploy the schema and pre-sign graph firewall queries using the GSQL web shell or CLI:
+Deploy the schema and pre-sign graph firewall queries using the GSQL CLI or TigerGraph Cloud Web Console / GraphStudio:
 
+### Option A: Via GSQL Command Line (Recommended)
 ```bash
-gsql /tigergraph/veilpay_firewall.gsql
+# Optional: if you need to wipe an old test schema on your cluster first
+gsql "DROP ALL"
+
+# Run the batch script (top-level DDL commands without semicolons)
+gsql tigergraph/veilpay_firewall.gsql
 ```
 
+### Option B: Interactive GSQL Shell or Web Shell
+If pasting directly into the interactive `GSQL>` shell, wrap multi-line statements with `BEGIN` and `END`, or use the file execution command:
+```gsql
+GSQL> @tigergraph/veilpay_firewall.gsql
+```
+
+### Option C: TigerGraph GraphStudio UI
+1. **Design Schema**: Create vertices `Wallet`, `Merchant`, `ThreatEntity`, `Address` and directed edges `TRANSFERRED_TO`, `DUSTED`, `FUNDED` (with reverse edges). Publish Schema.
+2. **Write Queries**: Copy the queries from `/tigergraph/veilpay_firewall.gsql` (`veilpay_firewall_check`, `veilpay_trusted_contacts`, `veilpay_poison_check`, `veilpay_neighbors`) into the query editor and click **Install All Queries**.
+
 This installs:
-1. Vertices: `Address`, `Link`
-2. Directed Edges with Discriminators: `FUNDED`, `DUSTED`, `FIRST_FUNDED`, `PAID_LINK`
-3. Queries:
-   - `veilpay_firewall_check`: 3-in-1 backward lineage, sybil cluster & dust factory analysis.
+1. Vertices: `Wallet`, `Merchant`, `ThreatEntity`, `Address`
+2. Directed Edges: `TRANSFERRED_TO` (reverse `REVERSE_TRANSFERRED_TO`), `DUSTED` (reverse `REVERSE_DUSTED`), `FUNDED` (reverse `REVERSE_FUNDED`)
+3. Compiled RESTPP Queries:
+   - `veilpay_firewall_check`: 3-in-1 backward lineage traversal, sybil cluster collapse & dust factory analysis.
    - `veilpay_trusted_contacts`: counterparty discovery with >= 2 successful non-dust interactions.
-   - `veilpay_poison_check`: lookalike prefix/suffix evaluation.
+   - `veilpay_poison_check`: lookalike prefix/suffix evaluation & dust history.
    - `veilpay_neighbors`: N-hop topology subgraph retrieval.
 
 ---
