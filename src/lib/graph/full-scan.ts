@@ -40,6 +40,9 @@ export interface RunFullScanParams {
   policy: FirewallPolicyConfig;
   crawlSettings?: Partial<LiveCrawlSettings>;
   includeGemini?: boolean;
+  linkId?: string;
+  graphSnapshot?: string;
+  receiptNonce?: string;
 }
 
 export interface RunFullScanResult {
@@ -55,6 +58,11 @@ export interface RunFullScanResult {
  * 1. Live TigerGraph 4.x RESTPP (`tryExecuteLiveTigerGraphQuery`) if configured
  * 2. Seeded topological dataset (`runVeilPayFirewallTraversal`) if vertex is seeded
  * 3. Live Etherscan V2 + GoPlus + threat-intel crawl (`crawlLiveAddressAndScan`)
+ *
+ * CACHE ISOLATION RULE (P1-2):
+ * We cache ONLY the graph scan result (targetWallet, chainId, policyHash).
+ * Receipts are regenerated and signed per request for the specific linkId,
+ * merchantWallet, and timestamps so different links never receive mixed merchant data!
  */
 export async function runFullScan(
   params: RunFullScanParams
@@ -65,7 +73,7 @@ export async function runFullScan(
   // Clamp crawl settings server-side to hard maxima (env-configurable)
   const clampedCrawlSettings = clampCrawlSettings(params.crawlSettings);
 
-  // Check 60s cache by (targetWallet, chainId, policyHash)
+  // Check cache by (targetWallet, chainId, policyHash)
   const policyHash = computePolicyKeccak256(params.policy);
   const cacheKey = buildScanCacheKey(
     canonicalTarget,
@@ -73,15 +81,26 @@ export async function runFullScan(
     policyHash
   );
 
-  const cached = getCachedScanResult(cacheKey);
-  if (cached) {
-    let finalReceipt = cached.receipt;
-    if (params.includeGemini && !finalReceipt.geminiExecutiveSummary) {
-      finalReceipt = await maybeEnrichReceiptWithGemini(finalReceipt);
+  const cachedScan = getCachedScanResult(cacheKey);
+  if (cachedScan) {
+    const isolatedScan: FirewallScanResult = {
+      ...cachedScan,
+      merchantWallet: canonicalMerchant,
+    };
+    let receipt = generateAigiForensicReceipt(isolatedScan, {
+      linkId: params.linkId,
+      payer: canonicalTarget,
+      merchant: canonicalMerchant,
+      policyHash,
+      graphSnapshot: params.graphSnapshot,
+      receiptNonce: params.receiptNonce,
+    });
+    if (params.includeGemini && !receipt.geminiExecutiveSummary) {
+      receipt = await maybeEnrichReceiptWithGemini(receipt);
     }
     return {
-      scan: cached.scan,
-      receipt: finalReceipt,
+      scan: isolatedScan,
+      receipt,
     };
   }
 
@@ -93,16 +112,24 @@ export async function runFullScan(
   });
 
   if (liveTgResult) {
-    let receipt = generateAigiForensicReceipt(liveTgResult);
+    const ttlMs = liveTgResult.verdict === 'INCONCLUSIVE' ? 8_000 : 60_000;
+    setCachedScanResult(cacheKey, liveTgResult, ttlMs);
+
+    let receipt = generateAigiForensicReceipt(liveTgResult, {
+      linkId: params.linkId,
+      payer: canonicalTarget,
+      merchant: canonicalMerchant,
+      policyHash,
+      graphSnapshot: params.graphSnapshot,
+      receiptNonce: params.receiptNonce,
+    });
     if (params.includeGemini) {
       receipt = await maybeEnrichReceiptWithGemini(receipt);
     }
-    const output = {
+    return {
       scan: liveTgResult,
       receipt,
     };
-    setCachedScanResult(cacheKey, output, 60_000);
-    return output;
   }
 
   // 2. Check if target wallet is in the seeded graph dataset
@@ -125,15 +152,23 @@ export async function runFullScan(
         crawlSettings: clampedCrawlSettings,
       });
 
-  let receipt = generateAigiForensicReceipt(scanResult);
+  const ttlMs = scanResult.verdict === 'INCONCLUSIVE' ? 8_000 : 60_000;
+  setCachedScanResult(cacheKey, scanResult, ttlMs);
+
+  let receipt = generateAigiForensicReceipt(scanResult, {
+    linkId: params.linkId,
+    payer: canonicalTarget,
+    merchant: canonicalMerchant,
+    policyHash,
+    graphSnapshot: params.graphSnapshot,
+    receiptNonce: params.receiptNonce,
+  });
   if (params.includeGemini) {
     receipt = await maybeEnrichReceiptWithGemini(receipt);
   }
 
-  const output = {
+  return {
     scan: scanResult,
     receipt,
   };
-  setCachedScanResult(cacheKey, output, 60_000);
-  return output;
 }

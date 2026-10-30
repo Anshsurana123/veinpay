@@ -373,9 +373,11 @@ export function EvidencePanel() {
           <button
             type="button"
             onClick={handleExportJson}
+            title="Export JSON Compliance Receipt"
+            aria-label="Export JSON Compliance Receipt"
             className="border border-[#27404f] rounded-full py-1 px-3 text-xs text-[#8ea5b4] hover:text-[#eaf0f3] hover:border-[#efe6d2] cursor-pointer transition-colors"
           >
-            Export JSON
+            Export JSON Compliance Receipt
           </button>
           <button
             type="button"

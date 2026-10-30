@@ -99,7 +99,11 @@ export interface FirewallPolicyConfig {
   inconclusivePolicy?: InconclusivePolicyMode;
 }
 
-export type LinkTrustLevel = 'PROVEN' | 'SIGNED_UNPROVEN';
+export type LinkTrustLevel =
+  | 'SELF_SIGNED_VAULT'
+  | 'HANDLE_VERIFIED'
+  | 'SIGNED_UNPROVEN'
+  | 'PROVEN';
 
 export interface SignedPaymentLinkPayload {
   version: number;
@@ -216,6 +220,17 @@ export interface AigiForensicReceipt {
   badgeSummary: string;
   targetWallet: string;
   merchantWallet: string;
+  linkId?: string;
+  payer?: string;
+  merchant?: string;
+  policyHash?: string;
+  metricsHash?: string;
+  evidenceHash?: string;
+  graphSnapshot?: string;
+  issuedAt?: string;
+  expiresAt?: string;
+  receiptNonce?: string;
+  demo?: boolean;
   inconclusiveReason?: string | null;
   telemetry: {
     nodesScanned: number;
@@ -233,7 +248,7 @@ export interface AigiForensicReceipt {
   geminiModelUsed?: string | null;
   cryptographicAuditHash: string;
   commitmentHash?: string;
-  signature?: string;
+  signature?: string | null;
   keyId?: string;
   canonicalPayloadJson: string;
   generatedAt: string;

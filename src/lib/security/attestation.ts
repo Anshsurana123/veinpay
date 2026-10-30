@@ -1,8 +1,10 @@
 import { createHmac, randomBytes, timingSafeEqual } from 'crypto';
 import type { FirewallPolicyConfig, VerdictStatus } from '@/types/veilpay';
 import { AUTHORITATIVE_DEFAULT_POLICY } from '@/lib/graph/full-scan';
+import { getStorage } from '@/lib/storage';
 
 export interface ScanAttestationPayload {
+  jti: string;
   payer: string;
   linkId: string;
   linkSigner: string;
@@ -10,33 +12,32 @@ export interface ScanAttestationPayload {
   socketUnlocked: boolean;
   proofOfControl: boolean;
   policyHash: string;
+  chainId?: number;
+  inputToken?: string;
+  maxInputAmount?: string;
   issuedAt: string;
   expiresAt: string;
 }
 
-const DEFAULT_ATTESTATION_TTL_MS = 5 * 60 * 1000; // 5 minutes
+// 2 minutes TTL per P1-9
+const DEFAULT_ATTESTATION_TTL_MS = 2 * 60 * 1000;
 
 export function assertScanAttestationSecretConfigured(): void {
-  const secret =
-    process.env.VEILPAY_ATTESTATION_SECRET?.trim() ||
-    process.env.VEILPAY_SESSION_SECRET?.trim() ||
-    process.env.RECEIPT_SIGNING_KEY?.trim();
-  if (!secret && process.env.NODE_ENV === 'production') {
+  const secret = process.env.VEILPAY_ATTESTATION_SECRET?.trim();
+  const allowDev = process.env.VEILPAY_ALLOW_DEV_SECRETS === 'true';
+  if (process.env.NODE_ENV === 'production' && !secret && !allowDev) {
     throw new Error(
-      'FATAL: VEILPAY_ATTESTATION_SECRET (or VEILPAY_SESSION_SECRET / RECEIPT_SIGNING_KEY) is required in production.'
+      'FATAL: VEILPAY_ATTESTATION_SECRET is required in production.'
     );
   }
 }
 
 function getAttestationSecret(): string {
-  const secret =
-    process.env.VEILPAY_ATTESTATION_SECRET?.trim() ||
-    process.env.VEILPAY_SESSION_SECRET?.trim() ||
-    process.env.RECEIPT_SIGNING_KEY?.trim();
+  const secret = process.env.VEILPAY_ATTESTATION_SECRET?.trim();
   if (!secret) {
-    if (process.env.NODE_ENV === 'production') {
+    if (process.env.NODE_ENV === 'production' && process.env.VEILPAY_ALLOW_DEV_SECRETS !== 'true') {
       throw new Error(
-        'FATAL: VEILPAY_ATTESTATION_SECRET (or VEILPAY_SESSION_SECRET / RECEIPT_SIGNING_KEY) is required in production.'
+        'FATAL: VEILPAY_ATTESTATION_SECRET is required in production.'
       );
     }
     return 'veilpay-dev-ephemeral-attestation-hmac-secret-2026';
@@ -79,12 +80,19 @@ export function signScanAttestation(params: {
   socketUnlocked: boolean;
   proofOfControl: boolean;
   policy: FirewallPolicyConfig;
+  chainId?: number;
+  inputToken?: string;
+  maxInputAmount?: string;
   ttlMs?: number;
   nowMs?: number;
+  jti?: string;
 }): string {
   const now = params.nowMs ?? Date.now();
   const ttl = params.ttlMs ?? DEFAULT_ATTESTATION_TTL_MS;
+  const jti = params.jti || `jti_${randomBytes(16).toString('hex')}`;
+
   const payload: ScanAttestationPayload = {
+    jti,
     payer: params.payer.trim().toLowerCase(),
     linkId: params.linkId.trim() || 'default',
     linkSigner: (params.linkSigner ?? '').trim().toLowerCase(),
@@ -92,15 +100,22 @@ export function signScanAttestation(params: {
     socketUnlocked: Boolean(params.socketUnlocked),
     proofOfControl: Boolean(params.proofOfControl),
     policyHash: computeCanonicalPolicyHash(params.policy),
+    chainId: params.chainId,
+    inputToken: params.inputToken,
+    maxInputAmount: params.maxInputAmount,
     issuedAt: new Date(now).toISOString(),
     expiresAt: new Date(now + ttl).toISOString(),
   };
 
   const canonicalJson = JSON.stringify({
+    chainId: payload.chainId,
     expiresAt: payload.expiresAt,
+    inputToken: payload.inputToken,
     issuedAt: payload.issuedAt,
+    jti: payload.jti,
     linkId: payload.linkId,
     linkSigner: payload.linkSigner,
+    maxInputAmount: payload.maxInputAmount,
     payer: payload.payer,
     policyHash: payload.policyHash,
     proofOfControl: payload.proofOfControl,
@@ -119,17 +134,48 @@ export function signScanAttestation(params: {
     .replace(/\+/g, '-')
     .replace(/\//g, '_')
     .replace(/=+$/, '');
-
   return `${encoded}.${mac}`;
 }
 
+export async function consumeScanAttestationJti(
+  jti: string,
+  ttlSeconds = 300
+): Promise<boolean> {
+  const storage = getStorage();
+  return storage.set(`jti:${jti}`, '1', { nx: true, exSeconds: ttlSeconds });
+}
+
+export async function isScanAttestationJtiConsumed(jti: string): Promise<boolean> {
+  const storage = getStorage();
+  const val = await storage.get<string>(`jti:${jti}`);
+  return val !== null;
+}
+
 export function verifyScanAttestation(
-  attestation: string | null | undefined,
-  expected: {
-    payer: string;
+  attestationOrParams:
+    | string
+    | null
+    | undefined
+    | {
+        attestation?: string | null;
+        expectedPayer?: string;
+        expectedLinkId?: string;
+        expectedPolicy?: FirewallPolicyConfig;
+        expectedChainId?: number;
+        expectedInputToken?: string;
+        expectedInputAmount?: string;
+        nowMs?: number;
+      },
+  maybeExpected?: {
+    payer?: string;
+    expectedPayer?: string;
     linkId?: string;
+    expectedLinkId?: string;
     linkSigner?: string;
     policy?: FirewallPolicyConfig;
+    expectedPolicy?: FirewallPolicyConfig;
+    chainId?: number;
+    expectedChainId?: number;
     requireProofOfControl?: boolean;
     nowMs?: number;
   }
@@ -138,135 +184,182 @@ export function verifyScanAttestation(
   reason?: string;
   payload?: ScanAttestationPayload;
 } {
-  if (!attestation || typeof attestation !== 'string' || !attestation.includes('.')) {
-    return {
-      valid: false,
-      reason: 'Missing or malformed server scanAttestation token.',
-    };
-  }
-
-  const [encoded, mac] = attestation.split('.');
-  if (!encoded || !mac) {
-    return {
-      valid: false,
-      reason: 'Malformed scanAttestation token segments.',
-    };
-  }
-
-  const expectedMac = createHmac('sha256', getAttestationSecret())
-    .update(encoded)
-    .digest('base64')
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=+$/, '');
-
-  const macBuf = Buffer.from(mac, 'utf8');
-  const expBuf = Buffer.from(expectedMac, 'utf8');
-  if (macBuf.length !== expBuf.length || !timingSafeEqual(macBuf, expBuf)) {
-    return {
-      valid: false,
-      reason: 'Invalid scanAttestation HMAC signature.',
-    };
-  }
-
   try {
-    const base64 = encoded.replace(/-/g, '+').replace(/_/g, '/');
-    const pad = base64.length % 4 === 0 ? '' : '='.repeat(4 - (base64.length % 4));
-    const parsed = JSON.parse(
-      Buffer.from(base64 + pad, 'base64').toString('utf8')
-    ) as ScanAttestationPayload;
+    let raw = '';
+    let expectedPayer = maybeExpected?.payer || maybeExpected?.expectedPayer;
+    let expectedLinkId = maybeExpected?.linkId || maybeExpected?.expectedLinkId;
+    let expectedLinkSigner = maybeExpected?.linkSigner;
+    let expectedPolicy = maybeExpected?.policy || maybeExpected?.expectedPolicy;
+    let expectedChainId = maybeExpected?.chainId || maybeExpected?.expectedChainId;
+    let requireProofOfControl = maybeExpected?.requireProofOfControl;
+    let nowMs = maybeExpected?.nowMs;
 
-    const now = expected.nowMs ?? Date.now();
-    const expMs = Date.parse(parsed.expiresAt);
+    if (!attestationOrParams) {
+      return { valid: false, reason: 'Missing scan attestation token.' };
+    }
+
+    if (typeof attestationOrParams === 'string') {
+      raw = attestationOrParams.trim();
+    } else {
+      raw = (attestationOrParams.attestation || '').trim();
+      expectedPayer = attestationOrParams.expectedPayer || expectedPayer;
+      expectedLinkId = attestationOrParams.expectedLinkId || expectedLinkId;
+      expectedPolicy = attestationOrParams.expectedPolicy || expectedPolicy;
+      expectedChainId = attestationOrParams.expectedChainId || expectedChainId;
+      nowMs = attestationOrParams.nowMs || nowMs;
+    }
+
+    if (!raw) {
+      return { valid: false, reason: 'Missing scan attestation token.' };
+    }
+
+    const parts = raw.split('.');
+    if (parts.length !== 2) {
+      return { valid: false, reason: 'Malformed scan attestation token format.' };
+    }
+
+    const [encoded, mac] = parts;
+    const expectedMac = createHmac('sha256', getAttestationSecret())
+      .update(encoded)
+      .digest('base64')
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=+$/, '');
+
+    const macBuf = Buffer.from(mac, 'utf8');
+    const expBuf = Buffer.from(expectedMac, 'utf8');
+    if (macBuf.length !== expBuf.length || !timingSafeEqual(macBuf, expBuf)) {
+      return { valid: false, reason: 'Cryptographic HMAC signature mismatch on scan attestation.' };
+    }
+
+    const jsonStr = Buffer.from(encoded, 'base64').toString('utf8');
+    const payload = JSON.parse(jsonStr) as ScanAttestationPayload;
+
+    const now = nowMs ?? Date.now();
+    const expMs = Date.parse(payload.expiresAt);
     if (!Number.isFinite(expMs) || now > expMs) {
+      return { valid: false, reason: `Scan attestation expired at ${payload.expiresAt}. Re-scan required.` };
+    }
+
+    if (
+      expectedPayer &&
+      payload.payer.toLowerCase() !== expectedPayer.trim().toLowerCase()
+    ) {
       return {
         valid: false,
-        reason: 'Server scanAttestation has expired.',
+        reason: `Scan attestation payer mismatch: expected ${expectedPayer}, got ${payload.payer}.`,
       };
     }
 
-    if (parsed.payer.toLowerCase() !== expected.payer.trim().toLowerCase()) {
+    if (
+      expectedLinkId &&
+      expectedLinkId.trim().toLowerCase() !== 'default' &&
+      payload.linkId.toLowerCase() !== expectedLinkId.trim().toLowerCase()
+    ) {
       return {
         valid: false,
-        reason: `Scan attestation payer (${parsed.payer}) does not match quote userAddress (${expected.payer}).`,
+        reason: `Scan attestation linkId mismatch: expected ${expectedLinkId}, got ${payload.linkId}.`,
       };
     }
 
-    if (expected.linkId && parsed.linkId !== expected.linkId.trim()) {
+    if (
+      expectedLinkSigner &&
+      payload.linkSigner &&
+      payload.linkSigner.toLowerCase() !== expectedLinkSigner.trim().toLowerCase()
+    ) {
       return {
         valid: false,
-        reason: `Scan attestation linkId (${parsed.linkId}) does not match requested linkId (${expected.linkId}).`,
+        reason: `Scan attestation linkSigner mismatch: expected ${expectedLinkSigner}, got ${payload.linkSigner}.`,
       };
     }
 
-    if (expected.linkSigner && parsed.linkSigner) {
-      if (parsed.linkSigner.toLowerCase() !== expected.linkSigner.trim().toLowerCase()) {
+    if (expectedPolicy) {
+      const expectedHash = computeCanonicalPolicyHash(expectedPolicy);
+      if (payload.policyHash !== expectedHash) {
         return {
           valid: false,
-          reason: `Scan attestation linkSigner (${parsed.linkSigner}) does not match verified link signer (${expected.linkSigner}).`,
+          reason: 'Scan attestation was generated under a different firewall policy than the active verified payment link.',
         };
       }
     }
 
-    if (expected.policy) {
-      const expectedHash = computeCanonicalPolicyHash(expected.policy);
-      if (parsed.policyHash !== expectedHash) {
-        return {
-          valid: false,
-          reason: 'Scan attestation policyHash does not match verified link policy.',
-        };
-      }
+    if (
+      expectedChainId !== undefined &&
+      payload.chainId !== undefined &&
+      payload.chainId !== expectedChainId
+    ) {
+      return {
+        valid: false,
+        reason: `Scan attestation chainId mismatch: expected ${expectedChainId}, got ${payload.chainId}.`,
+      };
     }
 
-    const requirePoC = expected.requireProofOfControl ?? true;
-    if (requirePoC && parsed.proofOfControl !== true) {
+    if (requireProofOfControl && !payload.proofOfControl) {
       return {
         valid: false,
         reason:
-          'Scan attestation does not carry proofOfControl=true. Connect wallet and sign Proof of Control before requesting a quote.',
+          'Scan attestation was not backed by a verified Proof of Control signature (proofOfControl=true required).',
       };
     }
 
-    if (!isVerdictAllowedForQuote(parsed.verdict, parsed.socketUnlocked)) {
-      return {
-        valid: false,
-        reason: `Scan attestation verdict (${parsed.verdict}) blocks quote generation.`,
-      };
-    }
-
-    return { valid: true, payload: parsed };
+    return { valid: true, payload };
   } catch {
-    return {
-      valid: false,
-      reason: 'Failed to decode scanAttestation payload.',
-    };
+    return { valid: false, reason: 'Failed to parse and verify scan attestation.' };
   }
 }
 
-export interface VerifiedLinkPolicyRecord {
+// Persistent / Storage-backed link policy registry
+export interface RegisteredLinkPolicy {
   linkId: string;
   policy: FirewallPolicyConfig;
-  vaultAddress?: string;
+  vaultAddress: string;
   signer?: string;
 }
 
-const verifiedLinkPolicyStore = new Map<string, VerifiedLinkPolicyRecord>();
+const memoryPolicyStore = new Map<string, RegisteredLinkPolicy>();
 
-export function registerVerifiedLinkPolicy(record: VerifiedLinkPolicyRecord): void {
-  verifiedLinkPolicyStore.set(record.linkId.trim(), record);
+export function registerVerifiedLinkPolicy(record: RegisteredLinkPolicy): void {
+  const key = record.linkId.trim().toLowerCase();
+  const enhancedRecord: RegisteredLinkPolicy = {
+    ...record,
+    signer:
+      record.signer ||
+      (record.vaultAddress.startsWith('0x') ? record.vaultAddress : undefined),
+  };
+  memoryPolicyStore.set(key, enhancedRecord);
+  void getStorage().set(`policy:${key}`, enhancedRecord, { exSeconds: 86400 * 30 });
 }
 
-export function getVerifiedLinkPolicy(linkId?: string | null): VerifiedLinkPolicyRecord {
-  const key = (linkId ?? '').trim();
-  if (key && verifiedLinkPolicyStore.has(key)) {
-    return verifiedLinkPolicyStore.get(key)!;
-  }
+export function getVerifiedLinkPolicy(linkId: string): RegisteredLinkPolicy {
+  const key = linkId.trim().toLowerCase();
+  const rec = memoryPolicyStore.get(key);
+  if (rec) return rec;
+
   return {
-    linkId: key || 'default',
-    policy: { ...AUTHORITATIVE_DEFAULT_POLICY },
+    linkId,
+    policy: AUTHORITATIVE_DEFAULT_POLICY,
+    vaultAddress: '',
+  };
+}
+
+export async function getVerifiedLinkPolicyAsync(linkId: string): Promise<RegisteredLinkPolicy> {
+  const key = linkId.trim().toLowerCase();
+  const rec = memoryPolicyStore.get(key);
+  if (rec) return rec;
+
+  const stored = await getStorage().get<RegisteredLinkPolicy>(`policy:${key}`);
+  if (stored) {
+    memoryPolicyStore.set(key, stored);
+    return stored;
+  }
+
+  return {
+    linkId,
+    policy: AUTHORITATIVE_DEFAULT_POLICY,
+    vaultAddress: '',
   };
 }
 
 export function clearVerifiedLinkPolicyStoreForTests(): void {
-  verifiedLinkPolicyStore.clear();
+  memoryPolicyStore.clear();
 }

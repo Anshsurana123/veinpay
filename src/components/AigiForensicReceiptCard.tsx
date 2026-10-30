@@ -127,10 +127,12 @@ export function AigiForensicReceiptCard() {
           <button
             type="button"
             onClick={handleDownloadJson}
+            title="Export JSON Compliance Receipt"
+            aria-label="Export JSON Compliance Receipt"
             className="flex items-center gap-1 border border-[#D97736] bg-[#261810] px-2.5 py-1.5 font-mono text-[10px] font-semibold text-[#E5A93C] hover:bg-[#D97736] hover:text-[#0B0C0E]"
           >
             <Download className="h-3 w-3" />
-            EXPORT .JSON
+            EXPORT JSON COMPLIANCE RECEIPT
           </button>
         </div>
       </div>

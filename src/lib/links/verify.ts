@@ -6,6 +6,7 @@ import {
   verifyTypedData,
   type PublicClient,
 } from 'viem';
+import { mainnet } from 'viem/chains';
 import type {
   LinkTrustLevel,
   SignedPaymentLinkPayload,
@@ -320,16 +321,35 @@ export async function verifySignedPaymentLink(
   }
 
   // Determine trust level:
-  // - PROVEN: settlementMode is EVM_SOCKET and signer == vaultAddress (or vaultAddress is a smart contract the signer controls per ERC-1271)
+  // - HANDLE_VERIFIED: handle is an ENS name that resolves to signer or vault
+  // - SELF_SIGNED_VAULT: EVM_SOCKET and signer == vaultAddress (or vaultAddress is an ERC-1271 smart contract)
   // - SIGNED_UNPROVEN: BTC or XMR mode (or EVM where signer != vaultAddress and not ERC-1271 proven)
   if (candidatePayload.settlementMode === 'EVM_SOCKET') {
     const vaultLower = candidatePayload.vaultAddress.toLowerCase();
     const signerLower = candidatePayload.signer.toLowerCase();
 
+    // Check if handle is an ENS name resolving to signer or vault
+    let isEnsHandleVerified = false;
+    if (candidatePayload.handle.endsWith('.eth')) {
+      try {
+        const rpcUrl = process.env.RPC_URL_1 || 'https://ethereum-rpc.publicnode.com';
+        const ensClient = createPublicClient({
+          chain: mainnet,
+          transport: http(rpcUrl, { timeout: 2000 }),
+        });
+        const resolved = await ensClient.getEnsAddress({ name: candidatePayload.handle });
+        if (resolved && (resolved.toLowerCase() === signerLower || resolved.toLowerCase() === vaultLower)) {
+          isEnsHandleVerified = true;
+        }
+      } catch {
+        // Network/offline fallback
+      }
+    }
+
     if (vaultLower === signerLower) {
       return {
         valid: true,
-        trustLevel: 'PROVEN',
+        trustLevel: isEnsHandleVerified ? 'HANDLE_VERIFIED' : 'SELF_SIGNED_VAULT',
         erc1271ContractVerified: false,
         payload: candidatePayload,
       };
@@ -337,19 +357,43 @@ export async function verifySignedPaymentLink(
 
     // Check if vaultAddress is an ERC-1271 smart-contract wallet controlled by signer
     let isErc1271VaultValid = false;
-    if (
-      options.publicClient &&
-      isAddress(candidatePayload.vaultAddress, { strict: false })
-    ) {
-      try {
-        isErc1271VaultValid = await options.publicClient.verifyTypedData({
-          address: getAddress(candidatePayload.vaultAddress),
-          domain: typedData.domain,
-          types: typedData.types,
-          primaryType: typedData.primaryType,
-          message: typedData.message,
-          signature: sig as `0x${string}`,
+    if (isAddress(candidatePayload.vaultAddress, { strict: false })) {
+      const rpcUrl =
+        process.env[`RPC_URL_${candidatePayload.destinationChainId}`] ||
+        process.env.RPC_URL_1 ||
+        'https://ethereum-rpc.publicnode.com';
+      const client =
+        options.publicClient ??
+        createPublicClient({
+          chain: mainnet,
+          transport: http(rpcUrl, { timeout: 2500 }),
         });
+
+      try {
+        if ('getCode' in client && typeof client.getCode === 'function') {
+          const code = await client.getCode({
+            address: getAddress(candidatePayload.vaultAddress),
+          });
+          if (code && code !== '0x') {
+            isErc1271VaultValid = await client.verifyTypedData({
+              address: getAddress(candidatePayload.vaultAddress),
+              domain: typedData.domain,
+              types: typedData.types,
+              primaryType: typedData.primaryType,
+              message: typedData.message,
+              signature: sig as `0x${string}`,
+            });
+          }
+        } else {
+          isErc1271VaultValid = await client.verifyTypedData({
+            address: getAddress(candidatePayload.vaultAddress),
+            domain: typedData.domain,
+            types: typedData.types,
+            primaryType: typedData.primaryType,
+            message: typedData.message,
+            signature: sig as `0x${string}`,
+          });
+        }
       } catch {
         isErc1271VaultValid = false;
       }
@@ -358,7 +402,7 @@ export async function verifySignedPaymentLink(
     if (isErc1271VaultValid) {
       return {
         valid: true,
-        trustLevel: 'PROVEN',
+        trustLevel: isEnsHandleVerified ? 'HANDLE_VERIFIED' : 'SELF_SIGNED_VAULT',
         erc1271ContractVerified: true,
         payload: candidatePayload,
       };
@@ -400,6 +444,21 @@ export async function verifyRevokeLinkSignature(params: {
 }> {
   if (!isAddress(params.revokeMessage.signer, { strict: false })) {
     return { valid: false, reason: 'Invalid revoke signer address.' };
+  }
+
+  // Validate issuedAt freshness (±10 minutes per P0-3)
+  const now = Date.now();
+  const rawIssued = params.revokeMessage.issuedAt;
+  let issuedMs = Date.parse(rawIssued);
+  if (!Number.isFinite(issuedMs) && /^\d+$/.test(rawIssued)) {
+    const num = Number(rawIssued);
+    issuedMs = num < 1e11 ? num * 1000 : num;
+  }
+  if (!Number.isFinite(issuedMs) || Math.abs(now - issuedMs) > 10 * 60 * 1000) {
+    return {
+      valid: false,
+      reason: 'Revocation issuedAt timestamp is expired or outside the freshness window (±10 minutes).',
+    };
   }
 
   const stored = getStoredLinkRecord(params.revokeMessage.linkId);

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { sha256HexSync } from '@/lib/aigi/verdict';
-import { verifyReceiptSignature } from '@/lib/aigi/receipt-signer';
+import { verifyReceiptSignature, isDemoKey } from '@/lib/aigi/receipt-signer';
 import type { AigiForensicReceipt } from '@/types/veilpay';
 
 export async function POST(request: NextRequest) {
@@ -63,7 +63,39 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 2. Cryptographically verify Ed25519 signature
+    // 2. Parse canonical payload to check expiration
+    let parsedPayload: Record<string, unknown> | null = null;
+    try {
+      parsedPayload = JSON.parse(canonicalJson) as Record<string, unknown>;
+    } catch {
+      return NextResponse.json(
+        {
+          valid: false,
+          error: 'MALFORMED_CANONICAL_PAYLOAD',
+          reason: 'canonicalPayloadJson is not valid JSON.',
+        },
+        { status: 400 }
+      );
+    }
+
+    const rawBody = body as Record<string, any>;
+    const effectiveExpiresAt = (rawBody.expiresAt ?? rawBody.receipt?.expiresAt ?? parsedPayload?.expiresAt) as string | undefined;
+    if (effectiveExpiresAt && typeof effectiveExpiresAt === 'string') {
+      const expiresMs = Date.parse(effectiveExpiresAt);
+      const gracePeriodMs = 60_000; // 60s grace
+      if (Number.isFinite(expiresMs) && Date.now() > expiresMs + gracePeriodMs) {
+        return NextResponse.json(
+          {
+            valid: false,
+            error: 'EXPIRED_RECEIPT',
+            reason: `Compliance receipt expired at ${effectiveExpiresAt}.`,
+          },
+          { status: 400 }
+        );
+      }
+    }
+
+    // 3. Cryptographically verify Ed25519 signature across registered keys
     const sigVerification = verifyReceiptSignature({
       commitmentHash: computedHash,
       signature,
@@ -84,10 +116,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const isDemo =
+      Boolean(sigVerification.isDemo) ||
+      Boolean(parsedPayload?.demo) ||
+      (keyId ? isDemoKey(keyId) : false);
+
     return NextResponse.json(
       {
         valid: true,
         verified: true,
+        demo: isDemo,
         commitmentHash: computedHash,
         keyId: keyId ?? 'veilpay-ed25519-v1',
         algorithm: 'Ed25519',
@@ -99,13 +137,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         valid: false,
-        error: 'VERIFICATION_ERROR',
+        error: 'INTERNAL_ERROR',
         reason:
           err instanceof Error
             ? err.message
-            : 'Internal error during receipt verification',
+            : 'Unknown receipt verification error.',
       },
-      { status: 400 }
+      { status: 500 }
     );
   }
 }

@@ -485,11 +485,11 @@ export async function fetchSocketCrossChainQuote(
   }
 
   try {
-    // Configurable timeout (defaults to 6000ms for resilient public API & serverless cold-starts)
+    // Enforce 3500ms timeout for resilient public API & offline fallback
     const timeoutMs =
       Number(process.env.SOCKET_TIMEOUT_MS) > 0
         ? Number(process.env.SOCKET_TIMEOUT_MS)
-        : 6000;
+        : 3500;
     const response = await fetch(`${baseUrl}/v3/swap/quote?${query.toString()}`, {
       method: 'GET',
       headers,

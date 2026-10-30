@@ -1,5 +1,5 @@
 import { getAddress } from 'viem';
-import { privateKeyToAccount } from 'viem/accounts';
+import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
 import type {
   FirewallPolicyConfig,
   PaymentAssetSymbol,
@@ -169,8 +169,13 @@ export function buildRevokeLinkTypedData(params: RevokeLinkMessage) {
   };
 }
 
-const SIMULATOR_PREVIEW_PK =
-  '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80' as const;
+let ephemeralSimulatorKey: `0x${string}` | null = null;
+function getEphemeralSimulatorKey(): `0x${string}` {
+  if (!ephemeralSimulatorKey) {
+    ephemeralSimulatorKey = generatePrivateKey();
+  }
+  return ephemeralSimulatorKey;
+}
 
 /**
  * Builds an EIP-712 signed preview link for the split-screen local simulator so that
@@ -184,7 +189,7 @@ export async function buildSimulatorSignedPreviewLink(
   c: string;
   sig: `0x${string}`;
 }> {
-  const simAccount = privateKeyToAccount(SIMULATOR_PREVIEW_PK);
+  const simAccount = privateKeyToAccount(getEphemeralSimulatorKey());
   const vaultAddr = config.vaultAddresses[config.settlementMode] ?? '';
   const payload = createPaymentLinkPayload({
     linkId: `0xsim_${(config.handle || 'default').replace(/[^a-zA-Z0-9]/g, '').slice(0, 16) || 'default'}`,

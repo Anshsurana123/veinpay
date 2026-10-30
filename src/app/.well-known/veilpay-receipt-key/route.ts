@@ -1,13 +1,29 @@
 import { NextResponse } from 'next/server';
-import { getReceiptPublicKeyInfo } from '@/lib/aigi/receipt-signer';
+import {
+  getAllReceiptPublicKeys,
+  getReceiptPublicKeyInfo,
+} from '@/lib/aigi/receipt-signer';
 
 export async function GET() {
-  const keyInfo = getReceiptPublicKeyInfo();
-  return NextResponse.json(keyInfo, {
-    status: 200,
-    headers: {
-      'Cache-Control': 'public, max-age=86400, stale-while-revalidate=604800',
-      'Content-Type': 'application/json',
+  const active = getReceiptPublicKeyInfo();
+  const allKeys = getAllReceiptPublicKeys();
+  const jwks = allKeys.map((k) => k.jwk);
+
+  return NextResponse.json(
+    {
+      keyId: active.keyId,
+      algorithm: active.algorithm,
+      publicKeyHex: active.publicKeyHex,
+      publicKeyPem: active.publicKeyPem,
+      jwk: active.jwk,
+      keys: jwks,
     },
-  });
+    {
+      status: 200,
+      headers: {
+        'Cache-Control': 'public, max-age=3600, stale-while-revalidate=86400',
+        'Content-Type': 'application/json',
+      },
+    }
+  );
 }

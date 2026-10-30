@@ -1,5 +1,6 @@
 import { createHmac, randomBytes, timingSafeEqual } from 'crypto';
 import { getAddress, isAddress, verifyMessage } from 'viem';
+import { getStorage } from '@/lib/storage';
 
 export interface ProofOfControlChallenge {
   nonce: string;
@@ -29,24 +30,21 @@ const nonceStore = new Map<
 >();
 
 export function assertSessionSecretConfigured(): void {
-  const secret =
-    process.env.VEILPAY_SESSION_SECRET?.trim() ||
-    process.env.RECEIPT_SIGNING_KEY?.trim();
-  if (!secret && process.env.NODE_ENV === 'production') {
+  const secret = process.env.VEILPAY_SESSION_SECRET?.trim();
+  const allowDev = process.env.VEILPAY_ALLOW_DEV_SECRETS === 'true';
+  if (process.env.NODE_ENV === 'production' && !secret && !allowDev) {
     throw new Error(
-      'FATAL: VEILPAY_SESSION_SECRET (or RECEIPT_SIGNING_KEY) is required in production.'
+      'FATAL: VEILPAY_SESSION_SECRET is required in production.'
     );
   }
 }
 
 function getSessionSecret(): string {
-  const secret =
-    process.env.VEILPAY_SESSION_SECRET?.trim() ||
-    process.env.RECEIPT_SIGNING_KEY?.trim();
+  const secret = process.env.VEILPAY_SESSION_SECRET?.trim();
   if (!secret) {
-    if (process.env.NODE_ENV === 'production') {
+    if (process.env.NODE_ENV === 'production' && process.env.VEILPAY_ALLOW_DEV_SECRETS !== 'true') {
       throw new Error(
-        'FATAL: VEILPAY_SESSION_SECRET (or RECEIPT_SIGNING_KEY) is required in production.'
+        'FATAL: VEILPAY_SESSION_SECRET is required in production.'
       );
     }
     return 'veilpay-dev-ephemeral-session-hmac-secret-2026';
@@ -127,6 +125,13 @@ export function issueProofOfControlNonce(params: {
   };
 
   nonceStore.set(nonce, { ...challenge, consumed: false });
+  // Store in distributed storage with TTL (seconds)
+  void getStorage().set(
+    `poc:nonce:${nonce}`,
+    { ...challenge, consumed: false },
+    { exSeconds: Math.ceil(ttl / 1000) }
+  );
+
   return challenge;
 }
 
@@ -160,8 +165,8 @@ export function verifyProofOfControlToken(
   token: string | null | undefined,
   expected: {
     scannedAddress: string;
-    linkId?: string;
     vaultAddress?: string;
+    linkId?: string;
     chainId?: number;
     nowMs?: number;
   }
@@ -170,15 +175,16 @@ export function verifyProofOfControlToken(
   reason?: string;
   payload?: ProofOfControlTokenPayload;
 } {
-  if (!token || typeof token !== 'string' || !token.includes('.')) {
-    return { valid: false, reason: 'Missing or malformed proofOfControlToken.' };
+  if (!token || typeof token !== 'string') {
+    return { valid: false, reason: 'Missing proofOfControlToken.' };
   }
 
-  const [encoded, mac] = token.split('.');
-  if (!encoded || !mac) {
-    return { valid: false, reason: 'Malformed proofOfControlToken segments.' };
+  const parts = token.trim().split('.');
+  if (parts.length !== 2) {
+    return { valid: false, reason: 'Malformed proofOfControlToken format.' };
   }
 
+  const [encoded, mac] = parts;
   const expectedMac = createHmac('sha256', getSessionSecret())
     .update(encoded)
     .digest('base64')
@@ -189,18 +195,15 @@ export function verifyProofOfControlToken(
   const macBuf = Buffer.from(mac, 'utf8');
   const expBuf = Buffer.from(expectedMac, 'utf8');
   if (macBuf.length !== expBuf.length || !timingSafeEqual(macBuf, expBuf)) {
-    return { valid: false, reason: 'Invalid proofOfControlToken HMAC signature.' };
+    return { valid: false, reason: 'HMAC signature mismatch on proofOfControlToken.' };
   }
 
   try {
-    const base64 = encoded.replace(/-/g, '+').replace(/_/g, '/');
-    const pad = base64.length % 4 === 0 ? '' : '='.repeat(4 - (base64.length % 4));
-    const parsed = JSON.parse(
-      Buffer.from(base64 + pad, 'base64').toString('utf8')
-    ) as ProofOfControlTokenPayload;
+    const jsonStr = Buffer.from(encoded, 'base64').toString('utf8');
+    const parsed = JSON.parse(jsonStr) as ProofOfControlTokenPayload;
 
-    if (parsed.proofOfControl !== true) {
-      return { valid: false, reason: 'Token does not grant proofOfControl.' };
+    if (!parsed || parsed.proofOfControl !== true) {
+      return { valid: false, reason: 'Invalid token payload.' };
     }
 
     const now = expected.nowMs ?? Date.now();
@@ -209,23 +212,11 @@ export function verifyProofOfControlToken(
       return { valid: false, reason: 'Proof of control token has expired.' };
     }
 
-    if (
-      parsed.scannedAddress.toLowerCase() !==
-      expected.scannedAddress.trim().toLowerCase()
-    ) {
+    const expectedAddr = expected.scannedAddress.trim().toLowerCase();
+    if (parsed.scannedAddress.toLowerCase() !== expectedAddr) {
       return {
         valid: false,
-        reason: `Proof of control signer (${parsed.scannedAddress}) does not match scanned wallet (${expected.scannedAddress}).`,
-      };
-    }
-
-    if (
-      expected.linkId &&
-      parsed.linkId !== expected.linkId.trim()
-    ) {
-      return {
-        valid: false,
-        reason: `Proof of control linkId (${parsed.linkId}) does not match active link (${expected.linkId}).`,
+        reason: `Proof of control was signed by ${parsed.scannedAddress}, but scanned wallet is ${expectedAddr}.`,
       };
     }
 
@@ -236,7 +227,18 @@ export function verifyProofOfControlToken(
     ) {
       return {
         valid: false,
-        reason: `Proof of control vaultAddress (${parsed.vaultAddress}) does not match expected destination vault (${expected.vaultAddress}).`,
+        reason: `Proof of control vault address (${parsed.vaultAddress}) does not match expected destination vault (${expected.vaultAddress}).`,
+      };
+    }
+
+    if (
+      expected.linkId &&
+      expected.linkId.trim() !== 'default' &&
+      parsed.linkId !== expected.linkId.trim()
+    ) {
+      return {
+        valid: false,
+        reason: `Proof of control was issued for linkId "${parsed.linkId}", but active link is "${expected.linkId}".`,
       };
     }
 
@@ -287,7 +289,14 @@ export async function verifyProofOfControlSignature(params: {
   let effectiveVaultAddress = (params.vaultAddress ?? '').trim();
   const requireNonce = params.requireStoredNonce ?? true;
   if (requireNonce) {
-    const stored = nonceStore.get(params.nonce);
+    // Atomically consume from storage via GETDEL
+    const storage = getStorage();
+    const storageStored = await storage.getdel<ProofOfControlChallenge & { consumed: boolean }>(
+      `poc:nonce:${params.nonce}`
+    );
+    const inMemStored = nonceStore.get(params.nonce);
+
+    const stored = storageStored || inMemStored;
     if (!stored) {
       return {
         valid: false,
@@ -300,6 +309,12 @@ export async function verifyProofOfControlSignature(params: {
         reason: 'Proof-of-control nonce has already been used.',
       };
     }
+
+    // Mark in-memory consumed as well to prevent any concurrent reuse
+    if (inMemStored) {
+      inMemStored.consumed = true;
+    }
+
     if (
       stored.scannedAddress.toLowerCase() !== checksumAddr.toLowerCase() ||
       stored.linkId !== params.linkId.trim() ||
@@ -337,13 +352,6 @@ export async function verifyProofOfControlSignature(params: {
         valid: false,
         reason: 'Signature verification failed: signer does not match scannedAddress.',
       };
-    }
-
-    if (requireNonce) {
-      const stored = nonceStore.get(params.nonce);
-      if (stored) {
-        stored.consumed = true;
-      }
     }
 
     const payload: ProofOfControlTokenPayload = {
@@ -393,8 +401,6 @@ export function evaluatePayerQuoteAndBroadcastEligibility(params: {
   isScanOnly: boolean;
   reason?: string;
 } {
-  // Rule 2(c): Personas and pasted addresses stay scan-only: they can see results
-  // but never get a quote or broadcast.
   if (params.activePersonaId !== 'reown-connected') {
     return {
       canQuote: false,
@@ -405,7 +411,6 @@ export function evaluatePayerQuoteAndBroadcastEligibility(params: {
     };
   }
 
-  // Rule 2(a): Connected wallet must equal scanned wallet (case-insensitive)
   if (!areAddressesMatchingSigner(params.connectedAddress, params.scannedAddress)) {
     return {
       canQuote: false,
@@ -416,7 +421,6 @@ export function evaluatePayerQuoteAndBroadcastEligibility(params: {
     };
   }
 
-  // Rule 2(b): Proof of control token must be present and valid for the scanned wallet
   if (!params.proofOfControlToken) {
     return {
       canQuote: false,

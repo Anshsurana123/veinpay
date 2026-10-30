@@ -720,7 +720,8 @@ export function CakeWalletSettlementModal() {
                   )}
                 </button>
                 <a
-                  href={activeUri || undefined}
+                  href={activeUri ? (activeUri.startsWith('bitcoin:') || activeUri.startsWith('monero:') ? activeUri : `cakewallet://pay?address=${encodeURIComponent(activeUri)}`) : undefined}
+                  aria-label="Launch Cake Wallet Deep-Link"
                   className={`flex flex-1 items-center justify-center gap-1.5 border border-[#D97736] bg-[#261810] py-2 text-xs font-semibold text-[#E5A93C] hover:bg-[#D97736] hover:text-[#0B0C0E] ${
                     !activeUri ? 'pointer-events-none opacity-50' : ''
                   }`}

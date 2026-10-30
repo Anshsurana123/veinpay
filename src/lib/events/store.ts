@@ -1,4 +1,5 @@
 import type { ThreatMetricsSummary, VeilPayEvent } from './types';
+import { getStorage } from '@/lib/storage';
 
 export interface EventStore {
   readonly isPersistent: boolean;
@@ -96,7 +97,7 @@ export class InMemoryEventStore implements EventStore {
       subset = subset.filter((e) => e.linkId.toLowerCase() === targetLinkId);
     }
 
-    // CRITICAL: Simulated events MUST BE EXCLUDED from production threat metrics & counters
+    // Server-verified events only: exclude simulated events and unverified non-EVM settlements
     const realEvents = subset.filter((e) => !e.simulated);
 
     const totalThreatsIntercepted = realEvents.filter(
@@ -121,34 +122,13 @@ export class InMemoryEventStore implements EventStore {
   }
 }
 
-export class RedisRestEventStore implements EventStore {
+/**
+ * StorageEventStore — Serverless-Safe Event Store
+ * Uses Redis Sorted Sets (ZADD with timestamp score) and MGET pipelines.
+ * Caps list length via ZREMRANGEBYRANK and applies TTL to event records.
+ */
+export class StorageEventStore implements EventStore {
   readonly isPersistent = true;
-  private readonly restUrl: string;
-  private readonly restToken: string;
-
-  constructor(restUrl: string, restToken: string) {
-    this.restUrl = restUrl.replace(/\/+$/, '');
-    this.restToken = restToken;
-  }
-
-  private async executeCommand<T>(command: (string | number)[]): Promise<T> {
-    const res = await fetch(this.restUrl, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${this.restToken}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(command),
-      signal: AbortSignal.timeout(3500),
-    });
-
-    if (!res.ok) {
-      throw new Error(`Upstash Redis REST error: HTTP ${res.status}`);
-    }
-
-    const data = (await res.json()) as { result: T };
-    return data.result;
-  }
 
   async recordEvent(
     input: Omit<VeilPayEvent, 'id' | 'timestamp'> & {
@@ -162,17 +142,25 @@ export class RedisRestEventStore implements EventStore {
       timestamp: input.timestamp ?? new Date().toISOString(),
     };
 
-    const eventJson = JSON.stringify(event);
+    const storage = getStorage();
+    const score = Date.parse(event.timestamp) || Date.now();
+    const linkKey = `veilpay:events:link:${event.linkId.toLowerCase()}`;
+    const allKey = 'veilpay:events:all';
 
+    // 1. Store event object with 30-day TTL (2592000s)
+    await storage.set(`veilpay:event:${event.id}`, event, {
+      exSeconds: 86400 * 30,
+    });
+
+    // 2. Add to sorted sets
     await Promise.all([
-      this.executeCommand(['SET', `veilpay:event:${event.id}`, eventJson]),
-      this.executeCommand(['LPUSH', 'veilpay:events:all', event.id]),
-      this.executeCommand([
-        'LPUSH',
-        `veilpay:events:link:${event.linkId.toLowerCase()}`,
-        event.id,
-      ]),
+      storage.zadd(linkKey, score, event.id),
+      storage.zadd(allKey, score, event.id),
     ]);
+
+    // 3. Trim to cap size (keep latest 500 per link, 2000 in all)
+    void storage.zremrangebyrank(linkKey, 0, -501).catch(() => 0);
+    void storage.zremrangebyrank(allKey, 0, -2001).catch(() => 0);
 
     return event;
   }
@@ -181,25 +169,17 @@ export class RedisRestEventStore implements EventStore {
     id: string,
     updates: Partial<VeilPayEvent>
   ): Promise<VeilPayEvent | null> {
-    const raw = await this.executeCommand<string | null>([
-      'GET',
-      `veilpay:event:${id}`,
-    ]);
-    if (!raw) return null;
+    const storage = getStorage();
+    const existing = await storage.get<VeilPayEvent>(`veilpay:event:${id}`);
+    if (!existing) return null;
 
-    const existing = JSON.parse(raw) as VeilPayEvent;
     const updated: VeilPayEvent = {
       ...existing,
       ...updates,
       id: existing.id, // Immutable
     };
 
-    await this.executeCommand([
-      'SET',
-      `veilpay:event:${id}`,
-      JSON.stringify(updated),
-    ]);
-
+    await storage.set(`veilpay:event:${id}`, updated, { exSeconds: 86400 * 30 });
     return updated;
   }
 
@@ -208,39 +188,26 @@ export class RedisRestEventStore implements EventStore {
     simulated?: boolean;
     limit?: number;
   }): Promise<VeilPayEvent[]> {
+    const storage = getStorage();
     const key = filter?.linkId
       ? `veilpay:events:link:${filter.linkId.toLowerCase()}`
       : 'veilpay:events:all';
 
     const limit = filter?.limit ?? 100;
-    const ids = await this.executeCommand<string[]>([
-      'LRANGE',
-      key,
-      0,
-      limit - 1,
-    ]);
+    const ids = await storage.zrevrange(key, 0, limit - 1);
 
     if (!ids || ids.length === 0) return [];
 
+    const keys = ids.map((id) => `veilpay:event:${id}`);
+    const rawEvents = await storage.mget<VeilPayEvent>(keys);
+
     const events: VeilPayEvent[] = [];
-    for (const id of ids) {
-      const raw = await this.executeCommand<string | null>([
-        'GET',
-        `veilpay:event:${id}`,
-      ]);
-      if (raw) {
-        try {
-          const parsed = JSON.parse(raw) as VeilPayEvent;
-          if (
-            filter?.simulated !== undefined &&
-            parsed.simulated !== filter.simulated
-          ) {
-            continue;
-          }
-          events.push(parsed);
-        } catch {
-          // Skip corrupt rows
+    for (const ev of rawEvents) {
+      if (ev) {
+        if (filter?.simulated !== undefined && ev.simulated !== filter.simulated) {
+          continue;
         }
+        events.push(ev);
       }
     }
 
@@ -268,7 +235,8 @@ export class RedisRestEventStore implements EventStore {
   }
 
   async clear(): Promise<void> {
-    // Used in tests if needed
+    const storage = getStorage();
+    await storage.clear();
   }
 }
 
@@ -278,11 +246,9 @@ let globalEventStore: EventStore | null = null;
 export function getEventStore(): EventStore {
   if (globalEventStore) return globalEventStore;
 
-  const url = process.env.UPSTASH_REDIS_REST_URL?.trim();
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN?.trim();
-
-  if (url && token) {
-    globalEventStore = new RedisRestEventStore(url, token);
+  const storage = getStorage();
+  if (storage.isPersistent) {
+    globalEventStore = new StorageEventStore();
   } else {
     globalEventStore = new InMemoryEventStore();
   }

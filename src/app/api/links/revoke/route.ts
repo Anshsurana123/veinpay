@@ -5,9 +5,23 @@ import {
   type RevokeLinkMessage,
 } from '@/lib/links';
 import { getEventStore } from '@/lib/events/store';
+import {
+  buildRateLimitExceededResponse,
+  checkRateLimit,
+  getClientIp,
+} from '@/lib/security/rate-limit';
 
 export async function POST(request: NextRequest) {
   try {
+    const ip = getClientIp(request);
+    const rateLimit = await checkRateLimit('revoke-link', ip, {
+      limit: 10,
+      windowSeconds: 60,
+    });
+    if (!rateLimit.allowed) {
+      return buildRateLimitExceededResponse(rateLimit);
+    }
+
     const body = (await request.json()) as {
       linkId?: string;
       signer?: string;

@@ -1,13 +1,14 @@
 import { z } from 'zod';
 import { isAddress } from 'viem';
 
-// Strict boolean parser where 'false', '0' parse to false, and 'true', '1' parse to true
+// Strict boolean parser where null, undefined, and empty string resolve to undefined (triggering zod defaults)
 export const strictBooleanSchema = z.preprocess((val) => {
+  if (val === null || val === undefined || val === '') return undefined;
   if (typeof val === 'boolean') return val;
   if (typeof val === 'string') {
     const lower = val.trim().toLowerCase();
     if (lower === 'true' || lower === '1') return true;
-    if (lower === 'false' || lower === '0' || lower === '') return false;
+    if (lower === 'false' || lower === '0') return false;
   }
   return val;
 }, z.boolean());
@@ -136,6 +137,12 @@ export const aigiVerdictQuerySchema = z.object({
   maxHops: hopDepthSchema.default(3),
   firewallEnabled: strictBooleanSchema.default(true),
   includeGemini: strictBooleanSchema.default(false),
+  linkId: z.string().trim().optional(),
+  c: z.string().trim().nullable().optional(),
+  sig: z.string().trim().nullable().optional(),
+  scanAttestation: z.string().trim().nullable().optional(),
+  proofOfControlToken: z.string().trim().nullable().optional(),
+  simulated: strictBooleanSchema.default(false),
 });
 
 export const aigiVerdictBodySchema = z.object({
@@ -145,6 +152,28 @@ export const aigiVerdictBodySchema = z.object({
   policy: firewallPolicySchema.partial().optional(),
   includeGemini: strictBooleanSchema.default(false),
   scan: z.record(z.string(), z.unknown()).optional(),
+  linkId: z.string().trim().optional(),
+  c: z.string().trim().nullable().optional(),
+  sig: z.string().trim().nullable().optional(),
+  scanAttestation: z.string().trim().nullable().optional(),
+  proofOfControlToken: z.string().trim().nullable().optional(),
+  simulated: strictBooleanSchema.default(false),
+});
+
+// 5b. /api/settlements/report schema
+export const settlementReportBodySchema = z.object({
+  linkId: z.string().trim().min(1),
+  c: z.string().trim().nullable().optional(),
+  sig: z.string().trim().nullable().optional(),
+  scanAttestation: z.string().trim().min(1, 'scanAttestation is required to report settlement'),
+  proofOfControlToken: z.string().trim().min(1, 'proofOfControlToken is required to report settlement'),
+  txHash: z.string().trim().regex(/^0x[0-9a-fA-F]{64}$/, 'txHash must be a 32-byte 0x-hex string').optional(),
+  chainId: z.coerce.number().int(),
+  settlementMode: z.enum(['EVM_SOCKET', 'BTC_SILENT_PAYMENT', 'XMR_SUBADDRESS']),
+  amount: z.string().trim().min(1),
+  asset: z.string().trim().default('USDC'),
+  bridgeUsed: z.string().trim().optional(),
+  simulated: strictBooleanSchema.default(false),
 });
 
 // 6. /api/events schemas

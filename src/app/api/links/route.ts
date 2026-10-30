@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import {
   encodeSignedLinkPayloadToBase64Url,
   getStoredLinkRecord,
+  getStoredLinkRecordAsync,
   isLinkRevoked,
+  isLinkRevokedAsync,
   storeSignedLinkRecord,
   verifySignedPaymentLink,
 } from '@/lib/links';
@@ -14,6 +16,15 @@ import {
 import type { SignedPaymentLinkPayload } from '@/types/veilpay';
 
 export async function GET(request: NextRequest) {
+  const ip = getClientIp(request);
+  const rateLimit = await checkRateLimit('get-link', ip, {
+    limit: 60,
+    windowSeconds: 60,
+  });
+  if (!rateLimit.allowed) {
+    return buildRateLimitExceededResponse(rateLimit);
+  }
+
   const sp = request.nextUrl.searchParams;
   const c = sp.get('c');
   const sig = sp.get('sig');
@@ -32,33 +43,62 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(result, { status: 200 });
   }
 
-  if (linkId) {
-    if (isLinkRevoked(linkId)) {
+  const targetLookupKey = linkId || handle;
+  if (targetLookupKey) {
+    const isRevoked =
+      isLinkRevoked(targetLookupKey) ||
+      (await isLinkRevokedAsync(targetLookupKey));
+
+    if (isRevoked) {
       return NextResponse.json(
         {
           valid: false,
           errorCode: 'REVOKED_LINK',
-          reason: `Payment link ${linkId} has been revoked by the receiver.`,
+          reason: `Payment link ${targetLookupKey} has been revoked by the receiver.`,
         },
         { status: 410 }
       );
     }
-    const stored = getStoredLinkRecord(linkId);
+
+    const stored =
+      getStoredLinkRecord(targetLookupKey) ||
+      (await getStoredLinkRecordAsync(targetLookupKey));
+
     if (!stored) {
       return NextResponse.json(
         {
           valid: false,
           errorCode: 'MALFORMED_LINK_PAYLOAD',
-          reason: `No stored payment link found for linkId "${linkId}".`,
+          reason: `No stored payment link found for "${targetLookupKey}".`,
         },
         { status: 404 }
       );
     }
+
+    // Re-verify signature on read per P0-3
+    const reVerify = await verifySignedPaymentLink({
+      encodedPayload: stored.encodedPayload,
+      signature: stored.signature,
+    });
+
+    if (!reVerify.valid || !reVerify.payload) {
+      return NextResponse.json(
+        {
+          valid: false,
+          errorCode: reVerify.errorCode ?? 'INVALID_SIGNATURE',
+          reason:
+            reVerify.reason ??
+            'Stored payment link signature failed re-verification on read.',
+        },
+        { status: 400 }
+      );
+    }
+
     return NextResponse.json(
       {
         valid: true,
-        trustLevel: stored.trustLevel,
-        payload: stored.payload,
+        trustLevel: reVerify.trustLevel ?? stored.trustLevel,
+        payload: reVerify.payload,
         c: stored.encodedPayload,
         sig: stored.signature,
       },
@@ -122,11 +162,12 @@ export async function POST(request: NextRequest) {
       verification.payload
     );
 
-    const { record } = storeSignedLinkRecord({
+    const { record, handleCollision } = storeSignedLinkRecord({
       payload: verification.payload,
       encodedPayload: canonicalEncoded,
       signature: signature as `0x${string}`,
       trustLevel: verification.trustLevel ?? 'SIGNED_UNPROVEN',
+      allowHandleCollision: true,
     });
 
     const baseOrigin = (
@@ -136,34 +177,32 @@ export async function POST(request: NextRequest) {
     ).replace(/\/+$/, '');
 
     const url = `${baseOrigin}/pay/${encodeURIComponent(record.handle)}?c=${canonicalEncoded}&sig=${encodeURIComponent(record.signature)}`;
+    const shortUrl = `${baseOrigin}/pay/${encodeURIComponent(record.handle)}`;
 
     return NextResponse.json(
       {
         ok: true,
-        linkId: record.linkId,
-        handle: record.handle,
-        trustLevel: record.trustLevel,
-        c: canonicalEncoded,
-        sig: record.signature,
+        record,
         url,
-        payload: record.payload,
+        shortUrl,
+        handleStatus: handleCollision ? 'NOT_OWNED_BY_SIGNER' : 'OWNED',
+        warning: handleCollision
+          ? `Handle "${record.handle}" is already owned by a different signer; short link routes to previous owner.`
+          : undefined,
       },
       { status: 201 }
     );
   } catch (err) {
-    const msg = err instanceof Error ? err.message : '';
-    const isCollision =
-      msg.includes('LINK_ID_COLLISION') || msg.includes('HANDLE_COLLISION');
     return NextResponse.json(
       {
         ok: false,
-        errorCode: isCollision ? 'LINK_COLLISION' : 'MALFORMED_LINK_PAYLOAD',
+        errorCode: 'STORE_LINK_FAILED',
         reason:
           err instanceof Error
             ? err.message
-            : 'Failed to create signed payment link.',
+            : 'An unexpected error occurred while storing payment link.',
       },
-      { status: isCollision ? 409 : 400 }
+      { status: 500 }
     );
   }
 }

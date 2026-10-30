@@ -1,5 +1,6 @@
-import type { LiveCrawlSettings } from '@/types/veilpay';
+import type { FirewallScanResult, LiveCrawlSettings } from '@/types/veilpay';
 import type { RunFullScanResult } from '@/lib/graph/full-scan';
+import { getStorage } from '@/lib/storage';
 
 // Hard server maxima (env-configurable with sensible production defaults)
 export function clampCrawlSettings(
@@ -36,7 +37,7 @@ export function clampCrawlSettings(
 }
 
 interface ScanCacheEntry {
-  result: RunFullScanResult;
+  scan: FirewallScanResult;
   expiresAt: number;
 }
 
@@ -51,33 +52,65 @@ export function clearScanAndGeminiCaches(): void {
 export function buildScanCacheKey(
   targetWallet: string,
   chainId: number,
-  policyHash: string
+  policyHash: string,
+  graphSnapshotId = 'live'
 ): string {
-  return `scan:${targetWallet.toLowerCase()}:${chainId}:${policyHash.toLowerCase()}`;
+  return `scan:${targetWallet.toLowerCase()}:${chainId}:${policyHash.toLowerCase()}:${graphSnapshotId}`;
 }
 
 export function getCachedScanResult(
   key: string,
   now = Date.now()
-): RunFullScanResult | null {
+): (FirewallScanResult & { scan: FirewallScanResult }) | null {
   const entry = memoryScanCache.get(key);
   if (!entry) return null;
   if (now > entry.expiresAt) {
     memoryScanCache.delete(key);
     return null;
   }
-  return entry.result;
+  return Object.assign({}, entry.scan, { scan: entry.scan });
+}
+
+export async function getCachedScanResultAsync(
+  key: string,
+  now = Date.now()
+): Promise<(FirewallScanResult & { scan: FirewallScanResult }) | null> {
+  const local = getCachedScanResult(key, now);
+  if (local) return local;
+
+  const storage = getStorage();
+  const stored = await storage.get<FirewallScanResult>(`scancache:${key}`);
+  if (stored) {
+    memoryScanCache.set(key, {
+      scan: stored,
+      expiresAt: now + 30_000,
+    });
+    return Object.assign({}, stored, { scan: stored });
+  }
+  return null;
 }
 
 export function setCachedScanResult(
   key: string,
-  result: RunFullScanResult,
+  scanOrResult: FirewallScanResult | RunFullScanResult,
   ttlMs = 60_000,
   now = Date.now()
 ): void {
+  const scan: FirewallScanResult =
+    'scan' in scanOrResult ? (scanOrResult as RunFullScanResult).scan : (scanOrResult as FirewallScanResult);
+
+  // Per P1-2: Never cache INCONCLUSIVE caused by upstream errors for more than ~5-10s
+  const effectiveTtl =
+    scan.verdict === 'INCONCLUSIVE' ? Math.min(ttlMs, 8_000) : ttlMs;
+
   memoryScanCache.set(key, {
-    result,
-    expiresAt: now + ttlMs,
+    scan,
+    expiresAt: now + effectiveTtl,
+  });
+
+  const storage = getStorage();
+  void storage.set(`scancache:${key}`, scan, {
+    exSeconds: Math.ceil(effectiveTtl / 1000),
   });
 }
 

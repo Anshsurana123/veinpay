@@ -210,6 +210,8 @@ export function PayerCheckoutPanel() {
             </div>
             <span
               className={`border px-2 py-0.5 font-bold uppercase ${
+                activeSignedLink.trustLevel === 'SELF_SIGNED_VAULT' ||
+                activeSignedLink.trustLevel === 'HANDLE_VERIFIED' ||
                 activeSignedLink.trustLevel === 'PROVEN'
                   ? 'border-[#1F9D68]/60 bg-[#0E291E] text-[#1F9D68]'
                   : 'border-[#D99B26]/60 bg-[#2B210D] text-[#D99B26]'

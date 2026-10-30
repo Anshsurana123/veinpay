@@ -94,7 +94,7 @@ describe('EIP-712 Receiver-Signed Payment Links (Issue 4)', () => {
       signature: sig,
     });
     expect(res.valid).toBe(true);
-    expect(res.trustLevel).toBe('PROVEN');
+    expect(res.trustLevel).toBe('SELF_SIGNED_VAULT');
     expect(res.payload?.linkId).toBe(payload.linkId);
   });
 
@@ -278,7 +278,7 @@ describe('EIP-712 Receiver-Signed Payment Links (Issue 4)', () => {
       },
     });
     expect(scRes.valid).toBe(true);
-    expect(scRes.trustLevel).toBe('PROVEN');
+    expect(scRes.trustLevel).toBe('SELF_SIGNED_VAULT');
   });
 
   it('Rejects legacy unsigned ?c= links with a clear error message', async () => {

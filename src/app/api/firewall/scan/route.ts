@@ -48,6 +48,14 @@ async function handleScan(params: {
     );
   }
 
+  const isDemo = Boolean(
+    params.simulated &&
+      (process.env.NEXT_PUBLIC_DEMO_MODE === 'true' ||
+        process.env.ALLOW_LOCAL_ENGINE === 'true' ||
+        authority.linkId.startsWith('0xsim') ||
+        authority.linkId === 'default')
+  );
+
   const { scan, receipt } = await runFullScan({
     targetWallet: params.targetWallet,
     merchantWallet: authority.vaultAddress,
@@ -55,6 +63,7 @@ async function handleScan(params: {
     policy: authority.policy,
     crawlSettings: params.crawlSettings,
     includeGemini: params.includeGemini,
+    linkId: authority.linkId,
   });
 
   // Record scan result event into events store
@@ -64,7 +73,7 @@ async function handleScan(params: {
       linkId: authority.linkId,
       eventType: 'SCAN_RESULT',
       status: scan.socketUnlocked ? 'ALLOWED' : 'BLOCKED',
-      simulated: Boolean(params.simulated),
+      simulated: isDemo,
       payerAddress: scan.targetWallet,
       receiverVault: authority.vaultAddress,
       amount: '0.00',
@@ -98,6 +107,7 @@ async function handleScan(params: {
     socketUnlocked: scan.socketUnlocked,
     proofOfControl,
     policy: authority.policy,
+    chainId: params.chainId,
   });
 
   return NextResponse.json({
@@ -134,11 +144,14 @@ export async function GET(request: NextRequest) {
       undefined,
     chainId: sp.get('chainId') || undefined,
     linkId: sp.get('linkId') || undefined,
-    c: sp.get('c'),
-    sig: sp.get('sig'),
-    includeGemini: sp.get('includeGemini'),
-    proofOfControlToken: sp.get('proofOfControlToken'),
-    simulated: sp.get('simulated'),
+    c: sp.get('c') || undefined,
+    sig: sp.get('sig') || undefined,
+    includeGemini: sp.get('includeGemini') ?? undefined,
+    proofOfControlToken:
+      request.headers.get('x-proof-of-control-token') ||
+      sp.get('proofOfControlToken') ||
+      undefined,
+    simulated: sp.get('simulated') ?? undefined,
   };
 
   const validation = validateWithZod(scanQuerySchema, rawParams);

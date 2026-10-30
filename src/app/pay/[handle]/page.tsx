@@ -31,12 +31,44 @@ function StandalonePayContent({ handle }: { handle: string }) {
       setVerifying(true);
       setLinkVerificationError(null);
 
+      // Support short links /pay/[handle] via server lookup, with ?c=&sig= as stateless fallback
       if (!encodedPayload || !signature) {
+        try {
+          const res = await fetch(`/api/links?handle=${encodeURIComponent(handle)}`);
+          const data = (await res.json()) as {
+            valid?: boolean;
+            reason?: string;
+            trustLevel?: LinkTrustLevel;
+            payload?: SignedPaymentLinkPayload;
+            c?: string;
+            sig?: `0x${string}`;
+          };
+
+          if (cancelled) return;
+
+          if (res.ok && data.valid && data.payload && data.c && data.sig && data.trustLevel) {
+            const decodedConfig = signedLinkPayloadToVeilPayConfig(data.payload);
+            hydrateFromVerifiedLink(
+              {
+                payload: data.payload,
+                c: data.c,
+                sig: data.sig,
+                trustLevel: data.trustLevel,
+              },
+              decodedConfig
+            );
+            setVerifying(false);
+            return;
+          }
+        } catch {
+          // Fall through to error
+        }
+
         if (!cancelled) {
           setLinkVerificationError(
             encodedPayload && !signature
               ? 'Legacy unsigned payment links are rejected. Payment links must include an EIP-712 receiver signature (?c=…&sig=0x…).'
-              : 'Missing signed payment link parameters (?c=…&sig=0x…).'
+              : `No active verified payment link found for handle "${handle}". Check the handle or use a full link with ?c=…&sig=0x…`
           );
           setVerifying(false);
         }
