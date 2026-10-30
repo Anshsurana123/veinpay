@@ -199,4 +199,223 @@ describe('TigerGraph MCP Implementation Suite', () => {
       delete process.env.TIGERGRAPH_TOKEN;
     }
   });
+
+  describe('P0-6 & Section 3: Official MCP Protocol Conformance', () => {
+    it('tools/list returns the official 6 tools with Zod schemas', async () => {
+      const req = new NextRequest('http://localhost:3000/api/mcp/tigergraph', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          accept: 'application/json',
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 'list-1',
+          method: 'tools/list',
+          params: {},
+        }),
+      });
+
+      const res = await postMcp(req);
+      expect(res.status).toBe(200);
+      const json = await res.json();
+      expect(json.jsonrpc).toBe('2.0');
+      expect(json.id).toBe('list-1');
+      expect(Array.isArray(json.result.tools)).toBe(true);
+
+      const toolNames = json.result.tools.map((t: { name: string }) => t.name);
+      expect(toolNames).toContain('veilpay_scan_wallet');
+      expect(toolNames).toContain('veilpay_check_recipient');
+      expect(toolNames).toContain('veilpay_verify_receipt');
+      expect(toolNames).toContain('tigergraph_run_veilpay_query');
+      expect(toolNames).toContain('tigergraph_get_neighbors');
+      expect(toolNames).toContain('tigergraph_get_schema');
+    });
+
+    it('streams SSE text/event-stream when client requests text/event-stream', async () => {
+      const req = new NextRequest('http://localhost:3000/api/mcp/tigergraph', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          accept: 'text/event-stream',
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 'sse-ping',
+          method: 'ping',
+        }),
+      });
+
+      const res = await postMcp(req);
+      expect(res.status).toBe(200);
+      expect(res.headers.get('content-type')).toContain('text/event-stream');
+      const text = await res.text();
+      expect(text).toContain('event: message');
+      expect(text).toContain('"jsonrpc":"2.0"');
+    });
+
+    it('ping method returns standard success response', async () => {
+      const req = new NextRequest('http://localhost:3000/api/mcp/tigergraph', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 'ping-1',
+          method: 'ping',
+        }),
+      });
+
+      const res = await postMcp(req);
+      expect(res.status).toBe(200);
+      const json = await res.json();
+      expect(json.jsonrpc).toBe('2.0');
+      expect(json.id).toBe('ping-1');
+      expect(json.result).toEqual({});
+    });
+
+    it('unknown method returns JSON-RPC -32601 Method not found', async () => {
+      const req = new NextRequest('http://localhost:3000/api/mcp/tigergraph', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 'bad-1',
+          method: 'non_existent_method_xyz',
+        }),
+      });
+
+      const res = await postMcp(req);
+      expect(res.status).toBe(200);
+      const json = await res.json();
+      expect(json.jsonrpc).toBe('2.0');
+      expect(json.id).toBe('bad-1');
+      expect(json.error).toBeDefined();
+      expect(json.error.code).toBe(-32601);
+      expect(json.error.message).toContain('Method not found');
+    });
+
+    it('tools/call veilpay_scan_wallet executes and returns spec-compliant content', async () => {
+      const req = new NextRequest('http://localhost:3000/api/mcp/tigergraph', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 'call-scan',
+          method: 'tools/call',
+          params: {
+            name: 'veilpay_scan_wallet',
+            arguments: {
+              address: '0x1111111111111111111111111111111111111111',
+              maxHops: 3,
+            },
+          },
+        }),
+      });
+
+      const res = await postMcp(req);
+      expect(res.status).toBe(200);
+      const json = await res.json();
+      expect(json.result.content).toBeDefined();
+      expect(json.result.content[0].type).toBe('text');
+      const scan = JSON.parse(json.result.content[0].text);
+      expect(scan.verdict).toBe('VERIFIED_CLEAN');
+    });
+
+    it('tools/call veilpay_check_recipient checks outbound poison lookalike', async () => {
+      const req = new NextRequest('http://localhost:3000/api/mcp/tigergraph', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 'call-check',
+          method: 'tools/call',
+          params: {
+            name: 'veilpay_check_recipient',
+            arguments: {
+              candidateAddress: '0x3333333333333333333333333333333333333333',
+            },
+          },
+        }),
+      });
+
+      const res = await postMcp(req);
+      expect(res.status).toBe(200);
+      const json = await res.json();
+      expect(json.result.content[0].type).toBe('text');
+      const poison = JSON.parse(json.result.content[0].text);
+      expect(poison.candidateAddress).toBe('0x3333333333333333333333333333333333333333');
+    });
+
+    it('tools/call tigergraph_run_veilpay_query rejects non-allowlisted query', async () => {
+      const req = new NextRequest('http://localhost:3000/api/mcp/tigergraph', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 'call-tg-query-bad',
+          method: 'tools/call',
+          params: {
+            name: 'tigergraph_run_veilpay_query',
+            arguments: {
+              queryName: 'arbitrary_drop_graph_query',
+            },
+          },
+        }),
+      });
+
+      const res = await postMcp(req);
+      expect(res.status).toBe(200);
+      const json = await res.json();
+      expect(json.result.isError).toBe(true);
+      expect(json.result.content[0].text).toContain('Forbidden query');
+    });
+
+    it('enforces Bearer token authentication when MCP_API_KEY is configured', async () => {
+      const origKey = process.env.MCP_API_KEY;
+      process.env.MCP_API_KEY = 'super-secret-mcp-key-12345';
+
+      try {
+        // 1. Unauthenticated request without header -> 401
+        const unauthReq = new NextRequest('http://localhost:3000/api/mcp/tigergraph', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'ping' }),
+        });
+        const unauthRes = await postMcp(unauthReq);
+        expect(unauthRes.status).toBe(401);
+        const unauthJson = await unauthRes.json();
+        expect(unauthJson.error).toBe('UNAUTHORIZED');
+
+        // 2. Request with invalid key -> 401
+        const badReq = new NextRequest('http://localhost:3000/api/mcp/tigergraph', {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            authorization: 'Bearer wrong-key',
+          },
+          body: JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'ping' }),
+        });
+        const badRes = await postMcp(badReq);
+        expect(badRes.status).toBe(401);
+
+        // 3. Request with valid key -> 200
+        const goodReq = new NextRequest('http://localhost:3000/api/mcp/tigergraph', {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            authorization: 'Bearer super-secret-mcp-key-12345',
+          },
+          body: JSON.stringify({ jsonrpc: '2.0', id: 3, method: 'ping' }),
+        });
+        const goodRes = await postMcp(goodReq);
+        expect(goodRes.status).toBe(200);
+      } finally {
+        if (origKey !== undefined) {
+          process.env.MCP_API_KEY = origKey;
+        } else {
+          delete process.env.MCP_API_KEY;
+        }
+      }
+    });
+  });
 });
