@@ -41,8 +41,9 @@ gsql tigergraph/veilpay_firewall.gsql
 ```
 
 ### Option B: Interactive GSQL Shell or Web Shell
-If pasting directly into the interactive `GSQL>` shell, wrap multi-line statements with `BEGIN` and `END`, or use the file execution command:
+If using the interactive `GSQL>` prompt, always ensure you are in the global scope before creating global schema components:
 ```gsql
+GSQL> USE GLOBAL
 GSQL> @tigergraph/veilpay_firewall.gsql
 ```
 

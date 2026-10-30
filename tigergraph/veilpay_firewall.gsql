@@ -18,6 +18,8 @@
 // 1. VERTEX & DIRECTED EDGE SCHEMA DEFINITIONS
 // ----------------------------------------------------------------------------
 
+USE GLOBAL
+
 CREATE VERTEX Wallet (
   PRIMARY_ID address STRING,
   label STRING,
