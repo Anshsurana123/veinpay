@@ -1,9 +1,9 @@
 /**
- * VeilPay — TigerGraph RESTPP Endpoint Client & Query Adapter
+ * VeinPay — TigerGraph RESTPP Endpoint Client & Query Adapter
  * File: src/lib/tigergraph.ts
  *
  * Implements the TigerGraph 4.x/3.x RESTPP query client for:
- *   /restpp/query/{graph_name}/veilpay_firewall_check?target_wallet=...&max_hops=...
+ *   /restpp/query/{graph_name}/veinpay_firewall_check?target_wallet=...&max_hops=...
  * Parses standard TigerGraph JSON response envelope: { version, error, message, results }
  */
 
@@ -12,7 +12,7 @@ import type {
   FirewallScanResult,
   TigerGraphRestppEnvelope,
   VerdictStatus,
-} from '@/types/veilpay';
+} from '@/types/veinpay';
 import {
   tryExecuteLiveTigerGraphQuery,
   upsertGraphToTigerGraph,
@@ -34,7 +34,7 @@ export interface TigerGraphQueryParams {
 
 /**
  * Direct TigerGraph RESTPP Endpoint Caller
- * Queries /restpp/query/{graph_name}/veilpay_firewall_check
+ * Queries /restpp/query/{graph_name}/veinpay_firewall_check
  * with query parameters or POST body, and parses standard TigerGraph envelope.
  */
 export async function queryTigerGraphRestpp(
@@ -45,7 +45,7 @@ export async function queryTigerGraphRestpp(
   const graphName =
     params.graphName?.trim() ||
     process.env.TIGERGRAPH_GRAPH?.trim() ||
-    'VeilPayGraph';
+    'VeinPayGraph';
   const token =
     params.token?.trim() || process.env.TIGERGRAPH_TOKEN?.trim() || '';
 
@@ -69,7 +69,7 @@ export async function queryTigerGraphRestpp(
     firewall_enabled: String(params.firewallEnabled ?? true),
   });
 
-  const url = `${baseUrl}/restpp/query/${encodeURIComponent(graphName)}/veilpay_firewall_check?${queryParams.toString()}`;
+  const url = `${baseUrl}/restpp/query/${encodeURIComponent(graphName)}/veinpay_firewall_check?${queryParams.toString()}`;
 
   const headers: Record<string, string> = {
     Accept: 'application/json',

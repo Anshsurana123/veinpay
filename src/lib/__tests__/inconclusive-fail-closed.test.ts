@@ -1,8 +1,8 @@
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
-import { runVeilPayFirewallTraversal } from '@/lib/graph/engine';
+import { runVeinPayFirewallTraversal } from '@/lib/graph/engine';
 import { crawlLiveAddressAndScan } from '@/lib/graph/live-crawler';
 import { generateAigiForensicReceipt } from '@/lib/aigi/verdict';
-import type { FirewallPolicyConfig } from '@/types/veilpay';
+import type { FirewallPolicyConfig } from '@/types/veinpay';
 
 describe('Issue 7: Unknown wallets fail closed with INCONCLUSIVE', () => {
   const originalEnv = process.env.ETHERSCAN_API_KEY;
@@ -71,7 +71,7 @@ describe('Issue 7: Unknown wallets fail closed with INCONCLUSIVE', () => {
   });
 
   it('Returns INCONCLUSIVE when crawl is truncated due to budget/timeout limits', () => {
-    const scan = runVeilPayFirewallTraversal({
+    const scan = runVeinPayFirewallTraversal({
       targetWallet: unseededWallet,
       merchantWallet: '0x2222222222222222222222222222222222222222',
       policy: baseBlockPolicy,
@@ -88,7 +88,7 @@ describe('Issue 7: Unknown wallets fail closed with INCONCLUSIVE', () => {
   });
 
   it('Direct engine invocation with isInconclusive=true blocks or warns according to policy', () => {
-    const blockedScan = runVeilPayFirewallTraversal({
+    const blockedScan = runVeinPayFirewallTraversal({
       targetWallet: unseededWallet,
       policy: baseBlockPolicy,
       isInconclusive: true,
@@ -97,7 +97,7 @@ describe('Issue 7: Unknown wallets fail closed with INCONCLUSIVE', () => {
     expect(blockedScan.verdict).toBe('INCONCLUSIVE');
     expect(blockedScan.socketUnlocked).toBe(false);
 
-    const warnedScan = runVeilPayFirewallTraversal({
+    const warnedScan = runVeinPayFirewallTraversal({
       targetWallet: unseededWallet,
       policy: baseWarnPolicy,
       isInconclusive: true,

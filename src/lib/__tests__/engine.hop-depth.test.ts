@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { runVeilPayFirewallTraversal } from '@/lib/graph/engine';
-import type { FirewallPolicyConfig, HopDepth } from '@/types/veilpay';
+import { runVeinPayFirewallTraversal } from '@/lib/graph/engine';
+import type { FirewallPolicyConfig, HopDepth } from '@/types/veinpay';
 
 const basePolicy = (maxHops: HopDepth, firewallEnabled = true): FirewallPolicyConfig => ({
   firewallEnabled,
@@ -15,7 +15,7 @@ describe('Case 1: Dynamic Hop-Depth Boundary Conditions (max_hops = 1..5)', () =
   it('Persona 1 (0x4F2a...88E1 Clean Whale) passes across all hop depths 1..5', () => {
     const p1 = '0x4F2a9c117034e8B1200499A1c3f88200000188E1';
     for (const hops of [1, 2, 3, 4, 5] as HopDepth[]) {
-      const res = runVeilPayFirewallTraversal({
+      const res = runVeinPayFirewallTraversal({
         targetWallet: p1,
         policy: basePolicy(hops),
       });
@@ -30,7 +30,7 @@ describe('Case 1: Dynamic Hop-Depth Boundary Conditions (max_hops = 1..5)', () =
     const p2 = '0x99B1c402881a77e3d90123456789aB00000FDead';
 
     // Hop 1 stops at Mule_1 (unmarked EOA) -> VERIFIED_CLEAN with shallowScanAdvisory
-    const hop1 = runVeilPayFirewallTraversal({
+    const hop1 = runVeinPayFirewallTraversal({
       targetWallet: p2,
       policy: basePolicy(1),
     });
@@ -41,7 +41,7 @@ describe('Case 1: Dynamic Hop-Depth Boundary Conditions (max_hops = 1..5)', () =
 
     // Hop 2..5 reaches PinkDrainer (0xdead...0001) at Hop 2 -> INTERCEPTED_TAINT
     for (const hops of [2, 3, 4, 5] as HopDepth[]) {
-      const res = runVeilPayFirewallTraversal({
+      const res = runVeinPayFirewallTraversal({
         targetWallet: p2,
         policy: basePolicy(hops),
       });
@@ -57,7 +57,7 @@ describe('Case 1: Dynamic Hop-Depth Boundary Conditions (max_hops = 1..5)', () =
     const p4 = '0x33C077112233445566778899aABbcC00000540b0';
 
     for (const hops of [1, 2, 3] as HopDepth[]) {
-      const res = runVeilPayFirewallTraversal({
+      const res = runVeinPayFirewallTraversal({
         targetWallet: p4,
         policy: basePolicy(hops),
       });
@@ -67,7 +67,7 @@ describe('Case 1: Dynamic Hop-Depth Boundary Conditions (max_hops = 1..5)', () =
     }
 
     for (const hops of [4, 5] as HopDepth[]) {
-      const res = runVeilPayFirewallTraversal({
+      const res = runVeinPayFirewallTraversal({
         targetWallet: p4,
         policy: basePolicy(hops),
       });
@@ -80,7 +80,7 @@ describe('Case 1: Dynamic Hop-Depth Boundary Conditions (max_hops = 1..5)', () =
 
   it('Master Firewall Toggle OFF returns ADVISORY_BYPASSED and unlocks SOCKET while still reporting topological taint', () => {
     const p2 = '0x99B1c402881a77e3d90123456789aB00000FDead';
-    const bypassed = runVeilPayFirewallTraversal({
+    const bypassed = runVeinPayFirewallTraversal({
       targetWallet: p2,
       policy: basePolicy(3, false),
     });

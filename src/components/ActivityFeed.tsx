@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { useVeilPayStore } from '@/store/veilpay-store';
+import { useVeinPayStore } from '@/store/veinpay-store';
 import { useCctpTransfer } from '@/hooks/useCctpTransfer';
 
 export function ActivityFeed() {
@@ -12,7 +12,7 @@ export function ActivityFeed() {
     runFirewallAndQuotePipeline,
     fetchEvents,
     linkConfig,
-  } = useVeilPayStore();
+  } = useVeinPayStore();
 
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 

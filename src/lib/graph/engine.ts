@@ -8,7 +8,7 @@ import type {
   RiskCategory,
   TigerGraphRestppEnvelope,
   VerdictStatus,
-} from '@/types/veilpay';
+} from '@/types/veinpay';
 import threatSnapshot from '@/data/threat-intel-snapshot.json';
 import {
   DEMO_ADDRESS_ALIASES,
@@ -59,13 +59,13 @@ export function buildGsqlQuerySnippet(
   maxHops: HopDepth,
   sybilThreshold: number
 ): string {
-  return `// Executed on TigerGraph Graph: VeilPayGraph (SYNTAX v1)
-INTERPRET QUERY veilpay_firewall_check(
+  return `// Executed on TigerGraph Graph: VeinPayGraph (SYNTAX v1)
+INTERPRET QUERY veinpay_firewall_check(
   target_wallet    = "${targetWallet}",
   merchant_wallet  = "${merchantWallet}",
   max_hops         = ${maxHops},
   sybil_threshold  = ${sybilThreshold}
-) FOR GRAPH VeilPayGraph;`;
+) FOR GRAPH VeinPayGraph;`;
 }
 
 export interface TraversalCoverage {
@@ -91,7 +91,7 @@ export interface RunTraversalOptions {
   coverage?: TraversalCoverage;
 }
 
-export function runVeilPayFirewallTraversal(
+export function runVeinPayFirewallTraversal(
   options: RunTraversalOptions
 ): FirewallScanResult {
   const startPerf = performance.now();
@@ -398,7 +398,7 @@ export function runVeilPayFirewallTraversal(
     }
   }
 
-  // Add VeilPay Firewall Gate / Merchant Vault node for topological completeness
+  // Add VeinPay Firewall Gate / Merchant Vault node for topological completeness
   const merchantLower = merchantCanonical.toLowerCase();
   if (!workingVertices.has(merchantLower)) {
     workingVertices.set(merchantLower, {

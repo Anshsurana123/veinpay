@@ -12,7 +12,7 @@ import { runFullScan } from '@/lib/graph/full-scan';
 import { resolveVerifiedLinkAuthority } from '@/lib/links';
 import { verifyScanAttestation } from '@/lib/security/attestation';
 import { isTestnetChain, resolveTokenByAddressOrSymbol } from '@/lib/socket/tokens';
-import { CctpFinalityMode } from '@/types/veilpay';
+import { CctpFinalityMode } from '@/types/veinpay';
 import {
   buildRateLimitExceededResponse,
   checkRateLimit,
@@ -65,7 +65,7 @@ export async function GET(request: NextRequest) {
     sig: searchParams.get('sig'),
     scanAttestation:
       searchParams.get('scanAttestation') ??
-      request.headers.get('x-veilpay-scan-attestation'),
+      request.headers.get('x-veinpay-scan-attestation'),
     finalityMode: (searchParams.get('finalityMode') ?? 'FAST').toUpperCase(),
     useForwardingService: searchParams.get('useForwardingService'),
   };
@@ -186,7 +186,7 @@ export async function GET(request: NextRequest) {
         success: false,
         statusCode: 403,
         error: 'FIREWALL_INTERCEPTED',
-        message: `CCTP V2 route locked by VeilPay ${scan.maxHopsQueried}-Hop Graph Firewall (${scan.verdict}).`,
+        message: `CCTP V2 route locked by VeinPay ${scan.maxHopsQueried}-Hop Graph Firewall (${scan.verdict}).`,
         verdict: scan.verdict,
         receipt,
       },

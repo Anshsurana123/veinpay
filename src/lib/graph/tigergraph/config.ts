@@ -12,7 +12,7 @@ export function getTigerGraphConfig(): TigerGraphConfig | null {
 
   return {
     host: host.startsWith('http') ? host.replace(/\/+$/, '') : `https://${host}`,
-    graph: process.env.TIGERGRAPH_GRAPH?.trim() || 'VeilPayGraph',
+    graph: process.env.TIGERGRAPH_GRAPH?.trim() || 'VeinPayGraph',
     token: process.env.TIGERGRAPH_TOKEN?.trim(),
     secret: process.env.TIGERGRAPH_SECRET?.trim(),
     timeoutMs: Number(process.env.TIGERGRAPH_TIMEOUT_MS) || 4000,

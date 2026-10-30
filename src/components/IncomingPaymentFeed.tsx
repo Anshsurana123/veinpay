@@ -8,10 +8,10 @@ import {
   Hash,
   Activity,
 } from 'lucide-react';
-import { useVeilPayStore } from '@/store/veilpay-store';
+import { useVeinPayStore } from '@/store/veinpay-store';
 
 export function IncomingPaymentFeed() {
-  const { paymentFeed, selectPersona } = useVeilPayStore();
+  const { paymentFeed, selectPersona } = useVeinPayStore();
 
   return (
     <div className="border border-[#262A33] bg-[#131519] p-4">

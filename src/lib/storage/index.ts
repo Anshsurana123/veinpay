@@ -1,5 +1,5 @@
 /**
- * VeilPay — Storage Layer Factory & Manager
+ * VeinPay — Storage Layer Factory & Manager
  * File: src/lib/storage/index.ts
  */
 

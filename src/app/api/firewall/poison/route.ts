@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import type { VaultSettlementMode } from '@/types/veilpay';
+import type { VaultSettlementMode } from '@/types/veinpay';
 import type { TrustedContactRecord } from '@/lib/graph/seed-topologies';
 import { evaluateOutboundPoisonRisk } from '@/lib/graph/poison-guard';
 

@@ -3,8 +3,8 @@ import type {
   CctpFinalityMode,
   CctpRoute,
   NormalizedSocketRoute,
-  VeilPayQuoteResponse,
-} from '@/types/veilpay';
+  VeinPayQuoteResponse,
+} from '@/types/veinpay';
 import {
   CIRCLE_IRIS_SANDBOX_BASE_URL,
   getCctpChainConfig,
@@ -50,7 +50,7 @@ export type ComputeCctpQuoteOutcome =
   | {
       ok: true;
       route: CctpRoute;
-      quoteResponse: VeilPayQuoteResponse;
+      quoteResponse: VeinPayQuoteResponse;
     }
   | {
       ok: false;
@@ -61,7 +61,7 @@ export type ComputeCctpQuoteOutcome =
         | 'AMOUNT_BELOW_FEE'
         | 'SAME_CHAIN_USE_DIRECT';
       message: string;
-      quoteResponse: VeilPayQuoteResponse;
+      quoteResponse: VeinPayQuoteResponse;
     };
 
 /**

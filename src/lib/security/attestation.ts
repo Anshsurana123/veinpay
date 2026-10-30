@@ -1,5 +1,5 @@
 import { createHmac, randomBytes, timingSafeEqual } from 'crypto';
-import type { FirewallPolicyConfig, VerdictStatus } from '@/types/veilpay';
+import type { FirewallPolicyConfig, VerdictStatus } from '@/types/veinpay';
 import { AUTHORITATIVE_DEFAULT_POLICY } from '@/lib/graph/full-scan';
 import { getStorage } from '@/lib/storage';
 
@@ -23,24 +23,24 @@ export interface ScanAttestationPayload {
 const DEFAULT_ATTESTATION_TTL_MS = 2 * 60 * 1000;
 
 export function assertScanAttestationSecretConfigured(): void {
-  const secret = process.env.VEILPAY_ATTESTATION_SECRET?.trim();
-  const allowDev = process.env.VEILPAY_ALLOW_DEV_SECRETS === 'true';
+  const secret = process.env.VEINPAY_ATTESTATION_SECRET?.trim();
+  const allowDev = process.env.VEINPAY_ALLOW_DEV_SECRETS === 'true';
   if (process.env.NODE_ENV === 'production' && !secret && !allowDev) {
     throw new Error(
-      'FATAL: VEILPAY_ATTESTATION_SECRET is required in production.'
+      'FATAL: VEINPAY_ATTESTATION_SECRET is required in production.'
     );
   }
 }
 
 function getAttestationSecret(): string {
-  const secret = process.env.VEILPAY_ATTESTATION_SECRET?.trim();
+  const secret = process.env.VEINPAY_ATTESTATION_SECRET?.trim();
   if (!secret) {
-    if (process.env.NODE_ENV === 'production' && process.env.VEILPAY_ALLOW_DEV_SECRETS !== 'true') {
+    if (process.env.NODE_ENV === 'production' && process.env.VEINPAY_ALLOW_DEV_SECRETS !== 'true') {
       throw new Error(
-        'FATAL: VEILPAY_ATTESTATION_SECRET is required in production.'
+        'FATAL: VEINPAY_ATTESTATION_SECRET is required in production.'
       );
     }
-    return 'veilpay-dev-ephemeral-attestation-hmac-secret-2026';
+    return 'veinpay-dev-ephemeral-attestation-hmac-secret-2026';
   }
   return secret;
 }
@@ -54,7 +54,7 @@ export function computeCanonicalPolicyHash(policy: FirewallPolicyConfig): string
     sybilBlockThreshold: Number(policy.sybilBlockThreshold),
     unbundleEnabled: Boolean(policy.unbundleEnabled),
   });
-  return createHmac('sha256', 'veilpay-policy-domain-v1')
+  return createHmac('sha256', 'veinpay-policy-domain-v1')
     .update(canonical)
     .digest('hex');
 }

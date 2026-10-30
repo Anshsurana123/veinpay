@@ -1,4 +1,4 @@
-import type { TigerGraphRestppEnvelope } from '@/types/veilpay';
+import type { TigerGraphRestppEnvelope } from '@/types/veinpay';
 import { getTigerGraphConfig, type TigerGraphConfig } from './config';
 import { getTigerGraphAuthToken } from './auth';
 

@@ -6,8 +6,8 @@ import type {
   SignedPaymentLinkPayload,
   SupportedEvmChainId,
   VaultSettlementMode,
-  VeilPayLinkConfig,
-} from '@/types/veilpay';
+  VeinPayLinkConfig,
+} from '@/types/veinpay';
 import {
   canonicalizePolicy,
   computePolicyKeccak256,
@@ -16,13 +16,13 @@ import {
 } from '@/lib/links/canonical';
 
 /**
- * VeilPay EIP-712 Domain
+ * VeinPay EIP-712 Domain
  * Intentionally omits `chainId` and `verifyingContract` so the receiver can sign
  * a cross-chain payment link without forcing a wallet chain-switch prompt.
  * `destinationChainId` is included inside the signed `PaymentLink` message itself.
  */
-export const VEILPAY_EIP712_DOMAIN = {
-  name: 'VeilPay',
+export const VEINPAY_EIP712_DOMAIN = {
+  name: 'VeinPay',
   version: '1',
 } as const;
 
@@ -128,7 +128,7 @@ export function buildPaymentLinkTypedData(payload: SignedPaymentLinkPayload) {
   );
 
   return {
-    domain: VEILPAY_EIP712_DOMAIN,
+    domain: VEINPAY_EIP712_DOMAIN,
     types: PAYMENT_LINK_EIP712_TYPES,
     primaryType: 'PaymentLink' as const,
     message: {
@@ -158,7 +158,7 @@ export interface RevokeLinkMessage {
 export function buildRevokeLinkTypedData(params: RevokeLinkMessage) {
   const checksumSigner = getAddress(params.signer);
   return {
-    domain: VEILPAY_EIP712_DOMAIN,
+    domain: VEINPAY_EIP712_DOMAIN,
     types: REVOKE_LINK_EIP712_TYPES,
     primaryType: 'Revoke' as const,
     message: {
@@ -183,7 +183,7 @@ function getEphemeralSimulatorKey(): `0x${string}` {
  * without reading raw policy or vault fields from the request body.
  */
 export async function buildSimulatorSignedPreviewLink(
-  config: VeilPayLinkConfig
+  config: VeinPayLinkConfig
 ): Promise<{
   payload: SignedPaymentLinkPayload;
   c: string;

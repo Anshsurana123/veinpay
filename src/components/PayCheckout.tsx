@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { isAddress } from 'viem';
 import { useAccount, useSignMessage } from 'wagmi';
-import { useVeilPayStore, type ActivePersonaId } from '@/store/veilpay-store';
+import { useVeinPayStore, type ActivePersonaId } from '@/store/veinpay-store';
 import { WALLET_PERSONAS } from '@/lib/graph/seed-topologies';
 import {
   getChainDisplayName,
@@ -17,7 +17,7 @@ import {
 import { VerdictBanner } from './VerdictBanner';
 import { EvidencePanel } from './EvidencePanel';
 import { RouteCard } from './RouteCard';
-import type { SupportedEvmChainId } from '@/types/veilpay';
+import type { SupportedEvmChainId } from '@/types/veinpay';
 
 export function PayCheckout() {
   const {
@@ -45,7 +45,7 @@ export function PayCheckout() {
     setSettlementModalOpen,
     setVaultMode,
     updateFirewallPolicy,
-  } = useVeilPayStore();
+  } = useVeinPayStore();
 
   const { isConnected, address: wagmiAddress } = useAccount();
   const { signMessageAsync, isPending: isSigningProof } = useSignMessage();
@@ -172,7 +172,7 @@ export function PayCheckout() {
       updateFirewallPolicy({ firewallEnabled: false });
       void runFirewallAndQuotePipeline();
     } else if (val === 'error') {
-      useVeilPayStore.setState({
+      useVeinPayStore.setState({
         scanError:
           'The history service didn’t respond in time. Nothing was sent. Retry the scan, or try again in a minute.',
         isScanning: false,

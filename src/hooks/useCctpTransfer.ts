@@ -13,7 +13,7 @@ import {
   transitionCctpTransfer,
 } from '@/lib/cctp';
 import { evaluateApprovalRequirement } from '@/lib/settlement/approval-machine';
-import { CctpRoute, CctpTransferRecord } from '@/types/veilpay';
+import { CctpRoute, CctpTransferRecord } from '@/types/veinpay';
 
 export interface UseCctpTransferOptions {
   linkId: string;

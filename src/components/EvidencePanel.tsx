@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { useVeilPayStore } from '@/store/veilpay-store';
+import { useVeinPayStore } from '@/store/veinpay-store';
 
 export function EvidencePanel() {
   const {
@@ -10,7 +10,7 @@ export function EvidencePanel() {
     activePayerAddress,
     requestGeminiExecutiveSummary,
     isGeneratingAiNarrative,
-  } = useVeilPayStore();
+  } = useVeinPayStore();
 
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [sybilExpanded, setSybilExpanded] = useState(false);
@@ -63,7 +63,7 @@ export function EvidencePanel() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `veilpay-receipt-${activeReceipt?.receiptId.toLowerCase() ?? 'audit'}.json`;
+    a.download = `veinpay-receipt-${activeReceipt?.receiptId.toLowerCase() ?? 'audit'}.json`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -418,7 +418,7 @@ export function EvidencePanel() {
             )}
             {'\n'}
             {activeScan?.gsqlQuerySnippet ??
-              `INSTALL QUERY veilpay_firewall_check(target, merchant, max_hops=${depthHops})`}
+              `INSTALL QUERY veinpay_firewall_check(target, merchant, max_hops=${depthHops})`}
           </pre>
         )}
 

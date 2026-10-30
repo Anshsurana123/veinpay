@@ -1,6 +1,6 @@
-# VeilPay — End-to-End Implementation Plan (`IMPLEMENTATION_PLAN.md`)
+# VeinPay — End-to-End Implementation Plan (`IMPLEMENTATION_PLAN.md`)
 
-> **Project:** VeilPay — Zero-Doxx Cross-Chain Payment Link & Pre-Sign Graph Firewall  
+> **Project:** VeinPay — Zero-Doxx Cross-Chain Payment Link & Pre-Sign Graph Firewall  
 > **Event:** Hacker House Goa  
 > **Core Sponsors Integrated:** TigerGraph (`3-in-1 Pre-Flight Graph Firewall`) · AIGI (`Deterministic Forensic Security Agent & SHA-256 Receipt`) · SOCKET (`Swap V3 Cross-Chain Engine`) · Cake Wallet (`Default Multi-Chain EVM + BIP-352 BTC Silent Payments + Monero RingCT Subaddress Vault`)
 
@@ -11,9 +11,9 @@
 ```mermaid
 flowchart TD
     subgraph Receiver["Module A & E: Receiver Command Center"]
-        A1["Create Protected VeilPay Link\n(Amount, Token, Dest Chain, Cake Wallet Mode)"]
+        A1["Create Protected VeinPay Link\n(Amount, Token, Dest Chain, Cake Wallet Mode)"]
         A2["Firewall Policy Controls\n(Master Toggle, 1-5 Hops, CleanLink, Unbundle, Sybil Threshold)"]
-        A3["Live Link Generator\n(veilpay.xyz/pay/handle + Stateless Base64URL Config)"]
+        A3["Live Link Generator\n(veinpay.xyz/pay/handle + Stateless Base64URL Config)"]
         E1["Safe Send Outbound Guard (PoisonGraph)\n(42-Char Prefix/Suffix Diff + 4,210 Dust Fan-Out + 1-Click Swap)"]
         F1["Incoming Payment Feed\n(Session Audit Log + Subgraph Replay)"]
     end
@@ -25,7 +25,7 @@ flowchart TD
     end
 
     subgraph Firewall["Module C, D & F: Pre-Sign Graph Firewall (/api/firewall/scan)"]
-        C1["In-Process GSQL-Mirror Graph Engine\nOR Live TigerGraph 4.x RESTPP (/veilpay_firewall_check)"]
+        C1["In-Process GSQL-Mirror Graph Engine\nOR Live TigerGraph 4.x RESTPP (/veinpay_firewall_check)"]
         C2["Interactive 2D Topological Graph Canvas\n(High-DPI SVG, Node/Edge Inspector, Raw RESTPP/GSQL Drawer)"]
         D1["AIGI Forensic Verdict & Compliance Receipt\n(Deterministic SHA-256 Hash + Optional Gemini Narration)"]
     end
@@ -70,14 +70,14 @@ hhgoa/
 │   └── reference/
 │       └── socket-v3-quote-sample.json        # Real captured 50 KB Socket Swap V3 response fixture
 ├── tigergraph/
-│   └── veilpay_firewall.gsql                  # Module F: Complete production GSQL schema & veilpay_firewall_check query
+│   └── veinpay_firewall.gsql                  # Module F: Complete production GSQL schema & veinpay_firewall_check query
 ├── scripts/
 │   └── refresh-threat-intel.mjs               # Script to refresh ScamSniffer + OFAC SDN threat snapshot
 └── src/
     ├── data/
     │   └── threat-intel-snapshot.json         # Bundled ScamSniffer drainers + OFAC SDN + major exploits
     ├── types/
-    │   └── veilpay.ts                         # Complete TypeScript interfaces for Graph, AIGI, SOCKET, PoisonGraph, Store
+    │   └── veinpay.ts                         # Complete TypeScript interfaces for Graph, AIGI, SOCKET, PoisonGraph, Store
     ├── config/
     │   └── wagmi.ts                           # Reown AppKit + WagmiAdapter (ssr: true) + supported EVM networks
     ├── context/
@@ -105,7 +105,7 @@ hhgoa/
     │       ├── aigi-determinism.test.ts       # Tests SHA-256 receipt determinism & zero-hallucination evidence chain
     │       └── uri-and-socket-adapter.test.ts # Tests BIP-321 sp1..., monero: URIs, & Socket V3 -> V2/V3 normalization
     ├── store/
-    │   └── veilpay-store.ts                   # Shared Zustand store (Link Config, Active Scan, Payment Feed, Settings)
+    │   └── veinpay-store.ts                   # Shared Zustand store (Link Config, Active Scan, Payment Feed, Settings)
     ├── components/
     │   ├── TopTelemetryBar.tsx                # Institutional hardware header, live latency metrics, view switcher, Reown button
     │   ├── ReceiverSetupForm.tsx              # Module A: Amount, Asset, Cake Wallet 3-mode vault, 1-5 Hop Firewall controls, Link bar
@@ -148,10 +148,10 @@ hhgoa/
 3. Configure `src/app/globals.css` with the Warm Carbon (`#0B0C0E`), Rich Graphite (`#131519`), Interactive Slate (`#1A1D23`), Hairline Border (`#262A33`), Burnished Copper (`#D97736`), Bullion Gold (`#E5A93C`), Botanical Jade (`#1F9D68`), Ochre Amber (`#D99B26`), and Oxide Vermilion (`#D6453A`) palette.
 
 ### Phase 2: Production TigerGraph GSQL Artifact & Core Graph Engine
-1. Author `/tigergraph/veilpay_firewall.gsql` (Module F) with complete `VERTEX` definitions (`Wallet`, `Merchant`, `ThreatEntity`), `DIRECTED EDGE` definitions (`TRANSFERRED_TO` with `REVERSE_EDGE="REVERSE_TRANSFERRED_TO"`, `DUSTED`), and the `veilpay_firewall_check` multi-hop GSQL query using `OrAccum`, `MinAccum`, `SumAccum`, and `SetAccum`.
+1. Author `/tigergraph/veinpay_firewall.gsql` (Module F) with complete `VERTEX` definitions (`Wallet`, `Merchant`, `ThreatEntity`), `DIRECTED EDGE` definitions (`TRANSFERRED_TO` with `REVERSE_EDGE="REVERSE_TRANSFERRED_TO"`, `DUSTED`), and the `veinpay_firewall_check` multi-hop GSQL query using `OrAccum`, `MinAccum`, `SumAccum`, and `SetAccum`.
 2. Implement `src/lib/validators/address.ts` for strict EIP-55 validation, Bech32m BIP-352 `sp1...` validation, Monero Base58 `888...` validation, and spec-compliant BIP-321 (`bitcoin:?sp=...`) / legacy `bitcoin:sp1...` / `monero:` URI builders.
 3. Implement `src/lib/graph/seed-topologies.ts` with the 4 canonical EIP-55 personas, cyclic wash-ring edges, 24-wallet sybil cluster funded by `0xB055...9999`, and 4,210 outbound dust edges for the PoisonGraph clone.
-4. Implement `src/lib/graph/engine.ts` (`runVeilPayFirewallTraversal`) with genuine BFS/DFS multi-hop backward traversal (`max_hops = 1..5`), cycle detection (`Set<string>` + `minHopByVertex`), `CleanLink` taint discovery, and `Unbundle` shared-ancestor sybil collapse.
+4. Implement `src/lib/graph/engine.ts` (`runVeinPayFirewallTraversal`) with genuine BFS/DFS multi-hop backward traversal (`max_hops = 1..5`), cycle detection (`Set<string>` + `minHopByVertex`), `CleanLink` taint discovery, and `Unbundle` shared-ancestor sybil collapse.
 5. Implement `src/lib/graph/poison-guard.ts` (`evaluateOutboundPoisonRisk`) with 42-character prefix/suffix/middle diffing, historical outbound interaction lookup, and dust-factory out-degree scoring.
 6. Implement `src/lib/graph/tigergraph-client.ts` (live TigerGraph 4.x `/gsql/v1/tokens` & `/restpp/query` client) and `src/lib/graph/live-crawler.ts` (Etherscan V2 multichain crawler + bundled `threat-intel-snapshot.json` + live GoPlus security API).
 
@@ -165,7 +165,7 @@ hhgoa/
    - `src/app/api/socket/quote/route.ts` (enforces server-side firewall verification before returning route calldata).
 
 ### Phase 4: Institutional Terminal UI Components & Routes
-1. Build Reown AppKit SSR context (`src/config/wagmi.ts`, `src/context/web3-provider.tsx`) and shared Zustand store (`src/store/veilpay-store.ts`).
+1. Build Reown AppKit SSR context (`src/config/wagmi.ts`, `src/context/web3-provider.tsx`) and shared Zustand store (`src/store/veinpay-store.ts`).
 2. Build `TopTelemetryBar.tsx`, `ReceiverSetupForm.tsx` (Module A), `PayerCheckoutPanel.tsx` (Module B), `TopologicalGraphCanvas.tsx` (Module C — interactive SVG topology + node/edge inspector + raw RESTPP/GSQL code view), `AigiForensicReceiptCard.tsx` (Module D), `SafeSendOutboundGuard.tsx` (Module E), `IncomingPaymentFeed.tsx`, `CakeWalletSettlementModal.tsx`, and `SettingsDrawer.tsx`.
 3. Wire up `/` (`src/app/page.tsx`) and `/pay/[handle]` (`src/app/pay/[handle]/page.tsx`).
 

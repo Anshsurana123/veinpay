@@ -1,5 +1,5 @@
 /**
- * VeilPay — Cake Wallet Default Vault Integration
+ * VeinPay — Cake Wallet Default Vault Integration
  * File: src/lib/cakewallet.ts
  *
  * Implements Cake Wallet default destination vault support for:
@@ -10,7 +10,7 @@
  * Generates scannable QR payloads, native protocol URIs, and cakewallet:// deep-links.
  */
 
-import type { VaultSettlementMode } from '@/types/veilpay';
+import type { VaultSettlementMode } from '@/types/veinpay';
 import {
   buildBip321SilentPaymentUri,
   buildLegacySilentPaymentUri,
@@ -76,7 +76,7 @@ export interface CakeWalletUriParams {
  */
 export function buildCakeWalletPaymentUri(params: CakeWalletUriParams): string {
   const { mode, vaultAddress, amount, handle, note, legacyBtcFormat } = params;
-  const label = handle ? `VeilPay:${handle}` : 'VeilPay Vault';
+  const label = handle ? `VeinPay:${handle}` : 'VeinPay Vault';
 
   switch (mode) {
     case 'BTC_SILENT_PAYMENT':

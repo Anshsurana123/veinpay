@@ -22,12 +22,12 @@ import {
   isLinkRevoked,
 } from '@/lib/links/store';
 import { resolveVerifiedLinkAuthority } from '@/lib/links';
-import { runVeilPayFirewallTraversal } from '@/lib/graph/engine';
+import { runVeinPayFirewallTraversal } from '@/lib/graph/engine';
 import { runFullScan } from '@/lib/graph/full-scan';
 import { setStorageForTesting } from '@/lib/storage';
 import { InMemoryKeyValueStore } from '@/lib/storage/memory';
 import { privateKeyToAccount, generatePrivateKey } from 'viem/accounts';
-import type { FirewallPolicyConfig, SignedPaymentLinkPayload } from '@/types/veilpay';
+import type { FirewallPolicyConfig, SignedPaymentLinkPayload } from '@/types/veinpay';
 
 const DEFAULT_POLICY: FirewallPolicyConfig = {
   firewallEnabled: true,
@@ -81,7 +81,7 @@ describe('Phase 1 Security & Hardening Regression Suite', () => {
   });
 
   it('3. Tampered canonicalPayloadJson fails verify and verifyReceiptSignature rejects expired receipts', async () => {
-    const scan = runVeilPayFirewallTraversal({
+    const scan = runVeinPayFirewallTraversal({
       targetWallet: '0x99B1c402881a77e3d90123456789aB00000FDead',
       merchantWallet: '0x2222222222222222222222222222222222222222',
       policy: DEFAULT_POLICY,

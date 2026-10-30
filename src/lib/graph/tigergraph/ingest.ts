@@ -1,4 +1,4 @@
-import type { GraphEdge, GraphVertex } from '@/types/veilpay';
+import type { GraphEdge, GraphVertex } from '@/types/veinpay';
 import { getTigerGraphConfig, type TigerGraphConfig } from './config';
 import { getTigerGraphAuthToken } from './auth';
 

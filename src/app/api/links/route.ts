@@ -13,7 +13,7 @@ import {
   checkRateLimit,
   getClientIp,
 } from '@/lib/security/rate-limit';
-import type { SignedPaymentLinkPayload } from '@/types/veilpay';
+import type { SignedPaymentLinkPayload } from '@/types/veinpay';
 
 export async function GET(request: NextRequest) {
   const ip = getClientIp(request);
@@ -173,7 +173,7 @@ export async function POST(request: NextRequest) {
     const baseOrigin = (
       body.origin ||
       request.nextUrl.origin ||
-      'https://veilpay.xyz'
+      'https://veinpay.xyz'
     ).replace(/\/+$/, '');
 
     const url = `${baseOrigin}/pay/${encodeURIComponent(record.handle)}?c=${canonicalEncoded}&sig=${encodeURIComponent(record.signature)}`;

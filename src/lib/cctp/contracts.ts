@@ -1,5 +1,5 @@
 import { isAddress } from 'viem';
-import type { SupportedEvmChainId } from '@/types/veilpay';
+import type { SupportedEvmChainId } from '@/types/veinpay';
 
 /**
  * Official Circle CCTP V2 EVM Testnet Contract Addresses & Domain Registry

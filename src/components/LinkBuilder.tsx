@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { useAccount, useSignTypedData } from 'wagmi';
 import { useAppKit } from '@reown/appkit/react';
-import { useVeilPayStore } from '@/store/veilpay-store';
+import { useVeinPayStore } from '@/store/veinpay-store';
 import { isTestnetChain, SUPPORTED_EVM_CHAINS } from '@/lib/socket/tokens';
 import {
   buildPaymentLinkTypedData,
@@ -18,7 +18,7 @@ import type {
   SignedPaymentLinkPayload,
   SupportedEvmChainId,
   VaultSettlementMode,
-} from '@/types/veilpay';
+} from '@/types/veinpay';
 
 const HOP_NOTES: Record<HopDepth, string> = {
   1: 'Relaxed: 1 step back. Fast, but misses risks 2+ steps away.',
@@ -40,7 +40,7 @@ export function LinkBuilder() {
     setActiveSignedLink,
     networkEnv,
     runFirewallAndQuotePipeline,
-  } = useVeilPayStore();
+  } = useVeinPayStore();
 
   const { address: connectedReceiverAddress, isConnected } = useAccount();
   const { signTypedDataAsync, isPending: isSigningLink } = useSignTypedData();
@@ -577,7 +577,7 @@ export function LinkBuilder() {
 
         <div className="bg-[#16252f] border border-[#27404f] rounded-2xl p-4 space-y-3 text-xs">
           <p className="text-[#8ea5b4] leading-relaxed m-0">
-            VeilPay links are cryptographically signed with EIP-712. Payers verify
+            VeinPay links are cryptographically signed with EIP-712. Payers verify
             that the payout vault and firewall rules cannot be altered by a man-in-the-middle.
           </p>
 

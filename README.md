@@ -1,14 +1,14 @@
-# VeilPay — Zero-Doxx Cross-Chain Payment Link & Pre-Sign Graph Firewall
+# VeinPay — Zero-Doxx Cross-Chain Payment Link & Pre-Sign Graph Firewall
 
 > **Built for Hacker House Goa**  
-> **VeilPay** is a privacy-first cross-chain payment link platform and pre-sign graph firewall for Web3. It lets freelancers, merchants, DAO contributors, and grants recipients get paid in any token across chains—settling into a **Cake Wallet** privacy vault—while automatically blocking tainted drainer funds, Sybil wash-rings, and lookalike address-poisoning attacks **before** a transaction is ever signed.
+> **VeinPay** is a privacy-first cross-chain payment link platform and pre-sign graph firewall for Web3. It lets freelancers, merchants, DAO contributors, and grants recipients get paid in any token across chains—settling into a **Cake Wallet** privacy vault—while automatically blocking tainted drainer funds, Sybil wash-rings, and lookalike address-poisoning attacks **before** a transaction is ever signed.
 
 ---
 
 ## Table of Contents
 
-1. [What Problem Does VeilPay Solve?](#1-what-problem-does-veilpay-solve)
-2. [How VeilPay Works (The 4 Core Pillars)](#2-how-veilpay-works-the-4-core-pillars)
+1. [What Problem Does VeinPay Solve?](#1-what-problem-does-veinpay-solve)
+2. [How VeinPay Works (The 4 Core Pillars)](#2-how-veinpay-works-the-4-core-pillars)
 3. [Mainnet & Testnet Support (`[ MAINNET | TESTNET ]`)](#3-mainnet--testnet-support--mainnet--testnet-)
 4. [Interactive 2-Minute Demo Walkthrough](#4-interactive-2-minute-demo-walkthrough)
 5. [Quick Start & Local Installation](#5-quick-start--local-installation)
@@ -18,7 +18,7 @@
 
 ---
 
-## 1. What Problem Does VeilPay Solve?
+## 1. What Problem Does VeinPay Solve?
 
 Today, getting paid in Web3 (or sending a payment) exposes both parties to **three critical risks**:
 
@@ -26,18 +26,18 @@ Today, getting paid in Web3 (or sending a payment) exposes both parties to **thr
 2. **Incoming Taint Contagion (Compliance Freeze Risk):** If a payer sends you funds that passed through an exploit, wallet drainer, or OFAC-sanctioned mixer 2–4 hops ago, centralized exchanges and compliance engines automatically freeze **your** receiving wallet by association.
 3. **Outbound Address Poisoning:** Attackers use GPU vanity generators to create fake addresses matching the first 4 and last 4 characters of your frequent contacts (`0x71C9...89A2`), drop zero-value dust into your history, and wait for you to copy-paste the wrong address from your transaction log.
 
-### The VeilPay Solution
+### The VeinPay Solution
 
-VeilPay puts a **sub-50ms TigerGraph Pre-Sign Firewall** and **AIGI Forensic Compliance Agent** directly in front of **SOCKET Cross-Chain Routing** and **Cake Wallet Stealth Vaults**:
+VeinPay puts a **sub-50ms TigerGraph Pre-Sign Firewall** and **AIGI Forensic Compliance Agent** directly in front of **SOCKET Cross-Chain Routing** and **Cake Wallet Stealth Vaults**:
 
-- **Payers** connect or select their wallet on a clean checkout link (`veilpay.xyz/pay/ansh-audit`).
-- **Before any quote or vault address is revealed**, VeilPay traverses 1 to 5 hops of the payer's transaction graph.
-- **If the payer is tainted**, VeilPay hard-locks the checkout, highlights the exact contagion path on an interactive 2D graph, and issues a **Blocked Forensic Receipt**.
-- **If the payer is verified clean**, VeilPay unlocks **SOCKET Swap V3** cross-chain routing and **Cake Wallet** destination vaults (Multi-Chain EVM, Bitcoin Silent Payments `sp1...` / `tsp1...`, or Monero `888...` subaddresses), generating a **SHA-256 Cryptographic Compliance Receipt** so the receiver can prove their incoming funds were pre-screened.
+- **Payers** connect or select their wallet on a clean checkout link (`veinpay.xyz/pay/ansh-audit`).
+- **Before any quote or vault address is revealed**, VeinPay traverses 1 to 5 hops of the payer's transaction graph.
+- **If the payer is tainted**, VeinPay hard-locks the checkout, highlights the exact contagion path on an interactive 2D graph, and issues a **Blocked Forensic Receipt**.
+- **If the payer is verified clean**, VeinPay unlocks **SOCKET Swap V3** cross-chain routing and **Cake Wallet** destination vaults (Multi-Chain EVM, Bitcoin Silent Payments `sp1...` / `tsp1...`, or Monero `888...` subaddresses), generating a **SHA-256 Cryptographic Compliance Receipt** so the receiver can prove their incoming funds were pre-screened.
 
 ---
 
-## 2. How VeilPay Works (The 4 Core Pillars)
+## 2. How VeinPay Works (The 4 Core Pillars)
 
 ```text
 [Payer Wallet (Reown AppKit / 4-Persona Simulator / Custom Live Etherscan V2 Crawl)]
@@ -62,9 +62,9 @@ VeilPay puts a **sub-50ms TigerGraph Pre-Sign Firewall** and **AIGI Forensic Com
 ```
 
 ### Pillar 1: TigerGraph 3-in-1 Pre-Sign Graph Firewall (Two-Sided Protection)
-Implemented both as a production GSQL query ([`/tigergraph/veilpay_firewall.gsql`](./tigergraph/veilpay_firewall.gsql)) and a cycle-safe, in-process TypeScript graph engine ([`src/lib/graph/engine.ts`](./src/lib/graph/engine.ts)) using GSQL-equivalent accumulators (`OrAccum`, `MinAccum`, `SumAccum`, `SetAccum`).
+Implemented both as a production GSQL query ([`/tigergraph/veinpay_firewall.gsql`](./tigergraph/veinpay_firewall.gsql)) and a cycle-safe, in-process TypeScript graph engine ([`src/lib/graph/engine.ts`](./src/lib/graph/engine.ts)) using GSQL-equivalent accumulators (`OrAccum`, `MinAccum`, `SumAccum`, `SetAccum`).
 
-VeilPay operates as a **two-sided pre-sign firewall**:
+VeinPay operates as a **two-sided pre-sign firewall**:
 1. **Inbound Guard (Payer Screening — protects Merchant):**
    - **`CleanLink` (Upstream Taint Traversal):** Walks `1` to `5` hops backward along the **payer's** inbound funding edges to detect drainer contracts (`PinkDrainer`, `Inferno Drainer`), protocol exploits (`Bybit Lazarus`), and OFAC-sanctioned mixers (`Tornado Cash Router`).
    - **`Unbundle` (Sybil & Wash-Ring Collapse):** Detects when the **payer's** wallet traces back to a shared root funder (e.g., a 24-wallet Sybil distributor) or trades in a cyclic wash loop (`Mule_A -> Mule_B -> Mule_C -> Mule_A`).
@@ -82,7 +82,7 @@ VeilPay operates as a **two-sided pre-sign firewall**:
 - Includes a 3,500ms timeout guard with a deterministic offline fallback so live demos never hang on unstable venue Wi-Fi.
 
 ### Pillar 4: Cake Wallet Zero-Doxx Destination Vaults
-Every VeilPay link settles into **Cake Wallet** across three selectable privacy modes:
+Every VeinPay link settles into **Cake Wallet** across three selectable privacy modes:
 1. **Mode 1 — Multi-Chain EVM (via SOCKET):** Payer pays from any supported EVM chain/token; SOCKET bridges and settles directly into the receiver's Cake Wallet EVM vault.
 2. **Mode 2 — Bitcoin Silent Payments (`BIP-352` / `BIP-321`):** Uses non-reusable `sp1...` (Mainnet) or `tsp1...` (Testnet) Silent Payment addresses so every payment derives a unique one-time Taproot output on-chain with zero address reuse. Supports both `BIP-321` (`bitcoin:?sp=sp1...`) and legacy (`bitcoin:sp1...`) QR codes/URIs.
 3. **Mode 3 — Monero Stealth Subaddress (`888...` RingCT):** Generates a spec-compliant `monero:888...?tx_amount=...&recipient_name=...` QR code and deep-link—kept redacted until the payer passes the pre-sign firewall.
@@ -91,7 +91,7 @@ Every VeilPay link settles into **Cake Wallet** across three selectable privacy 
 
 ## 3. Mainnet & Testnet Support (`[ MAINNET | TESTNET ]`)
 
-VeilPay supports both **Mainnet** and **Testnet** workflows out of the box. You can switch the entire application between Mainnet and Testnet at any time using the **`[ MAINNET | TESTNET ]`** toggle button in the top telemetry bar.
+VeinPay supports both **Mainnet** and **Testnet** workflows out of the box. You can switch the entire application between Mainnet and Testnet at any time using the **`[ MAINNET | TESTNET ]`** toggle button in the top telemetry bar.
 
 ### Supported Networks Matrix
 
@@ -122,7 +122,7 @@ VeilPay supports both **Mainnet** and **Testnet** workflows out of the box. You 
 
 ## 4. Interactive 2-Minute Demo Walkthrough
 
-You don't even need a wallet extension installed to test every graph algorithm and edge case—VeilPay includes a **4-Persona Payer Simulator** and **Safe Send Guard** right on the main screen:
+You don't even need a wallet extension installed to test every graph algorithm and edge case—VeinPay includes a **4-Persona Payer Simulator** and **Safe Send Guard** right on the main screen:
 
 ### Step 1: Test a Clean Cross-Chain Payment (`Persona 1: Verified Clean`)
 - Click **`Persona 1: Verified Clean`** (`0x4F9A...21E4`) in the right-hand Payer Checkout Simulator.
@@ -197,7 +197,7 @@ Open **[http://localhost:3000](http://localhost:3000)** in your browser.
 | `UPSTASH_REDIS_REST_URL` / `TOKEN` | Optional | Upstash Redis REST credentials for distributed per-IP rate limiting and persistent activity events. Falls back to in-memory store in dev. |
 | `MAX_CRAWL_API_CALLS` / `TIMEOUT_MS` | Optional | Server-side hard maxima clamping client-submitted crawl parameters to prevent denial-of-service. |
 | `SOCKET_API_KEY` | Optional | Optional dedicated SOCKET key (`public-backend.socket.tech/v3/swap/quote` works without a key). |
-| `TIGERGRAPH_HOST` / `TIGERGRAPH_GRAPH` / `TIGERGRAPH_TOKEN` | Optional | Connects `/api/firewall/scan` to a live TigerGraph 4.x RESTPP cluster (`POST /restpp/query/{graph}/veilpay_firewall_check`). Automatically falls back to the in-process TypeScript GSQL engine when unset. |
+| `TIGERGRAPH_HOST` / `TIGERGRAPH_GRAPH` / `TIGERGRAPH_TOKEN` | Optional | Connects `/api/firewall/scan` to a live TigerGraph 4.x RESTPP cluster (`POST /restpp/query/{graph}/veinpay_firewall_check`). Automatically falls back to the in-process TypeScript GSQL engine when unset. |
 
 ---
 
@@ -205,7 +205,7 @@ Open **[http://localhost:3000](http://localhost:3000)** in your browser.
 
 ```text
 ├── tigergraph/
-│   └── veilpay_firewall.gsql          # Production TigerGraph 4.x Schema & 3-in-1 GSQL Query
+│   └── veinpay_firewall.gsql          # Production TigerGraph 4.x Schema & 3-in-1 GSQL Query
 ├── docs/
 │   ├── ARCHITECTURE_AND_DECISIONS.md  # 16 Architecture Decision Records (ADRs) & trade-off matrices
 │   ├── API_AND_PROTOCOL_SPECS.md      # Verified 2026 API contracts (SOCKET V3, TigerGraph, BIP-352)
@@ -227,7 +227,7 @@ Open **[http://localhost:3000](http://localhost:3000)** in your browser.
 │   │   ├── socket/                    # SOCKET Swap V3 Client, Mainnet/Testnet Chain & Token Registry
 │   │   └── validators/                # Strict EIP-55, BIP-352 (sp1/tsp1), BIP-321 & Monero Validators
 │   └── store/
-│       └── veilpay-store.ts           # Unified Zustand Store (Mainnet/Testnet, Policy, Feed, Settings)
+│       └── veinpay-store.ts           # Unified Zustand Store (Mainnet/Testnet, Policy, Feed, Settings)
 ```
 
 ---

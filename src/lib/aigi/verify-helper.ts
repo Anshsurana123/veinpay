@@ -1,6 +1,6 @@
 import { sha256HexSync } from './verdict';
 import { verifyReceiptSignature, isDemoKey } from './receipt-signer';
-import type { AigiForensicReceipt } from '@/types/veilpay';
+import type { AigiForensicReceipt } from '@/types/veinpay';
 
 export interface ReceiptVerificationResult {
   valid: boolean;
@@ -120,7 +120,7 @@ export function verifyAigiReceiptData(params: {
     verified: true,
     demo: isDemo,
     commitmentHash: computedHash,
-    keyId: keyId ?? 'veilpay-ed25519-v1',
+    keyId: keyId ?? 'veinpay-ed25519-v1',
     algorithm: 'Ed25519',
     verifiedAt: new Date().toISOString(),
   };

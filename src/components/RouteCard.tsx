@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { useVeilPayStore } from '@/store/veilpay-store';
+import { useVeinPayStore } from '@/store/veinpay-store';
 
 export function RouteCard() {
   const {
@@ -12,7 +12,7 @@ export function RouteCard() {
     linkConfig,
     payerTokenSymbol,
     networkEnv,
-  } = useVeilPayStore();
+  } = useVeinPayStore();
 
   const isTestnet = networkEnv === 'TESTNET';
 

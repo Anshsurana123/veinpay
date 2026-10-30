@@ -30,16 +30,16 @@ describe('Cake Wallet BIP-352/BIP-321 & Monero URIs + SOCKET V3/V2 Adapter', () 
     const bip321 = buildBip321SilentPaymentUri({
       spAddress: DEMO_CAKE_VAULT_ADDRESSES.BTC_SILENT_PAYMENT,
       amountBtc: '0.0025',
-      label: 'VeilPay Vault',
+      label: 'VeinPay Vault',
     });
     expect(bip321).toContain('bitcoin:?sp=sp1qqgste7k9');
     expect(bip321).toContain('amount=0.0025');
-    expect(bip321).toContain('label=VeilPay%20Vault');
+    expect(bip321).toContain('label=VeinPay%20Vault');
 
     const legacy = buildLegacySilentPaymentUri({
       spAddress: DEMO_CAKE_VAULT_ADDRESSES.BTC_SILENT_PAYMENT,
       amountBtc: '0.0025',
-      label: 'VeilPay Vault',
+      label: 'VeinPay Vault',
     });
     expect(legacy).toContain('bitcoin:sp1qqgste7k9');
   });
@@ -54,10 +54,10 @@ describe('Cake Wallet BIP-352/BIP-321 & Monero URIs + SOCKET V3/V2 Adapter', () 
     const uri = buildMoneroPaymentUri({
       subaddress: DEMO_CAKE_VAULT_ADDRESSES.XMR_SUBADDRESS,
       amountXmr: '1.5',
-      recipientName: 'VeilPay Audit',
+      recipientName: 'VeinPay Audit',
     });
     expect(uri).toContain(
-      `monero:${DEMO_CAKE_VAULT_ADDRESSES.XMR_SUBADDRESS}?tx_amount=1.5&recipient_name=VeilPay%20Audit`
+      `monero:${DEMO_CAKE_VAULT_ADDRESSES.XMR_SUBADDRESS}?tx_amount=1.5&recipient_name=VeinPay%20Audit`
     );
   });
 

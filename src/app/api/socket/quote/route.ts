@@ -187,7 +187,7 @@ async function executeGatedQuoteRequest(params: {
         success: false,
         statusCode: 403,
         error: 'FIREWALL_INTERCEPTED',
-        message: `SOCKET transaction builder locked by VeilPay ${scan.maxHopsQueried}-Hop Graph Firewall (${scan.verdict}).`,
+        message: `SOCKET transaction builder locked by VeinPay ${scan.maxHopsQueried}-Hop Graph Firewall (${scan.verdict}).`,
         verdict: scan.verdict,
         receipt,
       },
@@ -244,7 +244,7 @@ export async function GET(request: NextRequest) {
     sig: sp.get('sig'),
     scanAttestation:
       sp.get('scanAttestation') ||
-      request.headers.get('x-veilpay-scan-attestation'),
+      request.headers.get('x-veinpay-scan-attestation'),
     slippage: sp.get('slippage') || '1',
     sort: sp.get('sort') || 'output',
   };
@@ -320,7 +320,7 @@ export async function POST(request: NextRequest) {
       scanAttestation:
         typeof rawBody.scanAttestation === 'string'
           ? rawBody.scanAttestation
-          : request.headers.get('x-veilpay-scan-attestation'),
+          : request.headers.get('x-veinpay-scan-attestation'),
       slippage: String(rawBody.slippage ?? '1'),
       sort: rawBody.sort === 'time' ? 'time' : 'output',
     };

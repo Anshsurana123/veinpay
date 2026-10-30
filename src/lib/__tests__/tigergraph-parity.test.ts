@@ -12,9 +12,9 @@ import {
   evaluateOutboundPoisonRisk,
   deriveTrustedContactsFromGraph,
 } from '@/lib/graph/poison-guard';
-import { runVeilPayFirewallTraversal } from '@/lib/graph/engine';
+import { runVeinPayFirewallTraversal } from '@/lib/graph/engine';
 import { buildSeededGraphDataset } from '@/lib/graph/seed-topologies';
-import type { FirewallPolicyConfig } from '@/types/veilpay';
+import type { FirewallPolicyConfig } from '@/types/veinpay';
 
 const PERSONAS = {
   CLEAN: '0x4F2a9c117034e8B1200499A1c3f88200000188E1',
@@ -54,7 +54,7 @@ describe('TigerGraph 4.x Parity & Golden Vector Suite', () => {
       };
 
       // Clean persona is clean at all hops
-      const cleanScan = runVeilPayFirewallTraversal({
+      const cleanScan = runVeinPayFirewallTraversal({
         targetWallet: PERSONAS.CLEAN,
         policy,
       });
@@ -62,7 +62,7 @@ describe('TigerGraph 4.x Parity & Golden Vector Suite', () => {
       expect(cleanScan.socketUnlocked).toBe(true);
 
       // Drainer persona: at hop 1 is intermediate mule (clean at hop 1), at hop >= 2 catches Lazarus exploit taint
-      const drainerScan = runVeilPayFirewallTraversal({
+      const drainerScan = runVeinPayFirewallTraversal({
         targetWallet: PERSONAS.DRAINER_2HOP,
         policy,
       });
@@ -87,7 +87,7 @@ describe('TigerGraph 4.x Parity & Golden Vector Suite', () => {
       process.env.TIGERGRAPH_TOKEN = 'test-bearer-token';
 
       global.fetch = vi.fn().mockImplementation((url: string) => {
-        if (url.includes('veilpay_firewall_check')) {
+        if (url.includes('veinpay_firewall_check')) {
           return Promise.resolve({
             ok: true,
             json: () =>
@@ -166,7 +166,7 @@ describe('TigerGraph 4.x Parity & Golden Vector Suite', () => {
 
   it('5. Hub termination: institutional whitelisted vertices are not clustered as sybil roots (P1-4)', () => {
     // Uniswap V3 Pool and Coinbase Hot Wallet fund thousands of addresses; they must not cause sybil grouping
-    const scan = runVeilPayFirewallTraversal({
+    const scan = runVeinPayFirewallTraversal({
       targetWallet: PERSONAS.CLEAN,
       policy: {
         ...BASE_POLICY,

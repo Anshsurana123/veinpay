@@ -1,11 +1,11 @@
-import type { VeilPayLinkConfig } from '@/types/veilpay';
+import type { VeinPayLinkConfig } from '@/types/veinpay';
 
 /**
  * DEMO / SPEC TEST FIXTURE VAULT ADDRESSES
  *
  * WARNING: These addresses are public specification examples / test vectors
  * (EIP-55 example, BIP-352 test vector, Monero docs example) and are NOT owned
- * by VeilPay or any real receiver.
+ * by VeinPay or any real receiver.
  *
  * They MUST ONLY be used in unit tests or when `NEXT_PUBLIC_DEMO_MODE === 'true'`.
  * Production defaults (`EMPTY_VAULT_ADDRESSES`) are empty strings and block link
@@ -31,7 +31,7 @@ export const DEMO_TESTNET_CAKE_VAULT_ADDRESSES = {
     '888tNkZrPN6JsEgekjMnABU4TBzc2Dt29EPAvkRxbANsAnjyPbb3iQ1YBRk1UXcdRsiKc9dhwMVgN5S9cQUiyoogDavup3H',
 } as const;
 
-export const EMPTY_VAULT_ADDRESSES: VeilPayLinkConfig['vaultAddresses'] = {
+export const EMPTY_VAULT_ADDRESSES: VeinPayLinkConfig['vaultAddresses'] = {
   EVM_SOCKET: '',
   BTC_SILENT_PAYMENT: '',
   XMR_SUBADDRESS: '',
@@ -45,7 +45,7 @@ export function isDemoModeEnabled(envOverride?: string): boolean {
 export function getInitialVaultAddresses(
   envOverride?: string,
   networkEnv: 'MAINNET' | 'TESTNET' = 'MAINNET'
-): VeilPayLinkConfig['vaultAddresses'] {
+): VeinPayLinkConfig['vaultAddresses'] {
   if (!isDemoModeEnabled(envOverride)) {
     return { ...EMPTY_VAULT_ADDRESSES };
   }

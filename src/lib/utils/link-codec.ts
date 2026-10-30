@@ -1,14 +1,14 @@
 import type {
   SignedPaymentLinkPayload,
-  VeilPayLinkConfig,
-} from '@/types/veilpay';
+  VeinPayLinkConfig,
+} from '@/types/veinpay';
 import { getInitialVaultAddresses } from '@/lib/demo-fixtures';
 import {
   decodeBase64UrlToUtf8,
   encodeSignedLinkPayloadToBase64Url,
 } from '@/lib/links/canonical';
 
-export const DEFAULT_LINK_CONFIG: VeilPayLinkConfig = {
+export const DEFAULT_LINK_CONFIG: VeinPayLinkConfig = {
   handle: 'ansh-audit',
   amount: '250.00',
   asset: 'USDC',
@@ -27,9 +27,9 @@ export const DEFAULT_LINK_CONFIG: VeilPayLinkConfig = {
   createdAt: '2026-10-28T12:00:00.000Z',
 };
 
-export function signedLinkPayloadToVeilPayConfig(
+export function signedLinkPayloadToVeinPayConfig(
   payload: SignedPaymentLinkPayload
-): VeilPayLinkConfig {
+): VeinPayLinkConfig {
   return {
     handle: payload.handle,
     amount: payload.openAmount ? '250.00' : payload.amount,

@@ -1,4 +1,4 @@
-import type { PaymentAssetSymbol, SupportedEvmChainId } from '@/types/veilpay';
+import type { PaymentAssetSymbol, SupportedEvmChainId } from '@/types/veinpay';
 
 export interface EvmChainMetadata {
   chainId: SupportedEvmChainId;

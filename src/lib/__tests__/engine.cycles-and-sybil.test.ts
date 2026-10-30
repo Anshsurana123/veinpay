@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { runVeilPayFirewallTraversal } from '@/lib/graph/engine';
+import { runVeinPayFirewallTraversal } from '@/lib/graph/engine';
 
 describe('Case 2 & Case 3: Cyclic Graph Loops, Self-Transfers & 24-Wallet Sybil Collapse', () => {
   const p3 = '0x5eb1a800112233445566778899aAbb0000010014';
 
   it('Prevents infinite loops on cyclic wash rings (A -> B -> C -> A) and self-transfers (A -> A)', () => {
-    const res = runVeilPayFirewallTraversal({
+    const res = runVeinPayFirewallTraversal({
       targetWallet: p3,
       policy: {
         firewallEnabled: true,
@@ -24,7 +24,7 @@ describe('Case 2 & Case 3: Cyclic Graph Loops, Self-Transfers & 24-Wallet Sybil 
   });
 
   it('Collapses 24 sybil sibling wallets to shared ancestor 0xB055...9999 and blocks when threshold <= 24', () => {
-    const blocked = runVeilPayFirewallTraversal({
+    const blocked = runVeinPayFirewallTraversal({
       targetWallet: p3,
       policy: {
         firewallEnabled: true,
@@ -44,7 +44,7 @@ describe('Case 2 & Case 3: Cyclic Graph Loops, Self-Transfers & 24-Wallet Sybil 
     expect(blocked.socketUnlocked).toBe(false);
 
     // When threshold is raised above 24 (e.g. 30), returns WARNING_SYBIL (amber warning)
-    const warned = runVeilPayFirewallTraversal({
+    const warned = runVeinPayFirewallTraversal({
       targetWallet: p3,
       policy: {
         firewallEnabled: true,

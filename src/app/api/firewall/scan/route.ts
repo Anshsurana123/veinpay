@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import type { LiveCrawlSettings } from '@/types/veilpay';
+import type { LiveCrawlSettings } from '@/types/veinpay';
 import { runFullScan } from '@/lib/graph/full-scan';
 import { resolveVerifiedLinkAuthority } from '@/lib/links';
 import { verifyProofOfControlToken } from '@/lib/session/proof-of-control';

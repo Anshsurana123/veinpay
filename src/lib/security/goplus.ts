@@ -1,5 +1,5 @@
 /**
- * GoPlus Security API Client for VeilPay
+ * GoPlus Security API Client for VeinPay
  * Docs: https://docs.gopluslabs.io/reference/api-overview
  *
  * Implements:
@@ -10,7 +10,7 @@
  * 5. Supported Chains Directory
  */
 
-import type { RiskCategory } from '@/types/veilpay';
+import type { RiskCategory } from '@/types/veinpay';
 
 export interface GoPlusAddressSecurityRawResult {
   cybercrime?: string;

@@ -14,10 +14,10 @@ import type {
   SignedPaymentLinkPayload,
   SupportedEvmChainId,
   VaultSettlementMode,
-  VeilPayLinkConfig,
-  VeilPayQuoteResponse,
+  VeinPayLinkConfig,
+  VeinPayQuoteResponse,
   VerdictStatus,
-} from '@/types/veilpay';
+} from '@/types/veinpay';
 import {
   OUTBOUND_POISON_TEST_PRESETS,
   WALLET_PERSONAS,
@@ -84,7 +84,7 @@ export interface FeedLogEntry {
   simulated?: boolean;
 }
 
-export interface VeilPayStoreState {
+export interface VeinPayStoreState {
   // UI Navigation
   networkEnv: 'MAINNET' | 'TESTNET';
   activeTab: 'pay' | 'create' | 'activity' | 'safesend';
@@ -96,7 +96,7 @@ export interface VeilPayStoreState {
   showRawGsqlInspector: boolean;
 
   // Receiver Payment Link Configuration
-  linkConfig: VeilPayLinkConfig;
+  linkConfig: VeinPayLinkConfig;
   activeSignedLink: ActiveSignedLinkState | null;
   linkVerificationError: string | null;
 
@@ -113,7 +113,7 @@ export interface VeilPayStoreState {
   // Firewall Scan, AIGI Receipt & SOCKET Quote
   activeScan: FirewallScanResult | null;
   activeReceipt: AigiForensicReceipt | null;
-  activeQuote: VeilPayQuoteResponse | null;
+  activeQuote: VeinPayQuoteResponse | null;
   scanAttestation: string | null;
   isScanning: boolean;
   isLoadingQuote: boolean;
@@ -160,7 +160,7 @@ export interface VeilPayStoreState {
   setSybilClusterExpanded: (expanded: boolean) => void;
 
   // Link Config Updaters
-  updateLinkConfig: (partial: Partial<VeilPayLinkConfig>) => void;
+  updateLinkConfig: (partial: Partial<VeinPayLinkConfig>) => void;
   setVaultMode: (mode: VaultSettlementMode) => void;
   setVaultAddress: (mode: VaultSettlementMode, address: string) => void;
   setDestinationChainAndAsset: (
@@ -168,12 +168,12 @@ export interface VeilPayStoreState {
     asset: PaymentAssetSymbol
   ) => void;
   updateFirewallPolicy: (partial: Partial<FirewallPolicyConfig>) => void;
-  hydrateFromDecodedLink: (decoded: VeilPayLinkConfig) => void;
+  hydrateFromDecodedLink: (decoded: VeinPayLinkConfig) => void;
   setActiveSignedLink: (signed: ActiveSignedLinkState | null) => void;
   setLinkVerificationError: (error: string | null) => void;
   hydrateFromVerifiedLink: (
     signed: ActiveSignedLinkState,
-    decoded: VeilPayLinkConfig
+    decoded: VeinPayLinkConfig
   ) => void;
 
   // Payer Actions
@@ -214,7 +214,7 @@ export interface VeilPayStoreState {
   fetchEvents: () => Promise<void>;
 }
 
-export const useVeilPayStore = create<VeilPayStoreState>((set, get) => ({
+export const useVeinPayStore = create<VeinPayStoreState>((set, get) => ({
   networkEnv: 'MAINNET',
   activeTab: 'pay',
   judgeMode: false,
@@ -690,7 +690,7 @@ export const useVeilPayStore = create<VeilPayStoreState>((set, get) => ({
 
         const quoteRes = await fetch(`/api/socket/quote?${qs.toString()}`);
         if (quoteRes.ok) {
-          const quoteData: VeilPayQuoteResponse = await quoteRes.json();
+          const quoteData: VeinPayQuoteResponse = await quoteRes.json();
           set({ activeQuote: quoteData, isLoadingQuote: false });
         } else {
           const fallbackQuote = buildDeterministicFallbackQuote(

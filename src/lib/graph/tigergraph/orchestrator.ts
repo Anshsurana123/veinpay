@@ -6,7 +6,7 @@ import type {
   TigerGraphRestppEnvelope,
   VerdictStatus,
   HopDepth,
-} from '@/types/veilpay';
+} from '@/types/veinpay';
 import { getTigerGraphConfig } from './config';
 import { executeTigerGraphQuery, formatVertexParam } from './client';
 import { batchUpsertToTigerGraph } from './ingest';
@@ -121,7 +121,7 @@ export async function scanWithTigerGraph(
   };
 
   let envelope = await executeTigerGraphQuery({
-    queryName: 'veilpay_firewall_check',
+    queryName: 'veinpay_firewall_check',
     params: queryParams,
   });
 
@@ -168,7 +168,7 @@ export async function scanWithTigerGraph(
       }
 
       envelope = await executeTigerGraphQuery({
-        queryName: 'veilpay_firewall_check',
+        queryName: 'veinpay_firewall_check',
         params: queryParams,
       });
     } catch {
@@ -206,7 +206,7 @@ export async function scanWithTigerGraph(
 
       // Re-query TigerGraph
       const reEnvelope = await executeTigerGraphQuery({
-        queryName: 'veilpay_firewall_check',
+        queryName: 'veinpay_firewall_check',
         params: queryParams,
       });
 

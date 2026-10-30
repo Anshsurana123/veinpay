@@ -1,6 +1,6 @@
-# VeilPay — TigerGraph 4.x Integration Guide
+# VeinPay — TigerGraph 4.x Integration Guide
 
-This guide describes how to configure, schema-load, and seed a TigerGraph 4.x or 3.x cluster (Savanna Cloud or self-hosted Enterprise) for VeilPay.
+This guide describes how to configure, schema-load, and seed a TigerGraph 4.x or 3.x cluster (Savanna Cloud or self-hosted Enterprise) for VeinPay.
 
 ---
 
@@ -12,8 +12,8 @@ Add the following environment variables to your `.env.local` or production deplo
 # Target TigerGraph RESTPP endpoint
 TIGERGRAPH_HOST=https://your-domain.tigergraph.cloud
 
-# Target graph name (defaults to VeilPayGraph)
-TIGERGRAPH_GRAPH=VeilPayGraph
+# Target graph name (defaults to VeinPayGraph)
+TIGERGRAPH_GRAPH=VeinPayGraph
 
 # Option A: Static RESTPP / GSQL Bearer token
 TIGERGRAPH_TOKEN=your-bearer-token
@@ -37,28 +37,28 @@ Deploy the schema and pre-sign graph firewall queries using the GSQL CLI or Tige
 gsql "DROP ALL"
 
 # Run the batch script (top-level DDL commands without semicolons)
-gsql tigergraph/veilpay_firewall.gsql
+gsql tigergraph/veinpay_firewall.gsql
 ```
 
 ### Option B: Interactive GSQL Shell or Web Shell
 If using the interactive `GSQL>` prompt, always ensure you are in the global scope before creating global schema components:
 ```gsql
 GSQL> USE GLOBAL
-GSQL> @tigergraph/veilpay_firewall.gsql
+GSQL> @tigergraph/veinpay_firewall.gsql
 ```
 
 ### Option C: TigerGraph GraphStudio UI
 1. **Design Schema**: Create vertices `Wallet`, `Merchant`, `ThreatEntity`, `Address` and directed edges `TRANSFERRED_TO`, `DUSTED`, `FUNDED` (with reverse edges). Publish Schema.
-2. **Write Queries**: Copy the queries from `/tigergraph/veilpay_firewall.gsql` (`veilpay_firewall_check`, `veilpay_trusted_contacts`, `veilpay_poison_check`, `veilpay_neighbors`) into the query editor and click **Install All Queries**.
+2. **Write Queries**: Copy the queries from `/tigergraph/veinpay_firewall.gsql` (`veinpay_firewall_check`, `veinpay_trusted_contacts`, `veinpay_poison_check`, `veinpay_neighbors`) into the query editor and click **Install All Queries**.
 
 This installs:
 1. Vertices: `Wallet`, `Merchant`, `ThreatEntity`, `Address`
 2. Directed Edges: `TRANSFERRED_TO` (reverse `REVERSE_TRANSFERRED_TO`), `DUSTED` (reverse `REVERSE_DUSTED`), `FUNDED` (reverse `REVERSE_FUNDED`)
 3. Compiled RESTPP Queries:
-   - `veilpay_firewall_check`: 3-in-1 backward lineage traversal, sybil cluster collapse & dust factory analysis.
-   - `veilpay_trusted_contacts`: counterparty discovery with >= 2 successful non-dust interactions.
-   - `veilpay_poison_check`: lookalike prefix/suffix evaluation & dust history.
-   - `veilpay_neighbors`: N-hop topology subgraph retrieval.
+   - `veinpay_firewall_check`: 3-in-1 backward lineage traversal, sybil cluster collapse & dust factory analysis.
+   - `veinpay_trusted_contacts`: counterparty discovery with >= 2 successful non-dust interactions.
+   - `veinpay_poison_check`: lookalike prefix/suffix evaluation & dust history.
+   - `veinpay_neighbors`: N-hop topology subgraph retrieval.
 
 ---
 
@@ -81,7 +81,7 @@ This ingests:
 Verify your deployment with `curl`:
 
 ```bash
-curl -X POST "$TIGERGRAPH_HOST/restpp/query/$TIGERGRAPH_GRAPH/veilpay_firewall_check" \
+curl -X POST "$TIGERGRAPH_HOST/restpp/query/$TIGERGRAPH_GRAPH/veinpay_firewall_check" \
   -H "Authorization: Bearer $TIGERGRAPH_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{

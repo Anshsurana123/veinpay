@@ -1,10 +1,10 @@
 /**
- * TigerGraph MCP (Model Context Protocol) Integration for VeilPay
+ * TigerGraph MCP (Model Context Protocol) Integration for VeinPay
  * Reference: https://github.com/TigerGraph-DevLabs/tigergraph-mcp
  *
  * Implements TigerGraph MCP Tool specifications:
- * - graph__run_query (executes GSQL queries including veilpay_firewall_check)
- * - graph__get_schema (retrieves VeilPayGraph schema)
+ * - graph__run_query (executes GSQL queries including veinpay_firewall_check)
+ * - graph__get_schema (retrieves VeinPayGraph schema)
  * - graph__get_neighbors (traverses 1-hop inbound/outbound relationships)
  * - graph__breadth_first_search (multi-hop cycle-safe directed BFS)
  * - graph__get_node_data (inspects vertex attributes)
@@ -15,9 +15,9 @@
  */
 
 import { buildSeededGraphDataset, type SeedGraphDataset } from '@/lib/graph/seed-topologies';
-import { runVeilPayFirewallTraversal } from '@/lib/graph/engine';
+import { runVeinPayFirewallTraversal } from '@/lib/graph/engine';
 import { tryExecuteLiveTigerGraphQuery } from '@/lib/graph/tigergraph-client';
-import type { FirewallPolicyConfig, HopDepth } from '@/types/veilpay';
+import type { FirewallPolicyConfig, HopDepth } from '@/types/veinpay';
 
 export interface McpToolDefinition {
   name: string;
@@ -44,22 +44,22 @@ export const TIGERGRAPH_MCP_TOOLS: McpToolDefinition[] = [
   {
     name: 'graph__run_query',
     description:
-      'Runs a pre-installed GSQL query on a TigerGraph graph (e.g., "veilpay_firewall_check" on "VeilPayGraph"). Compatible with TigerGraph-MCP and TigerGraph RESTPP.',
+      'Runs a pre-installed GSQL query on a TigerGraph graph (e.g., "veinpay_firewall_check" on "VeinPayGraph"). Compatible with TigerGraph-MCP and TigerGraph RESTPP.',
     inputSchema: {
       type: 'object',
       properties: {
         graph_name: {
           type: 'string',
-          description: 'The name of the graph (defaults to "VeilPayGraph").',
+          description: 'The name of the graph (defaults to "VeinPayGraph").',
         },
         query_name: {
           type: 'string',
-          description: 'The name of the installed GSQL query to execute (e.g. "veilpay_firewall_check").',
+          description: 'The name of the installed GSQL query to execute (e.g. "veinpay_firewall_check").',
         },
         params: {
           type: 'object',
           description:
-            'Parameters for the GSQL query. For veilpay_firewall_check: { target_wallet, merchant_wallet, max_hops, sybil_threshold }.',
+            'Parameters for the GSQL query. For veinpay_firewall_check: { target_wallet, merchant_wallet, max_hops, sybil_threshold }.',
         },
       },
       required: ['query_name'],
@@ -74,7 +74,7 @@ export const TIGERGRAPH_MCP_TOOLS: McpToolDefinition[] = [
       properties: {
         graph_name: {
           type: 'string',
-          description: 'The name of the graph (defaults to "VeilPayGraph").',
+          description: 'The name of the graph (defaults to "VeinPayGraph").',
         },
       },
     },
@@ -181,7 +181,7 @@ export async function executeTigerGraphMcpTool(
   args: Record<string, unknown> = {}
 ): Promise<McpCallToolResult> {
   const dataset: SeedGraphDataset = buildSeededGraphDataset();
-  const graphName = typeof args.graph_name === 'string' ? args.graph_name : 'VeilPayGraph';
+  const graphName = typeof args.graph_name === 'string' ? args.graph_name : 'VeinPayGraph';
 
   const normalizedName = name
     .replace(/^tigergraph__/, 'graph__')
@@ -192,7 +192,7 @@ export async function executeTigerGraphMcpTool(
       const queryName = String(args.query_name || '');
       const params = (args.params || {}) as Record<string, unknown>;
 
-      if (queryName === 'veilpay_firewall_check') {
+      if (queryName === 'veinpay_firewall_check') {
         const targetWallet = String(params.target_wallet || params.targetWallet || '');
         const merchantWallet = String(params.merchant_wallet || params.merchantWallet || '');
         const rawHops = Number(params.max_hops || params.maxHops || 3);
@@ -201,7 +201,7 @@ export async function executeTigerGraphMcpTool(
 
         if (!targetWallet) {
           return {
-            content: [{ type: 'text', text: 'Error: target_wallet parameter is required for veilpay_firewall_check.' }],
+            content: [{ type: 'text', text: 'Error: target_wallet parameter is required for veinpay_firewall_check.' }],
             isError: true,
           };
         }
@@ -256,7 +256,7 @@ export async function executeTigerGraphMcpTool(
         }
 
         // Run high-fidelity in-memory GSQL engine
-        const localResult = runVeilPayFirewallTraversal({
+        const localResult = runVeinPayFirewallTraversal({
           targetWallet,
           merchantWallet,
           policy,
@@ -304,7 +304,7 @@ export async function executeTigerGraphMcpTool(
       }
 
       return {
-        content: [{ type: 'text', text: `Unknown query '${queryName}' on graph '${graphName}'. Available: veilpay_firewall_check` }],
+        content: [{ type: 'text', text: `Unknown query '${queryName}' on graph '${graphName}'. Available: veinpay_firewall_check` }],
         isError: true,
       };
     }

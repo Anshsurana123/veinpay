@@ -30,24 +30,24 @@ const nonceStore = new Map<
 >();
 
 export function assertSessionSecretConfigured(): void {
-  const secret = process.env.VEILPAY_SESSION_SECRET?.trim();
-  const allowDev = process.env.VEILPAY_ALLOW_DEV_SECRETS === 'true';
+  const secret = process.env.VEINPAY_SESSION_SECRET?.trim();
+  const allowDev = process.env.VEINPAY_ALLOW_DEV_SECRETS === 'true';
   if (process.env.NODE_ENV === 'production' && !secret && !allowDev) {
     throw new Error(
-      'FATAL: VEILPAY_SESSION_SECRET is required in production.'
+      'FATAL: VEINPAY_SESSION_SECRET is required in production.'
     );
   }
 }
 
 function getSessionSecret(): string {
-  const secret = process.env.VEILPAY_SESSION_SECRET?.trim();
+  const secret = process.env.VEINPAY_SESSION_SECRET?.trim();
   if (!secret) {
-    if (process.env.NODE_ENV === 'production' && process.env.VEILPAY_ALLOW_DEV_SECRETS !== 'true') {
+    if (process.env.NODE_ENV === 'production' && process.env.VEINPAY_ALLOW_DEV_SECRETS !== 'true') {
       throw new Error(
-        'FATAL: VEILPAY_SESSION_SECRET is required in production.'
+        'FATAL: VEINPAY_SESSION_SECRET is required in production.'
       );
     }
-    return 'veilpay-dev-ephemeral-session-hmac-secret-2026';
+    return 'veinpay-dev-ephemeral-session-hmac-secret-2026';
   }
   return secret;
 }
@@ -63,7 +63,7 @@ export function buildProofOfControlMessage(params: {
   const normalizedAddr = params.scannedAddress.trim().toLowerCase();
   const normalizedVault = (params.vaultAddress ?? '').trim().toLowerCase();
   const lines = [
-    'VeilPay Pre-Sign Firewall — Proof of Wallet Control',
+    'VeinPay Pre-Sign Firewall — Proof of Wallet Control',
     `Link ID: ${params.linkId.trim()}`,
   ];
   if (normalizedVault) {

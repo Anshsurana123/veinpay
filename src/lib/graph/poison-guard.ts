@@ -2,7 +2,7 @@ import type {
   CharDiffSegment,
   OutboundPoisonScanResult,
   VaultSettlementMode,
-} from '@/types/veilpay';
+} from '@/types/veinpay';
 import {
   DEMO_ADDRESS_ALIASES,
   validateMultiProtocolAddress,

@@ -3,7 +3,7 @@
 import React from 'react';
 import { useAccount, useDisconnect } from 'wagmi';
 import { useAppKit } from '@reown/appkit/react';
-import { useVeilPayStore } from '@/store/veilpay-store';
+import { useVeinPayStore } from '@/store/veinpay-store';
 
 export function AppHeader() {
   const {
@@ -15,7 +15,7 @@ export function AppHeader() {
     syncConnectedWallet,
     selectPersona,
     activePersonaId,
-  } = useVeilPayStore();
+  } = useVeinPayStore();
 
   const { isConnected, address } = useAccount();
   const { disconnect } = useDisconnect();
@@ -69,7 +69,7 @@ export function AppHeader() {
           }}
           aria-hidden="true"
         />
-        <span>VeilPay</span>
+        <span>VeinPay</span>
       </div>
 
       {/* Mainnet / Testnet Switch */}

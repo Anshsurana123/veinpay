@@ -13,7 +13,7 @@ import {
   Globe,
 } from 'lucide-react';
 import { useAppKit, useAppKitAccount } from '@reown/appkit/react';
-import { useVeilPayStore } from '@/store/veilpay-store';
+import { useVeinPayStore } from '@/store/veinpay-store';
 import { isReownConfigured } from '@/config/wagmi';
 
 export function TopTelemetryBar() {
@@ -32,7 +32,7 @@ export function TopTelemetryBar() {
     selectPersona,
     syncConnectedWallet,
     linkConfig,
-  } = useVeilPayStore();
+  } = useVeinPayStore();
 
   useEffect(() => {
     if (isConnected && address) {
@@ -62,7 +62,7 @@ export function TopTelemetryBar() {
             <div>
               <div className="flex items-center gap-2">
                 <span className="font-mono text-sm font-bold tracking-tight text-[#F3F1EC]">
-                  VEILPAY
+                  VEINPAY
                 </span>
                 <span className="border border-[#D97736]/40 bg-[#261810] px-1.5 py-0.5 font-mono text-[10px] font-semibold tracking-wider text-[#E5A93C] uppercase">
                   ZERO-DOXX FIREWALL

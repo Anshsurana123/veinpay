@@ -1,5 +1,5 @@
 import { keccak256 } from 'viem';
-import type { VaultSettlementMode } from '@/types/veilpay';
+import type { VaultSettlementMode } from '@/types/veinpay';
 
 // ============================================================================
 // 1. DEMO PERSONA SHORTHAND ALIASES (FOR SIMULATOR GRAPH INPUT)

@@ -1,4 +1,4 @@
-# VeilPay — Verified 2026 API & Cryptographic Protocol Specifications
+# VeinPay — Verified 2026 API & Cryptographic Protocol Specifications
 
 > **Verification Date:** 2026-10-28  
 > All external endpoints, headers, query parameters, and JSON response paths in this file were verified against live 2026 documentation and live HTTP probes.
@@ -149,7 +149,7 @@ Content-Type: application/json
 
 {
   "secret": "<TIGERGRAPH_SECRET>",
-  "graph": "VeilPayGraph",
+  "graph": "VeinPayGraph",
   "lifetime": 604800000
 }
 ```
@@ -157,7 +157,7 @@ Content-Type: application/json
 ### 2.2 Running the Installed Query (`GET/POST /restpp/query/{graph_name}/{query_name}`)
 
 ```http
-POST https://{TIGERGRAPH_HOST}/restpp/query/VeilPayGraph/veilpay_firewall_check
+POST https://{TIGERGRAPH_HOST}/restpp/query/VeinPayGraph/veinpay_firewall_check
 Authorization: Bearer <TIGERGRAPH_TOKEN>
 Content-Type: application/json
 
@@ -226,7 +226,7 @@ GET https://api.etherscan.io/v2/api?chainid={chainId}&module=account&action=txli
 
 ### 3.2 Verified Etherscan V2 Free-Tier vs. Paid-Tier Chain Matrix (2026)
 
-| Chain Name | `chainid` | Etherscan Free Tier Support | VeilPay Crawler Behavior |
+| Chain Name | `chainid` | Etherscan Free Tier Support | VeinPay Crawler Behavior |
 | :--- | :--- | :--- | :--- |
 | **Ethereum Mainnet** | `1` | **Supported (Free Tier)** | Full live N-hop crawl (`txlist` + `tokentx`). |
 | **Arbitrum One** | `42161` | **Supported (Free Tier)** | Full live N-hop crawl (`txlist` + `tokentx`). |
@@ -261,11 +261,11 @@ Flags a discovered ancestor as a `ThreatEntity` if any of the following fields e
   ```
 - **Primary QR / Deep-Link URI (BIP-321 Compliant `sp=` Parameter):**
   ```text
-  bitcoin:?sp=sp1qqgste7k9hx0qftg6qmwlkqtwuy6cycyavzmzj85c6qdfhjdpdjtdgqjuexzk6murw56suy3e0rd2cgqvycxttddwsvgxe2usfpxumr70xc9pkqwv&amount=0.0025&label=VeilPay%20Protected%20Vault
+  bitcoin:?sp=sp1qqgste7k9hx0qftg6qmwlkqtwuy6cycyavzmzj85c6qdfhjdpdjtdgqjuexzk6murw56suy3e0rd2cgqvycxttddwsvgxe2usfpxumr70xc9pkqwv&amount=0.0025&label=VeinPay%20Protected%20Vault
   ```
 - **Secondary Direct URI Copy Option (Prompt Legacy Format):**
   ```text
-  bitcoin:sp1qqgste7k9hx0qftg6qmwlkqtwuy6cycyavzmzj85c6qdfhjdpdjtdgqjuexzk6murw56suy3e0rd2cgqvycxttddwsvgxe2usfpxumr70xc9pkqwv?amount=0.0025&label=VeilPay%20Protected%20Vault
+  bitcoin:sp1qqgste7k9hx0qftg6qmwlkqtwuy6cycyavzmzj85c6qdfhjdpdjtdgqjuexzk6murw56suy3e0rd2cgqvycxttddwsvgxe2usfpxumr70xc9pkqwv?amount=0.0025&label=VeinPay%20Protected%20Vault
   ```
 - **Validation Rules (`src/lib/validators/address.ts`):**
   - Must start with `sp1q` (mainnet version 0) or `tsp1q` (testnet version 0).
@@ -279,7 +279,7 @@ Flags a discovered ancestor as a `ThreatEntity` if any of the following fields e
   ```
 - **Spec-Compliant Monero URI:**
   ```text
-  monero:888tNkZrPN6JsEgekjMnABU4TBzc2Dt29EPAvkRxbANsAnjyPbb3iQ1YBRk1UXcdRsiKc9dhwMVgN5S9cQUiyoogDavup3H?tx_amount=1.45&recipient_name=VeilPay%20Vault&tx_description=Audit%20Settlement
+  monero:888tNkZrPN6JsEgekjMnABU4TBzc2Dt29EPAvkRxbANsAnjyPbb3iQ1YBRk1UXcdRsiKc9dhwMVgN5S9cQUiyoogDavup3H?tx_amount=1.45&recipient_name=VeinPay%20Vault&tx_description=Audit%20Settlement
   ```
 - **Validation Rules:**
   - Subaddress starts with `8` (or standard address with `4`), length `95` characters (or `106` for integrated address), all characters in Monero Base58 alphabet (`123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz` — excludes `0`, `O`, `I`, `l`).
@@ -299,7 +299,7 @@ Flags a discovered ancestor as a `ThreatEntity` if any of the following fields e
 
 ---
 
-## 6. VeilPay Internal API Endpoints & Cryptographic Protocol Suite
+## 6. VeinPay Internal API Endpoints & Cryptographic Protocol Suite
 
 ### 6.1 Circle CCTP V2 Testnet Routing (`GET /api/cctp/quote`, `POST /api/cctp/attestation`)
 - **GET /api/cctp/quote**: Computes authoritative net received amount, Circle burn fee, finality mode (Fast / Standard), and returns official testnet TokenMessengerV2 contract addresses (`Ethereum Sepolia`, `OP Sepolia`, `Arbitrum Sepolia`, `Base Sepolia`, `Polygon Amoy`). Requires verified link authority + scan attestation with `proofOfControl=true`.
@@ -318,7 +318,7 @@ Flags a discovered ancestor as a `ThreatEntity` if any of the following fields e
 - **Server HMAC Attestation**: Quote routes (`/api/socket/quote` and `/api/cctp/quote`) require an HMAC attestation that covers `linkId`, `policyHash`, and the verified link's `signer`. Both routes refuse execution with HTTP 403 if link verification fails.
 
 ### 6.4 Ed25519 Signed Forensic Receipts & Public Key Verification
-- **GET /.well-known/veilpay-receipt-key**: Serves VeilPay's Ed25519 public key in JWK and SPKI PEM format (`veilpay-ed25519-v1`).
+- **GET /.well-known/veinpay-receipt-key**: Serves VeinPay's Ed25519 public key in JWK and SPKI PEM format (`veinpay-ed25519-v1`).
 - **POST /api/aigi/verify**: Cryptographically verifies that `sha256HexSync(canonicalPayloadJson) === commitmentHash` and validates the Ed25519 signature against the published public key.
 
 ### 6.5 Real Integration Diagnostics (`GET /api/health`)

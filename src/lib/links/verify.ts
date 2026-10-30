@@ -10,7 +10,7 @@ import { mainnet } from 'viem/chains';
 import type {
   LinkTrustLevel,
   SignedPaymentLinkPayload,
-} from '@/types/veilpay';
+} from '@/types/veinpay';
 import {
   canonicalizeSignedLinkPayload,
   computePolicyKeccak256,

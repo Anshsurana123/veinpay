@@ -2,7 +2,7 @@ import { randomBytes } from 'crypto';
 import { getAddress, isAddress, verifyTypedData } from 'viem';
 
 export const READ_ACTIVITY_EIP712_DOMAIN = {
-  name: 'VeilPay Link Activity',
+  name: 'VeinPay Link Activity',
   version: '1',
 } as const;
 

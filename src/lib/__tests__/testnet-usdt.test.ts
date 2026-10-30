@@ -11,7 +11,7 @@ import { verifySignedPaymentLink } from '@/lib/links/verify';
 import { buildPaymentLinkTypedData } from '@/lib/links/eip712';
 import { encodeSignedLinkPayloadToBase64Url, computePolicyKeccak256 } from '@/lib/links/canonical';
 import { privateKeyToAccount } from 'viem/accounts';
-import type { SignedPaymentLinkPayload } from '@/types/veilpay';
+import type { SignedPaymentLinkPayload } from '@/types/veinpay';
 
 const TEST_RECEIVER = privateKeyToAccount(
   '0x4f3edf983ac636a65a842ce7c78d9aa706d3b113bce9c46f30d7d21715b23b1d'

@@ -3,7 +3,7 @@ import type {
   AigiForensicReceipt,
   FirewallScanResult,
   HopEvidenceStep,
-} from '@/types/veilpay';
+} from '@/types/veinpay';
 import { formatShortAddress } from '@/lib/validators/address';
 import {
   getCachedGeminiSummary,
@@ -171,7 +171,7 @@ export function generateAigiForensicReceipt(
 
   if (!useV2) {
     canonicalCommitmentObject = {
-      schema: 'veilpay.aigi.receipt.v1',
+      schema: 'veinpay.aigi.receipt.v1',
       verdictStatus: scan.verdict,
       targetWallet: scan.targetWallet.toLowerCase(),
       merchantWallet: scan.merchantWallet.toLowerCase(),
@@ -191,7 +191,7 @@ export function generateAigiForensicReceipt(
   } else {
     // Standard v2 signed commitment specification
     canonicalCommitmentObject = {
-      schema: 'veilpay.aigi.receipt.v2',
+      schema: 'veinpay.aigi.receipt.v2',
       linkId: options?.linkId || 'default',
       payer: (options?.payer || scan.targetWallet).toLowerCase(),
       merchant: (options?.merchant || scan.merchantWallet).toLowerCase(),
@@ -303,7 +303,7 @@ export async function maybeEnrichReceiptWithGemini(
     const cleanNarrative = receipt.deterministicNarrative.slice(0, 500);
 
     const prompt = [
-      'You are the AIGI Web3 Forensic Compliance Narrator for VeilPay.',
+      'You are the AIGI Web3 Forensic Compliance Narrator for VeinPay.',
       'Write a crisp, institutional 2-sentence executive forensic summary based ONLY on the exact deterministic receipt facts below.',
       'STRICT RULES: Do NOT invent any addresses, hop numbers, or transaction hashes. Cite the exact verdict, hop count, and primary address/hash.',
       `Verdict: ${cleanVerdict}`,

@@ -1,4 +1,4 @@
-# VeilPay — Live Execution Checkpoints & Handoff Log (`PROGRESS_CHECKPOINTS.md`)
+# VeinPay — Live Execution Checkpoints & Handoff Log (`PROGRESS_CHECKPOINTS.md`)
 
 > **FOR ANY CONTINUING AGENT:** Read this file and run `git status` + `git log -n 5 --oneline` first. Every completed phase below is committed to git and verified.
 
@@ -10,7 +10,7 @@
 | :--- | :--- | :--- | :--- |
 | **CP-0** | Architecture, Specs, `.env.local`, Reown Skill & Docs | ✅ COMPLETED | `d89f66a` |
 | **CP-1** | Phase 1: Project Scaffold, Dependencies, Tailwind v4 `@theme` & Core Types | ✅ COMPLETED | `0829682` |
-| **CP-2** | Phase 2A: Production TigerGraph GSQL (`/tigergraph/veilpay_firewall.gsql`) & Multi-Chain Address/URI Validators | ✅ COMPLETED | `0829682` |
+| **CP-2** | Phase 2A: Production TigerGraph GSQL (`/tigergraph/veinpay_firewall.gsql`) & Multi-Chain Address/URI Validators | ✅ COMPLETED | `0829682` |
 | **CP-3** | Phase 2B: Seeded Graph Topologies, In-Process GSQL-Mirror Engine, PoisonGraph & Threat-Intel Snapshot | ✅ COMPLETED | `0829682` |
 | **CP-4** | Phase 2C: Live TigerGraph 4.x RESTPP Client & Live Etherscan V2 + GoPlus Crawler | ✅ COMPLETED | `c144905` |
 | **CP-5** | Phase 3: AIGI Forensic Engine (SHA-256 + Gemini Narration), SOCKET Swap V3 Adapter & All 4 API Routes | ✅ COMPLETED | `c144905` |

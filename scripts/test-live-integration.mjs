@@ -9,7 +9,7 @@ import { crawlLiveAddressAndScan } from '../src/lib/graph/live-crawler.ts';
 import { AUTHORITATIVE_DEFAULT_POLICY } from '../src/lib/graph/full-scan.ts';
 
 async function main() {
-  console.log('=== VEILPAY TRI-INTEGRATION VERIFICATION ===\n');
+  console.log('=== VEINPAY TRI-INTEGRATION VERIFICATION ===\n');
 
   // 1. GoPlus Live API Key Check
   console.log('1. Testing GoPlus Live API Key with Address Security...');
@@ -38,8 +38,8 @@ async function main() {
   // 3. TigerGraph MCP Tool Execution
   console.log('3. Testing TigerGraph MCP Tool Execution (graph__run_query)...');
   const mcpQueryRes = await executeTigerGraphMcpTool('graph__run_query', {
-    graph_name: 'VeilPayGraph',
-    query_name: 'veilpay_firewall_check',
+    graph_name: 'VeinPayGraph',
+    query_name: 'veinpay_firewall_check',
     params: {
       target_wallet: '0x99B1c402881a77e3d90123456789aB00000FDead',
       merchant_wallet: '0x71C84102070853531b783c5D2D563456F9960244',

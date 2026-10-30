@@ -1,39 +1,39 @@
-import type { ThreatMetricsSummary, VeilPayEvent } from './types';
+import type { ThreatMetricsSummary, VeinPayEvent } from './types';
 import { getStorage } from '@/lib/storage';
 
 export interface EventStore {
   readonly isPersistent: boolean;
   recordEvent(
-    event: Omit<VeilPayEvent, 'id' | 'timestamp'> & {
+    event: Omit<VeinPayEvent, 'id' | 'timestamp'> & {
       id?: string;
       timestamp?: string;
     }
-  ): Promise<VeilPayEvent>;
+  ): Promise<VeinPayEvent>;
   updateEvent(
     id: string,
-    updates: Partial<VeilPayEvent>
-  ): Promise<VeilPayEvent | null>;
+    updates: Partial<VeinPayEvent>
+  ): Promise<VeinPayEvent | null>;
   getEvents(filter?: {
     linkId?: string;
     simulated?: boolean;
     limit?: number;
-  }): Promise<VeilPayEvent[]>;
+  }): Promise<VeinPayEvent[]>;
   getThreatMetrics(linkId?: string): Promise<ThreatMetricsSummary>;
   clear(): Promise<void>;
 }
 
 export class InMemoryEventStore implements EventStore {
   readonly isPersistent = false;
-  private events: VeilPayEvent[] = [];
-  private eventById = new Map<string, VeilPayEvent>();
+  private events: VeinPayEvent[] = [];
+  private eventById = new Map<string, VeinPayEvent>();
 
   async recordEvent(
-    input: Omit<VeilPayEvent, 'id' | 'timestamp'> & {
+    input: Omit<VeinPayEvent, 'id' | 'timestamp'> & {
       id?: string;
       timestamp?: string;
     }
-  ): Promise<VeilPayEvent> {
-    const event: VeilPayEvent = {
+  ): Promise<VeinPayEvent> {
+    const event: VeinPayEvent = {
       ...input,
       id: input.id ?? `evt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
       timestamp: input.timestamp ?? new Date().toISOString(),
@@ -51,12 +51,12 @@ export class InMemoryEventStore implements EventStore {
 
   async updateEvent(
     id: string,
-    updates: Partial<VeilPayEvent>
-  ): Promise<VeilPayEvent | null> {
+    updates: Partial<VeinPayEvent>
+  ): Promise<VeinPayEvent | null> {
     const existing = this.eventById.get(id);
     if (!existing) return null;
 
-    const updated: VeilPayEvent = {
+    const updated: VeinPayEvent = {
       ...existing,
       ...updates,
       id: existing.id, // Immutable
@@ -75,7 +75,7 @@ export class InMemoryEventStore implements EventStore {
     linkId?: string;
     simulated?: boolean;
     limit?: number;
-  }): Promise<VeilPayEvent[]> {
+  }): Promise<VeinPayEvent[]> {
     let result = this.events;
     if (filter?.linkId) {
       const targetLinkId = filter.linkId.trim().toLowerCase();
@@ -131,12 +131,12 @@ export class StorageEventStore implements EventStore {
   readonly isPersistent = true;
 
   async recordEvent(
-    input: Omit<VeilPayEvent, 'id' | 'timestamp'> & {
+    input: Omit<VeinPayEvent, 'id' | 'timestamp'> & {
       id?: string;
       timestamp?: string;
     }
-  ): Promise<VeilPayEvent> {
-    const event: VeilPayEvent = {
+  ): Promise<VeinPayEvent> {
+    const event: VeinPayEvent = {
       ...input,
       id: input.id ?? `evt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
       timestamp: input.timestamp ?? new Date().toISOString(),
@@ -144,11 +144,11 @@ export class StorageEventStore implements EventStore {
 
     const storage = getStorage();
     const score = Date.parse(event.timestamp) || Date.now();
-    const linkKey = `veilpay:events:link:${event.linkId.toLowerCase()}`;
-    const allKey = 'veilpay:events:all';
+    const linkKey = `veinpay:events:link:${event.linkId.toLowerCase()}`;
+    const allKey = 'veinpay:events:all';
 
     // 1. Store event object with 30-day TTL (2592000s)
-    await storage.set(`veilpay:event:${event.id}`, event, {
+    await storage.set(`veinpay:event:${event.id}`, event, {
       exSeconds: 86400 * 30,
     });
 
@@ -167,19 +167,19 @@ export class StorageEventStore implements EventStore {
 
   async updateEvent(
     id: string,
-    updates: Partial<VeilPayEvent>
-  ): Promise<VeilPayEvent | null> {
+    updates: Partial<VeinPayEvent>
+  ): Promise<VeinPayEvent | null> {
     const storage = getStorage();
-    const existing = await storage.get<VeilPayEvent>(`veilpay:event:${id}`);
+    const existing = await storage.get<VeinPayEvent>(`veinpay:event:${id}`);
     if (!existing) return null;
 
-    const updated: VeilPayEvent = {
+    const updated: VeinPayEvent = {
       ...existing,
       ...updates,
       id: existing.id, // Immutable
     };
 
-    await storage.set(`veilpay:event:${id}`, updated, { exSeconds: 86400 * 30 });
+    await storage.set(`veinpay:event:${id}`, updated, { exSeconds: 86400 * 30 });
     return updated;
   }
 
@@ -187,21 +187,21 @@ export class StorageEventStore implements EventStore {
     linkId?: string;
     simulated?: boolean;
     limit?: number;
-  }): Promise<VeilPayEvent[]> {
+  }): Promise<VeinPayEvent[]> {
     const storage = getStorage();
     const key = filter?.linkId
-      ? `veilpay:events:link:${filter.linkId.toLowerCase()}`
-      : 'veilpay:events:all';
+      ? `veinpay:events:link:${filter.linkId.toLowerCase()}`
+      : 'veinpay:events:all';
 
     const limit = filter?.limit ?? 100;
     const ids = await storage.zrevrange(key, 0, limit - 1);
 
     if (!ids || ids.length === 0) return [];
 
-    const keys = ids.map((id) => `veilpay:event:${id}`);
-    const rawEvents = await storage.mget<VeilPayEvent>(keys);
+    const keys = ids.map((id) => `veinpay:event:${id}`);
+    const rawEvents = await storage.mget<VeinPayEvent>(keys);
 
-    const events: VeilPayEvent[] = [];
+    const events: VeinPayEvent[] = [];
     for (const ev of rawEvents) {
       if (ev) {
         if (filter?.simulated !== undefined && ev.simulated !== filter.simulated) {

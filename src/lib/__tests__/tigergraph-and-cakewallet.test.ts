@@ -44,7 +44,7 @@ describe('TigerGraph RESTPP Client (src/lib/tigergraph.ts)', () => {
 
       const envelope = await queryTigerGraphRestpp({
         host: 'https://test-savanna.tigergraph.cloud',
-        graphName: 'VeilPayGraph',
+        graphName: 'VeinPayGraph',
         targetWallet: '0x4F2a9c117034e8B1200499A1c3f88200000188E1',
         maxHops: 3,
         token: 'test-token',
@@ -53,7 +53,7 @@ describe('TigerGraph RESTPP Client (src/lib/tigergraph.ts)', () => {
       expect(envelope.error).toBe(false);
       expect(envelope.results?.[0].verdict).toBe('VERIFIED_CLEAN');
       expect(global.fetch).toHaveBeenCalledWith(
-        expect.stringContaining('/restpp/query/VeilPayGraph/veilpay_firewall_check?'),
+        expect.stringContaining('/restpp/query/VeinPayGraph/veinpay_firewall_check?'),
         expect.objectContaining({
           method: 'GET',
           headers: expect.objectContaining({

@@ -2,9 +2,9 @@ import type {
   ExecutionEngineSource,
   PaymentAssetSymbol,
   VerdictStatus,
-} from '@/types/veilpay';
+} from '@/types/veinpay';
 
-export type VeilPayEventStatus =
+export type VeinPayEventStatus =
   | 'BLOCKED'
   | 'ALLOWED'
   | 'PENDING'
@@ -22,19 +22,19 @@ export type VeilPayEventStatus =
   | 'MINT_PENDING'
   | 'MINTED';
 
-export type VeilPayEventType =
+export type VeinPayEventType =
   | 'SCAN_RESULT'
   | 'SETTLEMENT_ATTEMPT'
   | 'SETTLEMENT_CONFIRMED'
   | 'LINK_REVOCATION'
   | 'CCTP_TRANSFER_STATE';
 
-export interface VeilPayEvent {
+export interface VeinPayEvent {
   id: string;
   linkId: string;
   timestamp: string; // ISO-8601
-  eventType: VeilPayEventType;
-  status: VeilPayEventStatus;
+  eventType: VeinPayEventType;
+  status: VeinPayEventStatus;
   simulated: boolean;
   payerAddress: string;
   payerLabel?: string;

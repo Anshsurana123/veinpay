@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { useVeilPayStore } from '@/store/veilpay-store';
+import { useVeinPayStore } from '@/store/veinpay-store';
 import type { HealthCheckResponse } from '@/lib/health';
 
 export function SettingsDrawer() {
@@ -11,7 +11,7 @@ export function SettingsDrawer() {
     crawlSettings,
     updateCrawlSettings,
     runFirewallAndQuotePipeline,
-  } = useVeilPayStore();
+  } = useVeinPayStore();
 
   const [healthData, setHealthData] = useState<HealthCheckResponse | null>(null);
 

@@ -17,7 +17,7 @@ import {
   settlementReportBodySchema,
   validateWithZod,
 } from '@/lib/validation/schemas';
-import type { PaymentAssetSymbol, VaultSettlementMode } from '@/types/veilpay';
+import type { PaymentAssetSymbol, VaultSettlementMode } from '@/types/veinpay';
 
 export async function POST(request: NextRequest) {
   const ip = getClientIp(request);

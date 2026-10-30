@@ -15,7 +15,7 @@ import {
   KeyRound,
 } from 'lucide-react';
 import { useAccount, useSignMessage } from 'wagmi';
-import { useVeilPayStore } from '@/store/veilpay-store';
+import { useVeinPayStore } from '@/store/veinpay-store';
 import { WALLET_PERSONAS } from '@/lib/graph/seed-topologies';
 import {
   getChainDisplayName,
@@ -28,7 +28,7 @@ import {
 } from '@/lib/session/proof-of-control';
 import { TopologicalGraphCanvas } from '@/components/TopologicalGraphCanvas';
 import { AigiForensicReceiptCard } from '@/components/AigiForensicReceiptCard';
-import type { SupportedEvmChainId } from '@/types/veilpay';
+import type { SupportedEvmChainId } from '@/types/veinpay';
 
 export function PayerCheckoutPanel() {
   const {
@@ -53,7 +53,7 @@ export function PayerCheckoutPanel() {
     setPayerChainAndToken,
     runFirewallAndQuotePipeline,
     setSettlementModalOpen,
-  } = useVeilPayStore();
+  } = useVeinPayStore();
 
   const { address: wagmiAddress, isConnected } = useAccount();
   const { signMessageAsync, isPending: isSigningProof } = useSignMessage();

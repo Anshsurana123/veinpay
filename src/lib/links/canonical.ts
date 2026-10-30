@@ -5,7 +5,7 @@ import type {
   InconclusivePolicyMode,
   SignedPaymentLinkPayload,
   VaultSettlementMode,
-} from '@/types/veilpay';
+} from '@/types/veinpay';
 
 export interface CanonicalFirewallPolicy {
   cleanLinkEnabled: boolean;

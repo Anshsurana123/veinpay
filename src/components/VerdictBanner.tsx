@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { useVeilPayStore } from '@/store/veilpay-store';
+import { useVeinPayStore } from '@/store/veinpay-store';
 
 export function VerdictBanner() {
   const {
@@ -10,7 +10,7 @@ export function VerdictBanner() {
     runFirewallAndQuotePipeline,
     isScanning,
     linkConfig,
-  } = useVeilPayStore();
+  } = useVeinPayStore();
 
   if (isScanning) {
     return null;

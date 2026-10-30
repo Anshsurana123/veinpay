@@ -2,8 +2,8 @@ import type {
   CctpFinalityMode,
   CctpRoute,
   NormalizedSocketRoute,
-  VeilPayQuoteResponse,
-} from '@/types/veilpay';
+  VeinPayQuoteResponse,
+} from '@/types/veinpay';
 import {
   fromAtomicUnits,
   getChainDisplayName,
@@ -93,7 +93,7 @@ function encodeErc20TransferCalldata(toAddress: string, atomicAmount: string): s
 export function buildSameChainDirectRoute(
   params: SocketQuoteRequestParams,
   elapsedMs: number
-): VeilPayQuoteResponse {
+): VeinPayQuoteResponse {
   const tokenMeta = resolveTokenByAddressOrSymbol(
     params.originChainId,
     params.inputToken
@@ -170,7 +170,7 @@ export function buildDeterministicFallbackQuote(
   params: SocketQuoteRequestParams,
   fallbackReason: string,
   elapsedMs: number
-): VeilPayQuoteResponse {
+): VeinPayQuoteResponse {
   const inMeta = resolveTokenByAddressOrSymbol(
     params.originChainId,
     params.inputToken
@@ -250,7 +250,7 @@ export function buildUnsupportedTestnetQuote(
   params: SocketQuoteRequestParams,
   reason: string,
   elapsedMs: number
-): VeilPayQuoteResponse {
+): VeinPayQuoteResponse {
   return {
     success: false,
     statusCode: 400,
@@ -271,7 +271,7 @@ export function buildCctpV2QuoteResponse(
   params: SocketQuoteRequestParams,
   cctpRoute: CctpRoute,
   elapsedMs: number
-): VeilPayQuoteResponse {
+): VeinPayQuoteResponse {
   const originName = getChainDisplayName(params.originChainId);
   const destName = getChainDisplayName(params.destinationChainId);
   const bridgeDisplayName = `Circle CCTP V2 (${cctpRoute.finalityMode} · ${originName} Domain ${cctpRoute.sourceDomain} → ${destName} Domain ${cctpRoute.destinationDomain})`;
@@ -334,7 +334,7 @@ export function buildCctpV2QuoteResponse(
 
 export async function fetchSocketCrossChainQuote(
   params: SocketQuoteRequestParams
-): Promise<VeilPayQuoteResponse> {
+): Promise<VeinPayQuoteResponse> {
   const startPerf = performance.now();
 
   let inMeta;

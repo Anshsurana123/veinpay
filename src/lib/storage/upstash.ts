@@ -1,5 +1,5 @@
 /**
- * VeilPay — Upstash Redis REST KeyValueStore Implementation
+ * VeinPay — Upstash Redis REST KeyValueStore Implementation
  * File: src/lib/storage/upstash.ts
  */
 

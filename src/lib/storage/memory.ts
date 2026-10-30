@@ -1,5 +1,5 @@
 /**
- * VeilPay — In-Memory KeyValueStore Implementation (Dev & Test Fallback)
+ * VeinPay — In-Memory KeyValueStore Implementation (Dev & Test Fallback)
  * File: src/lib/storage/memory.ts
  */
 

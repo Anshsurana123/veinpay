@@ -1,10 +1,10 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { useVeilPayStore } from '@/store/veilpay-store';
+import { useVeinPayStore } from '@/store/veinpay-store';
 import { OUTBOUND_POISON_TEST_PRESETS } from '@/lib/graph/seed-topologies';
 import { toEip55Address } from '@/lib/validators/address';
-import type { VaultSettlementMode } from '@/types/veilpay';
+import type { VaultSettlementMode } from '@/types/veinpay';
 
 export function SafeSend() {
   const {
@@ -17,7 +17,7 @@ export function SafeSend() {
     setOutboundExpectedMode,
     runOutboundPoisonScan,
     swapToVerifiedContactAddress,
-  } = useVeilPayStore();
+  } = useVeinPayStore();
 
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 

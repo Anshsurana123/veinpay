@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAigiReceiptData } from '@/lib/aigi/verify-helper';
-import type { AigiForensicReceipt } from '@/types/veilpay';
+import type { AigiForensicReceipt } from '@/types/veinpay';
 
 export async function POST(request: NextRequest) {
   try {

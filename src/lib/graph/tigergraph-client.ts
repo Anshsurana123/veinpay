@@ -4,7 +4,7 @@ import type {
   GraphEdge,
   GraphVertex,
   TigerGraphRestppEnvelope,
-} from '@/types/veilpay';
+} from '@/types/veinpay';
 import {
   scanWithTigerGraph,
   buildTigerGraphFailClosedScan as buildFailClosed,

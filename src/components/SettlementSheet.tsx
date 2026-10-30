@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react';
 import QRCode from 'qrcode';
 import { useAccount } from 'wagmi';
 import { useAppKit } from '@reown/appkit/react';
-import { useVeilPayStore } from '@/store/veilpay-store';
+import { useVeinPayStore } from '@/store/veinpay-store';
 import {
   buildBip321SilentPaymentUri,
   buildLegacySilentPaymentUri,
@@ -18,7 +18,7 @@ import {
 } from '@/lib/socket/tokens';
 import { useCctpTransfer } from '@/hooks/useCctpTransfer';
 import { useSettlementFlow } from '@/hooks/useSettlementFlow';
-import type { VaultSettlementMode } from '@/types/veilpay';
+import type { VaultSettlementMode } from '@/types/veinpay';
 
 export function SettlementSheet() {
   const {
@@ -39,7 +39,7 @@ export function SettlementSheet() {
     networkEnv,
     activePersonaId,
     selectPersona,
-  } = useVeilPayStore();
+  } = useVeinPayStore();
 
   const { address: connectedWallet, isConnected } = useAccount();
   const { open: openAppKit } = useAppKit();
@@ -139,8 +139,8 @@ export function SettlementSheet() {
       ? buildBip321SilentPaymentUri({
           spAddress,
           amountBtc,
-          label: `VeilPay:${linkConfig.handle}`,
-          message: `VeilPay Clean Settlement ($${linkConfig.amount} USD @ $${btcRate?.toLocaleString()} BTC/USD)`,
+          label: `VeinPay:${linkConfig.handle}`,
+          message: `VeinPay Clean Settlement ($${linkConfig.amount} USD @ $${btcRate?.toLocaleString()} BTC/USD)`,
         })
       : '';
 
@@ -149,7 +149,7 @@ export function SettlementSheet() {
       ? buildLegacySilentPaymentUri({
           spAddress,
           amountBtc,
-          label: `VeilPay:${linkConfig.handle}`,
+          label: `VeinPay:${linkConfig.handle}`,
         })
       : '';
 
@@ -158,8 +158,8 @@ export function SettlementSheet() {
       ? buildMoneroPaymentUri({
           subaddress: xmrSubaddress,
           amountXmr,
-          recipientName: `VeilPay:${linkConfig.handle}`,
-          description: `VeilPay Clean Settlement ($${linkConfig.amount} USD @ $${xmrRate?.toLocaleString()} XMR/USD)`,
+          recipientName: `VeinPay:${linkConfig.handle}`,
+          description: `VeinPay Clean Settlement ($${linkConfig.amount} USD @ $${xmrRate?.toLocaleString()} XMR/USD)`,
         })
       : '';
 

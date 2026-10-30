@@ -1,4 +1,4 @@
-# VeilPay — Exhaustive Edge-Case Matrix, Canonical Personas & Test Specification
+# VeinPay — Exhaustive Edge-Case Matrix, Canonical Personas & Test Specification
 
 > **Zero-Tolerance Rule #2:** Every scenario in this matrix is governed by real directed graph traversal (`src/lib/graph/engine.ts`) and character-level cryptographic validation (`src/lib/validators/address.ts` & `src/lib/graph/poison-guard.ts`). No hardcoded address-to-boolean shortcuts are permitted.
 

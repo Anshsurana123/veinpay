@@ -124,7 +124,7 @@ export interface SignedPaymentLinkPayload {
   signer: `0x${string}`;
 }
 
-export interface VeilPayLinkConfig {
+export interface VeinPayLinkConfig {
   handle: string;
   amount: string;
   asset: PaymentAssetSymbol;
@@ -443,7 +443,7 @@ export interface NormalizedSocketRoute {
   statusCheckUrl: string;
 }
 
-export interface VeilPayQuoteResponse {
+export interface VeinPayQuoteResponse {
   success: boolean;
   statusCode: number;
   source:

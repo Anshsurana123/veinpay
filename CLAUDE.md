@@ -1,4 +1,4 @@
-# VeilPay — Master Agent Context & Execution Mandate (`AGENTS.md`)
+# VeinPay — Master Agent Context & Execution Mandate (`AGENTS.md`)
 
 > **READ THIS FIRST:** Every AI coding agent or engineer working in this repository MUST read this file and the linked documents in [`docs/`](./docs/) before modifying any code, configuration, or schema.
 
@@ -6,7 +6,7 @@
 
 ## 1. Project Identity & Core Architecture
 
-**VeilPay** (built for Hacker House Goa) is a **Zero-Doxx Cross-Chain Payment Link & Pre-Sign Graph Firewall** for Web3. It unifies four sponsor/core technologies into a single pre-sign and settlement pipeline:
+**VeinPay** (built for Hacker House Goa) is a **Zero-Doxx Cross-Chain Payment Link & Pre-Sign Graph Firewall** for Web3. It unifies four sponsor/core technologies into a single pre-sign and settlement pipeline:
 
 ```text
 [Payer Wallet (Reown AppKit / Persona Simulator / Custom Address)]
@@ -56,12 +56,12 @@ All architectural ambiguities were resolved with the project owner and are **loc
 1. **SOCKET Integration (V3 Live + V2 Adapter + 3500ms Offline Fallback):**
    - Legacy `api.socket.tech/v2/quote` (401 without legacy key) and `public-backend.bungee.exchange` (410 Gone) are deprecated as of 2026.
    - Our backend `/api/socket/quote` calls **Socket Swap V3** (`GET https://public-backend.socket.tech/v3/swap/quote?userOps=tx&...`) by default (zero auth required), or `https://dedicated-backend.socket.tech/v3/swap/quote` when `SOCKET_API_KEY` + `SOCKET_AFFILIATE_ID` are set.
-   - Our adapter normalizes the V3 response into a unified `VeilPayQuoteResult` that exposes **both** native V3 fields (`routes[0].output.amount`, `routes[0].routeDetails.bridgeDetails.protocol.displayName`, `routes[0].estimatedTime`, `routes[0].gasFee.feeInUsd`, `routes[0].txData.object`, `routes[0].approval`) **and** the brief's v2-compatible alias paths (`result.routes[0].toAmount`, `usedBridgeNames`, `serviceTime`, `totalGasFeesInUsd`).
+   - Our adapter normalizes the V3 response into a unified `VeinPayQuoteResult` that exposes **both** native V3 fields (`routes[0].output.amount`, `routes[0].routeDetails.bridgeDetails.protocol.displayName`, `routes[0].estimatedTime`, `routes[0].gasFee.feeInUsd`, `routes[0].txData.object`, `routes[0].approval`) **and** the brief's v2-compatible alias paths (`result.routes[0].toAmount`, `usedBridgeNames`, `serviceTime`, `totalGasFeesInUsd`).
    - Enforces an `AbortSignal.timeout(3500)` abort controller. On network drop or rate limit, returns a realistic, deterministic fallback route quote clearly badged `FALLBACK_DETERMINISTIC`.
 2. **TigerGraph Engine (Hybrid In-Process GSQL-Mirror + Live TigerGraph 4.x RESTPP):**
    - Primary engine is a real, cycle-safe, multi-hop directed graph traversal engine in TypeScript (`src/lib/graph/engine.ts`) using GSQL-equivalent accumulators (`OrAccum`, `MinAccum`, `SumAccum`, `SetAccum`).
-   - When `TIGERGRAPH_HOST`, `TIGERGRAPH_GRAPH`, and `TIGERGRAPH_TOKEN` (or `TIGERGRAPH_SECRET` via `POST /gsql/v1/tokens`) are configured, `/api/firewall/scan` executes against live TigerGraph 4.x RESTPP (`POST /restpp/query/{graph}/veilpay_firewall_check`) and falls back to the in-process engine if unreachable.
-   - Production GSQL schema and query artifact lives at `/tigergraph/veilpay_firewall.gsql`.
+   - When `TIGERGRAPH_HOST`, `TIGERGRAPH_GRAPH`, and `TIGERGRAPH_TOKEN` (or `TIGERGRAPH_SECRET` via `POST /gsql/v1/tokens`) are configured, `/api/firewall/scan` executes against live TigerGraph 4.x RESTPP (`POST /restpp/query/{graph}/veinpay_firewall_check`) and falls back to the in-process engine if unreachable.
+   - Production GSQL schema and query artifact lives at `/tigergraph/veinpay_firewall.gsql`.
 3. **Honest Telemetry Timing:**
    - Only real measured `performance.now()` execution durations (`executionTimeMs`) are reported, explicitly labeled by execution source (`IN_MEMORY_GSQL_ENGINE` vs `TIGERGRAPH_RESTPP_LIVE` vs `ETHERSCAN_V2_LIVE_CRAWL`). No fake static numbers.
 4. **AIGI Forensic Agent (Deterministic Core + Optional Gemini Structured Narration):**
@@ -83,8 +83,8 @@ All architectural ambiguities were resolved with the project owner and are **loc
    - For BTC/XMR vault settlement modes, the payer connects/selects their wallet first; the Cake Wallet QR code and `bitcoin:?sp=...` / `monero:...` URIs remain **redacted/locked** until the TigerGraph firewall clears the payer.
    - Provides both **BIP-321 standard URI** (`bitcoin:?sp=sp1...&amount=...&label=...`) and a legacy copy toggle (`bitcoin:sp1...?amount=...&label=...`).
 9. **Routing & Shareable Links:**
-   - Primary workspace `/` renders the **Receiver Command Center** and **Live Payer Checkout Simulator** side-by-side (or split view) backed by a shared Zustand store (`src/store/veilpay-store.ts`), including an **Incoming Payment Feed** tab, **Safe Send Outbound Guard** tab, and **Crawl/Safety Settings** drawer.
-   - Standalone `/pay/[handle]?c=<base64url>` route reconstructs any generated link statelessly on both `localhost:3000` and Vercel production deployments (`window.location.origin`), while displaying the branded `veilpay.xyz/pay/<handle>` handle pill.
+   - Primary workspace `/` renders the **Receiver Command Center** and **Live Payer Checkout Simulator** side-by-side (or split view) backed by a shared Zustand store (`src/store/veinpay-store.ts`), including an **Incoming Payment Feed** tab, **Safe Send Outbound Guard** tab, and **Crawl/Safety Settings** drawer.
+   - Standalone `/pay/[handle]?c=<base64url>` route reconstructs any generated link statelessly on both `localhost:3000` and Vercel production deployments (`window.location.origin`), while displaying the branded `veinpay.xyz/pay/<handle>` handle pill.
 
 ---
 

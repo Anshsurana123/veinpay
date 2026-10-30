@@ -23,7 +23,7 @@ if (!isReownConfigured) {
     process.env.NEXT_PHASE === 'phase-production-build'
   ) {
     console.warn(
-      '⚠️ [VeilPay CRITICAL WARNING]: NEXT_PUBLIC_PROJECT_ID is missing in production build! Wallet connect is disabled. Configure NEXT_PUBLIC_PROJECT_ID at dashboard.reown.com.'
+      '⚠️ [VeinPay CRITICAL WARNING]: NEXT_PUBLIC_PROJECT_ID is missing in production build! Wallet connect is disabled. Configure NEXT_PUBLIC_PROJECT_ID at dashboard.reown.com.'
     );
   }
 }
@@ -50,7 +50,7 @@ export const wagmiAdapter = new WagmiAdapter({
 });
 
 export const appKitMetadata = {
-  name: 'VeilPay — Pre-Sign Graph Firewall & Zero-Doxx Checkout',
+  name: 'VeinPay — Pre-Sign Graph Firewall & Zero-Doxx Checkout',
   description:
     'Sub-50ms TigerGraph 3-in-1 Pre-Sign Firewall, AIGI Deterministic Forensics, SOCKET V3 Cross-Chain Routing & Cake Wallet Vault Settlement (Mainnet & Testnet).',
   url: process.env.NEXT_PUBLIC_APP_URL || 'https://veinpay.vercel.app',

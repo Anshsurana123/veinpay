@@ -3,10 +3,10 @@ import type {
   FirewallPolicyConfig,
   FirewallScanResult,
   LiveCrawlSettings,
-} from '@/types/veilpay';
+} from '@/types/veinpay';
 import {
   resolveCanonicalWalletInput,
-  runVeilPayFirewallTraversal,
+  runVeinPayFirewallTraversal,
 } from '@/lib/graph/engine';
 import { tryExecuteLiveTigerGraphQuery } from '@/lib/graph/tigergraph-client';
 import { crawlLiveAddressAndScan } from '@/lib/graph/live-crawler';
@@ -56,7 +56,7 @@ export interface RunFullScanResult {
  *
  * Execution order:
  * 1. Live TigerGraph 4.x RESTPP (`tryExecuteLiveTigerGraphQuery`) if configured
- * 2. Seeded topological dataset (`runVeilPayFirewallTraversal`) if vertex is seeded
+ * 2. Seeded topological dataset (`runVeinPayFirewallTraversal`) if vertex is seeded
  * 3. Live Etherscan V2 + GoPlus + threat-intel crawl (`crawlLiveAddressAndScan`)
  *
  * CACHE ISOLATION RULE (P1-2):
@@ -137,7 +137,7 @@ export async function runFullScan(
   const isSeeded = seeded.vertices.has(canonicalTarget.toLowerCase());
 
   const scanResult = isSeeded
-    ? runVeilPayFirewallTraversal({
+    ? runVeinPayFirewallTraversal({
         targetWallet: canonicalTarget,
         merchantWallet: canonicalMerchant,
         policy: params.policy,

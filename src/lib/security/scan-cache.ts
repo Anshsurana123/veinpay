@@ -1,4 +1,4 @@
-import type { FirewallScanResult, LiveCrawlSettings } from '@/types/veilpay';
+import type { FirewallScanResult, LiveCrawlSettings } from '@/types/veinpay';
 import type { RunFullScanResult } from '@/lib/graph/full-scan';
 import { getStorage } from '@/lib/storage';
 

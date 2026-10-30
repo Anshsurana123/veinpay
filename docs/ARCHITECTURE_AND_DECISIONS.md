@@ -1,6 +1,6 @@
-# VeilPay — Architecture Decision Records & Exhaustive Trade-Off Analysis
+# VeinPay — Architecture Decision Records & Exhaustive Trade-Off Analysis
 
-> **Purpose:** This document captures the complete engineering reasoning behind every architectural choice in VeilPay, evaluating **every possible outcome of choosing one option over another** (latency, reliability, security, live-demo resilience, spec compliance, and judge verifiability) and recording the user-locked decision for each.
+> **Purpose:** This document captures the complete engineering reasoning behind every architectural choice in VeinPay, evaluating **every possible outcome of choosing one option over another** (latency, reliability, security, live-demo resilience, spec compliance, and judge verifiability) and recording the user-locked decision for each.
 
 ---
 
@@ -9,7 +9,7 @@
 | ADR # | Decision Domain | Chosen Architecture (Locked) | Rejected Alternatives |
 | :--- | :--- | :--- | :--- |
 | **ADR-01** | **SOCKET (Bungee) Cross-Chain API** | **Socket Swap V3** (`/v3/swap/quote` on `public-backend.socket.tech` or `dedicated-backend.socket.tech`) + **V2/V3 Dual-Shape Adapter** + **3500ms Timeout & Labeled Deterministic Fallback** | Calling deprecated `api.socket.tech/v2/quote` (returns HTTP 401) or `public-backend.bungee.exchange` (returns HTTP 410 Gone) |
-| **ADR-02** | **TigerGraph Execution Engine** | **Hybrid Dual-Engine:** Real In-Process TypeScript Multi-Hop GSQL-Equivalent Graph Engine (Primary) + Live **TigerGraph 4.x RESTPP** (`/restpp/query/{graph}/veilpay_firewall_check`) when env vars are set + Production `/tigergraph/veilpay_firewall.gsql` artifact | Cloud-only TigerGraph (fails if Savanna free workspace pauses or venue Wi-Fi drops); or static mock returns (violates Rule #2) |
+| **ADR-02** | **TigerGraph Execution Engine** | **Hybrid Dual-Engine:** Real In-Process TypeScript Multi-Hop GSQL-Equivalent Graph Engine (Primary) + Live **TigerGraph 4.x RESTPP** (`/restpp/query/{graph}/veinpay_firewall_check`) when env vars are set + Production `/tigergraph/veinpay_firewall.gsql` artifact | Cloud-only TigerGraph (fails if Savanna free workspace pauses or venue Wi-Fi drops); or static mock returns (violates Rule #2) |
 | **ADR-03** | **Traversal Latency Telemetry** | **Honest Real-Time `performance.now()` Measurement** labeled with execution source (`IN_MEMORY_GSQL_ENGINE`, `TIGERGRAPH_RESTPP_LIVE`, or `ETHERSCAN_V2_LIVE_CRAWL`) | Fake hardcoded `32ms` / `38ms` numbers or `Math.random()` jitter |
 | **ADR-04** | **AIGI Forensic Verdict & Receipt** | **Deterministic Rule/Template Engine + Canonical SHA-256 Receipt Hash** + Optional **Gemini (`@google/genai`) Structured Narration Layer** strictly constrained to cited edges | Pure LLM generation (non-deterministic, breaks SHA-256 hash reproducibility, adds 1–3s latency, risks hallucinated tx hashes) |
 | **ADR-05** | **Web3 Wallet Connection Stack** | **Reown AppKit 1.8.x + `@reown/appkit-adapter-wagmi` + Wagmi 3.x + Viem 2.x** with Next.js 16 SSR Cookie Hydration | RainbowKit 2.2.x (pins `wagmi` to `^2.9.0`, peer-dependency conflict with Wagmi 3.x); or raw `window.ethereum` only |
@@ -23,7 +23,7 @@
 | **ADR-13** | **Native BTC (`sp1...`) & Monero (`888...`) Firewall Enforcement** | **Cryptographic Vault Reveal Gate:** Redacts/locks the Cake Wallet QR code and `bitcoin:?sp=...` / `monero:...` URIs until the payer's connected wallet passes the firewall scan | Rendering the BTC/XMR QR code immediately on page load (bypasses the pre-sign firewall concept entirely) |
 | **ADR-14** | **BIP-352 Silent Payment URI Format** | **Dual-Format Support:** Primary **BIP-321 Standard** (`bitcoin:?sp=sp1...&amount=...&label=...`) + **Legacy Direct Copy** (`bitcoin:sp1...?amount=...&label=...`) | Supporting only one format (risks incompatibility across different BIP-352/BIP-321 parsers or literal prompt checks) |
 | **ADR-15** | **Demo Persona & PoisonGraph Address Validity** | **100% Spec-Valid Canonical Addresses:** Genuine **EIP-55 Checksummed** EVM addresses that preserve the exact prompt prefixes/suffixes (`0x71C8...489B`, `0x4F2a...88E1`, `0x99B1...Dead`, `0x5eb1...0014`, `0x33C0...40b0`) + Official **BIP-352 Test Vector** `sp1...` address + Alias Resolver | Using literal invalid strings (`0x5yb1...`, `...4Hop`, fake `sp1...`) which break `viem` and Bech32m validators in Case 4C |
-| **ADR-16** | **Routing, State & Shareable Link Architecture** | **Unified Split-Screen Command Center (`/`) with Shared Zustand Store** + **Stateless Base64URL-Encoded `/pay/[handle]?c=...` Route** using dynamic `window.location.origin` (Vercel/localhost) + branded `veilpay.xyz` badge | Separate routes only (loses side-by-side live demo flow) or copying a dead `https://veilpay.xyz` link that 404s |
+| **ADR-16** | **Routing, State & Shareable Link Architecture** | **Unified Split-Screen Command Center (`/`) with Shared Zustand Store** + **Stateless Base64URL-Encoded `/pay/[handle]?c=...` Route** using dynamic `window.location.origin` (Vercel/localhost) + branded `veinpay.xyz` badge | Separate routes only (loses side-by-side live demo flow) or copying a dead `https://veinpay.xyz` link that 404s |
 
 ---
 
@@ -49,8 +49,8 @@
 ### ADR-02: TigerGraph Execution Engine — Hybrid In-Process + Live RESTPP
 
 - **Outcomes of Each Option:**
-  - *Option A (Chosen — Hybrid):* Build a deterministic, cycle-safe TypeScript directed graph engine (`src/lib/graph/engine.ts`) that implements the exact same vertex/edge schema and accumulator semantics (`OrAccum @is_tainted`, `MinAccum @min_taint_hop`, `SetAccum<EDGE> @@evidence_edges`, `SumAccum @dust_out_degree`, `SetAccum<VERTEX> @sybil_siblings`) as `/tigergraph/veilpay_firewall.gsql`. If `TIGERGRAPH_HOST` + `TIGERGRAPH_TOKEN`/`TIGERGRAPH_SECRET` are set in `.env.local`, `/api/firewall/scan` queries the live TigerGraph 4.x RESTPP endpoint (`POST /restpp/query/{graph}/veilpay_firewall_check`) with a `2500ms` timeout and falls back to the in-process engine if the cloud workspace is paused or offline.
-    - **Pros:** Zero external infrastructure dependency for local dev, Vercel preview, or stage demos; sub-5ms in-process execution; 100% compatible with a live TigerGraph Savanna cluster when credentials are provided; includes the full `/tigergraph/veilpay_firewall.gsql` artifact.
+  - *Option A (Chosen — Hybrid):* Build a deterministic, cycle-safe TypeScript directed graph engine (`src/lib/graph/engine.ts`) that implements the exact same vertex/edge schema and accumulator semantics (`OrAccum @is_tainted`, `MinAccum @min_taint_hop`, `SetAccum<EDGE> @@evidence_edges`, `SumAccum @dust_out_degree`, `SetAccum<VERTEX> @sybil_siblings`) as `/tigergraph/veinpay_firewall.gsql`. If `TIGERGRAPH_HOST` + `TIGERGRAPH_TOKEN`/`TIGERGRAPH_SECRET` are set in `.env.local`, `/api/firewall/scan` queries the live TigerGraph 4.x RESTPP endpoint (`POST /restpp/query/{graph}/veinpay_firewall_check`) with a `2500ms` timeout and falls back to the in-process engine if the cloud workspace is paused or offline.
+    - **Pros:** Zero external infrastructure dependency for local dev, Vercel preview, or stage demos; sub-5ms in-process execution; 100% compatible with a live TigerGraph Savanna cluster when credentials are provided; includes the full `/tigergraph/veinpay_firewall.gsql` artifact.
   - *Option B (Rejected — Cloud-Only):* Require a live TigerGraph Savanna cluster for every scan.
     - **Failure Mode:** TigerGraph Savanna free-tier workspaces auto-pause after inactivity and take several minutes to resume; a paused cluster or venue network blip bricks the entire firewall demo.
 
@@ -100,7 +100,7 @@
      - Every discovered ancestor vertex is checked against:
        - **Local Snapshot (`O(1)` Set lookup):** ScamSniffer drainer database + OFAC SDN sanctioned Ethereum addresses + curated exploit contracts (`PinkDrainer`, `InfernoDrainer`, `AngelDrainer`, `TornadoCash`, `LazarusGroup`, `BybitExploit`, `RoninBridgeExploit`).
        - **Live GoPlus Security API:** `GET https://api.gopluslabs.io/api/v1/address_security/{address}?chain_id={chainId}`, flagging any address where `stealing_attack === "1"`, `phishing_activities === "1"`, `cybercrime === "1"`, `money_laundering === "1"`, `sanctioned === "1"`, or `mixer === "1"`.
-     - Run the exact same `runVeilPayFirewallTraversal()` algorithm on the dynamically constructed subgraph!
+     - Run the exact same `runVeinPayFirewallTraversal()` algorithm on the dynamically constructed subgraph!
 
 ---
 

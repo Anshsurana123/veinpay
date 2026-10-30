@@ -7,9 +7,9 @@ import {
   Layers,
   RotateCcw,
 } from 'lucide-react';
-import { useVeilPayStore } from '@/store/veilpay-store';
+import { useVeinPayStore } from '@/store/veinpay-store';
 import { getChainDisplayName } from '@/lib/socket/tokens';
-import type { GraphEdge, GraphVertex } from '@/types/veilpay';
+import type { GraphEdge, GraphVertex } from '@/types/veinpay';
 
 interface PositionedNode {
   vertex: GraphVertex;
@@ -30,7 +30,7 @@ export function TopologicalGraphCanvas() {
     setSelectedGraphEdgeId,
     setSybilClusterExpanded,
     setShowRawGsqlInspector,
-  } = useVeilPayStore();
+  } = useVeinPayStore();
 
   const layout = useMemo(() => {
     if (!activeScan) {
@@ -388,7 +388,7 @@ export function TopologicalGraphCanvas() {
             markerEnd={isBlocked ? 'url(#arrow-muted)' : 'url(#arrow-clean)'}
           />
 
-          {/* VeilPay Firewall Gate Node */}
+          {/* VeinPay Firewall Gate Node */}
           <g transform={`translate(${layout.gateX}, 145)`}>
             <rect
               x="-26"
@@ -674,7 +674,7 @@ export function TopologicalGraphCanvas() {
                 RAW TIGERGRAPH RESTPP v2 PAYLOAD &amp; GSQL ACCUMULATOR OUTPUT
               </span>
               <span className="text-[#9499A3]">
-                /restpp/query/VeilPayGraph/veilpay_firewall_check
+                /restpp/query/VeinPayGraph/veinpay_firewall_check
               </span>
             </div>
             <pre className="max-h-48 overflow-auto border border-[#262A33] bg-[#131519] p-3 font-mono text-[10px] leading-relaxed text-[#F3F1EC]">
@@ -684,7 +684,7 @@ export function TopologicalGraphCanvas() {
 
           <div>
             <div className="mb-1 font-mono text-[11px] font-semibold text-[#D97736]">
-              EXECUTED GSQL QUERY SNIPPET (/tigergraph/veilpay_firewall.gsql):
+              EXECUTED GSQL QUERY SNIPPET (/tigergraph/veinpay_firewall.gsql):
             </div>
             <pre className="max-h-36 overflow-auto border border-[#262A33] bg-[#131519] p-3 font-mono text-[10px] leading-relaxed text-[#9499A3]">
               {activeScan.gsqlQuerySnippet}

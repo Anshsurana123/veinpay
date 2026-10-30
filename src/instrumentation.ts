@@ -1,10 +1,10 @@
 /**
- * VeilPay — Next.js Server Boot & Instrumentation Hook
+ * VeinPay — Next.js Server Boot & Instrumentation Hook
  * File: src/instrumentation.ts
  *
  * Enforces production security assertions:
  * 1. Storage configuration (Upstash Redis URL/Token or explicit ALLOW_EPHEMERAL_STATE=true)
- * 2. Distinct cryptographic secrets (RECEIPT_SIGNING_KEY, VEILPAY_SESSION_SECRET, VEILPAY_ATTESTATION_SECRET)
+ * 2. Distinct cryptographic secrets (RECEIPT_SIGNING_KEY, VEINPAY_SESSION_SECRET, VEINPAY_ATTESTATION_SECRET)
  */
 
 export async function register() {

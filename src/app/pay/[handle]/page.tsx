@@ -3,14 +3,14 @@
 import React, { useEffect, use, useState, Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { useVeilPayStore } from '@/store/veilpay-store';
-import { signedLinkPayloadToVeilPayConfig } from '@/lib/utils/link-codec';
+import { useVeinPayStore } from '@/store/veinpay-store';
+import { signedLinkPayloadToVeinPayConfig } from '@/lib/utils/link-codec';
 import { AppHeader } from '@/components/AppHeader';
 import { JudgeStrip } from '@/components/JudgeStrip';
 import { PayCheckout } from '@/components/PayCheckout';
 import { SettlementSheet } from '@/components/SettlementSheet';
 import { SettingsDrawer } from '@/components/SettingsDrawer';
-import type { LinkTrustLevel, SignedPaymentLinkPayload } from '@/types/veilpay';
+import type { LinkTrustLevel, SignedPaymentLinkPayload } from '@/types/veinpay';
 
 function StandalonePayContent({ handle }: { handle: string }) {
   const searchParams = useSearchParams();
@@ -21,7 +21,7 @@ function StandalonePayContent({ handle }: { handle: string }) {
     hydrateFromVerifiedLink,
     linkVerificationError,
     setLinkVerificationError,
-  } = useVeilPayStore();
+  } = useVeinPayStore();
 
   const [verifying, setVerifying] = useState(true);
 
@@ -47,7 +47,7 @@ function StandalonePayContent({ handle }: { handle: string }) {
           if (cancelled) return;
 
           if (res.ok && data.valid && data.payload && data.c && data.sig && data.trustLevel) {
-            const decodedConfig = signedLinkPayloadToVeilPayConfig(data.payload);
+            const decodedConfig = signedLinkPayloadToVeinPayConfig(data.payload);
             hydrateFromVerifiedLink(
               {
                 payload: data.payload,
@@ -98,7 +98,7 @@ function StandalonePayContent({ handle }: { handle: string }) {
           return;
         }
 
-        const decodedConfig = signedLinkPayloadToVeilPayConfig(data.payload);
+        const decodedConfig = signedLinkPayloadToVeinPayConfig(data.payload);
         hydrateFromVerifiedLink(
           {
             payload: data.payload,
@@ -142,7 +142,7 @@ function StandalonePayContent({ handle }: { handle: string }) {
           href="/"
           className="text-[#efe6d2] hover:underline"
         >
-          Open VeilPay console ↗
+          Open VeinPay console ↗
         </Link>
       </div>
 
@@ -159,7 +159,7 @@ function StandalonePayContent({ handle }: { handle: string }) {
             {linkVerificationError}
           </p>
           <p className="mt-2 text-[11px] text-[#8ea5b4]">
-            VeilPay requires a cryptographically signed EIP-712 PaymentLink
+            VeinPay requires a cryptographically signed EIP-712 PaymentLink
             payload that has not been tampered with or revoked.
           </p>
         </div>

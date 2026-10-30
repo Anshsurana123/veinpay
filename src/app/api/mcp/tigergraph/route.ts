@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
-import { createVeilPayMcpServer } from '@/lib/mcp/server';
+import { createVeinPayMcpServer } from '@/lib/mcp/server';
 import {
   buildRateLimitExceededResponse,
   checkRateLimit,
@@ -9,20 +9,20 @@ import {
 
 export async function GET() {
   return NextResponse.json({
-    server: 'TigerGraph-MCP-VeilPay',
+    server: 'TigerGraph-MCP-VeinPay',
     version: '1.0.0',
     protocol: 'model-context-protocol',
     description:
-      'Official Model Context Protocol (MCP) server for VeilPay 3-in-1 Pre-Flight Graph Firewall & TigerGraph Engine.',
+      'Official Model Context Protocol (MCP) server for VeinPay 3-in-1 Pre-Flight Graph Firewall & TigerGraph Engine.',
     endpoints: {
       http: '/api/mcp/tigergraph',
       stdio: 'scripts/tigergraph-mcp-stdio.mjs',
     },
     tools: [
-      'veilpay_scan_wallet',
-      'veilpay_check_recipient',
-      'veilpay_verify_receipt',
-      'tigergraph_run_veilpay_query',
+      'veinpay_scan_wallet',
+      'veinpay_check_recipient',
+      'veinpay_verify_receipt',
+      'tigergraph_run_veinpay_query',
       'tigergraph_get_neighbors',
       'tigergraph_get_schema',
       'graph__run_query',
@@ -121,7 +121,7 @@ export async function POST(request: NextRequest) {
       body: reqBodyText,
     });
 
-    const mcpServer = createVeilPayMcpServer();
+    const mcpServer = createVeinPayMcpServer();
     const transport = new WebStandardStreamableHTTPServerTransport();
     await mcpServer.connect(transport);
 

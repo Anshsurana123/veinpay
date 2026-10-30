@@ -1,8 +1,8 @@
 {
-  "name": "veilpay",
+  "name": "veinpay",
   "version": "1.0.0",
   "private": true,
-  "description": "VeilPay — Zero-Doxx Cross-Chain Payment Link & Pre-Sign TigerGraph Firewall for Web3",
+  "description": "VeinPay — Zero-Doxx Cross-Chain Payment Link & Pre-Sign TigerGraph Firewall for Web3",
   "scripts": {
     "dev": "next dev -p 3000",
     "build": "next build",

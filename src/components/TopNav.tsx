@@ -1,10 +1,10 @@
 'use client';
 
 import React from 'react';
-import { useVeilPayStore } from '@/store/veilpay-store';
+import { useVeinPayStore } from '@/store/veinpay-store';
 
 export function TopNav() {
-  const { activeTab, setActiveTab, paymentFeed } = useVeilPayStore();
+  const { activeTab, setActiveTab, paymentFeed } = useVeinPayStore();
 
   const tabs: Array<{ id: 'pay' | 'create' | 'activity' | 'safesend'; label: string }> = [
     { id: 'pay', label: 'Pay' },

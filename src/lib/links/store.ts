@@ -1,7 +1,7 @@
 import type {
   LinkTrustLevel,
   SignedPaymentLinkPayload,
-} from '@/types/veilpay';
+} from '@/types/veinpay';
 import { registerVerifiedLinkPolicy } from '@/lib/security/attestation';
 import { getStorage } from '@/lib/storage';
 

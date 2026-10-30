@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { useVeilPayStore } from '@/store/veilpay-store';
+import { useVeinPayStore } from '@/store/veinpay-store';
 import { AppHeader } from '@/components/AppHeader';
 import { JudgeStrip } from '@/components/JudgeStrip';
 import { TopNav } from '@/components/TopNav';
@@ -13,7 +13,7 @@ import { SettlementSheet } from '@/components/SettlementSheet';
 import { SettingsDrawer } from '@/components/SettingsDrawer';
 
 export default function HomePage() {
-  const { activeTab } = useVeilPayStore();
+  const { activeTab } = useVeinPayStore();
 
   return (
     <div className="w-full max-w-[600px] mx-auto min-h-screen px-3.5 py-4 pb-20">

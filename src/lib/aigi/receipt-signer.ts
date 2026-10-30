@@ -5,8 +5,8 @@ const ED25519_PKCS8_PREFIX = Buffer.from(
   'hex'
 );
 
-export const DEFAULT_RECEIPT_KEY_ID = 'veilpay-ed25519-v1';
-export const DEMO_RECEIPT_KEY_ID = 'veilpay-demo-ed25519';
+export const DEFAULT_RECEIPT_KEY_ID = 'veinpay-ed25519-v1';
+export const DEMO_RECEIPT_KEY_ID = 'veinpay-demo-ed25519';
 
 interface KeyPairEntry {
   keyId: string;
@@ -19,7 +19,7 @@ let keyRegistry: Map<string, KeyPairEntry> | null = null;
 let activeKeyId: string = DEFAULT_RECEIPT_KEY_ID;
 
 export function assertReceiptSigningKeyConfigured(): void {
-  const allowDev = process.env.VEILPAY_ALLOW_DEV_SECRETS === 'true';
+  const allowDev = process.env.VEINPAY_ALLOW_DEV_SECRETS === 'true';
   const hasKeys =
     Boolean(process.env.RECEIPT_SIGNING_KEYS?.trim()) ||
     Boolean(process.env.RECEIPT_SIGNING_KEY?.trim());
@@ -94,7 +94,7 @@ function initKeyRegistry(): Map<string, KeyPairEntry> {
     // Deterministic dev/test seed
     const devSeed = crypto
       .createHash('sha256')
-      .update('veilpay-default-dev-receipt-signing-key-v1')
+      .update('veinpay-default-dev-receipt-signing-key-v1')
       .digest();
     const priv = crypto.createPrivateKey({
       key: Buffer.concat([ED25519_PKCS8_PREFIX, devSeed]),
@@ -117,7 +117,7 @@ function initKeyRegistry(): Map<string, KeyPairEntry> {
   // 3. Register separate DEMO key
   const demoSeed = crypto
     .createHash('sha256')
-    .update('veilpay-demo-unverified-signing-key-2026')
+    .update('veinpay-demo-unverified-signing-key-2026')
     .digest();
   const demoPriv = crypto.createPrivateKey({
     key: Buffer.concat([ED25519_PKCS8_PREFIX, demoSeed]),

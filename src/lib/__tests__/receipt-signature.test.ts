@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { runVeilPayFirewallTraversal } from '@/lib/graph/engine';
+import { runVeinPayFirewallTraversal } from '@/lib/graph/engine';
 import {
   generateAigiForensicReceipt,
   sha256HexSync,
@@ -12,11 +12,11 @@ import {
 } from '@/lib/aigi/receipt-signer';
 import { POST } from '@/app/api/aigi/verify/route';
 import { POST as postVerdict } from '@/app/api/aigi/verdict/route';
-import { GET as getWellKnownKey } from '@/app/.well-known/veilpay-receipt-key/route';
+import { GET as getWellKnownKey } from '@/app/.well-known/veinpay-receipt-key/route';
 import { NextRequest } from 'next/server';
 
 describe('Issue 13: Ed25519 Signed Forensic Receipts & Verification', () => {
-  const sampleScan = runVeilPayFirewallTraversal({
+  const sampleScan = runVeinPayFirewallTraversal({
     targetWallet: '0x99B1c402881a77e3d90123456789aB00000FDead',
     merchantWallet: '0x1111111111111111111111111111111111111111',
     policy: {
@@ -82,7 +82,7 @@ describe('Issue 13: Ed25519 Signed Forensic Receipts & Verification', () => {
     expect(badSigRes.valid).toBe(false);
   });
 
-  it('serves the Ed25519 public key at /.well-known/veilpay-receipt-key', async () => {
+  it('serves the Ed25519 public key at /.well-known/veinpay-receipt-key', async () => {
     const res = await getWellKnownKey();
     expect(res.status).toBe(200);
 

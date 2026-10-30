@@ -15,7 +15,7 @@ import {
   ShieldAlert,
 } from 'lucide-react';
 import { useAccount, useSignTypedData } from 'wagmi';
-import { useVeilPayStore } from '@/store/veilpay-store';
+import { useVeinPayStore } from '@/store/veinpay-store';
 import { isTestnetChain, SUPPORTED_EVM_CHAINS } from '@/lib/socket/tokens';
 import {
   buildPaymentLinkTypedData,
@@ -30,7 +30,7 @@ import type {
   SignedPaymentLinkPayload,
   SupportedEvmChainId,
   VaultSettlementMode,
-} from '@/types/veilpay';
+} from '@/types/veinpay';
 
 const HOP_OPTIONS: { value: HopDepth; label: string; tag?: string }[] = [
   { value: 1, label: '1 Hop' },
@@ -51,7 +51,7 @@ export function ReceiverSetupForm() {
     updateFirewallPolicy,
     setActiveSignedLink,
     runFirewallAndQuotePipeline,
-  } = useVeilPayStore();
+  } = useVeinPayStore();
 
   const { address: connectedReceiverAddress, isConnected } = useAccount();
   const { signTypedDataAsync, isPending: isSigningLink } = useSignTypedData();

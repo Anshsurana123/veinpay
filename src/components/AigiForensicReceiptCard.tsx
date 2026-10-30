@@ -11,7 +11,7 @@ import {
   Sparkles,
   Hash,
 } from 'lucide-react';
-import { useVeilPayStore } from '@/store/veilpay-store';
+import { useVeinPayStore } from '@/store/veinpay-store';
 
 export function AigiForensicReceiptCard() {
   const {
@@ -19,7 +19,7 @@ export function AigiForensicReceiptCard() {
     activeScan,
     isGeneratingAiNarrative,
     requestGeminiExecutiveSummary,
-  } = useVeilPayStore();
+  } = useVeinPayStore();
 
   const [copiedJson, setCopiedJson] = useState(false);
 
@@ -45,7 +45,7 @@ export function AigiForensicReceiptCard() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `veilpay-signed-receipt-${(activeReceipt.commitmentHash ?? activeReceipt.cryptographicAuditHash).slice(0, 12)}.json`;
+    a.download = `veinpay-signed-receipt-${(activeReceipt.commitmentHash ?? activeReceipt.cryptographicAuditHash).slice(0, 12)}.json`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -246,7 +246,7 @@ export function AigiForensicReceiptCard() {
         {activeReceipt.signature && (
           <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[#262A33]/50 pt-1 text-[10px]">
             <span className="text-[#9499A3]">
-              ED25519 SIGNED RECEIPT ({activeReceipt.keyId ?? 'veilpay-ed25519-v1'}):
+              ED25519 SIGNED RECEIPT ({activeReceipt.keyId ?? 'veinpay-ed25519-v1'}):
             </span>
             <span
               className="max-w-[260px] truncate font-mono text-[#1F9D68]"

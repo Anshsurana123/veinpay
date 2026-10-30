@@ -17,7 +17,7 @@ import {
   generateAigiForensicReceipt,
   maybeEnrichReceiptWithGemini,
 } from '@/lib/aigi/verdict';
-import { runVeilPayFirewallTraversal } from '@/lib/graph/engine';
+import { runVeinPayFirewallTraversal } from '@/lib/graph/engine';
 import { AUTHORITATIVE_DEFAULT_POLICY, runFullScan } from '@/lib/graph/full-scan';
 import { computePolicyKeccak256 } from '@/lib/links/canonical';
 
@@ -136,7 +136,7 @@ describe('Issue 11: Rate Limiting, Server-Clamped Crawl Settings, and Caching', 
 
   describe('Scan Caching by (address, chain, policyHash)', () => {
     it('caches scan results for 60s and expires properly', () => {
-      const scan = runVeilPayFirewallTraversal({
+      const scan = runVeinPayFirewallTraversal({
         targetWallet: '0x4F2a9c117034e8B1200499A1c3f88200000188E1',
         merchantWallet: '0x1111111111111111111111111111111111111111',
         policy: AUTHORITATIVE_DEFAULT_POLICY,
@@ -181,7 +181,7 @@ describe('Issue 11: Rate Limiting, Server-Clamped Crawl Settings, and Caching', 
       process.env.GEMINI_API_KEY = 'fake-key-for-test';
       delete process.env.ENABLE_GEMINI_NARRATION;
 
-      const scan = runVeilPayFirewallTraversal({
+      const scan = runVeinPayFirewallTraversal({
         targetWallet: '0x4F2a9c117034e8B1200499A1c3f88200000188E1',
         merchantWallet: '0x1111111111111111111111111111111111111111',
         policy: AUTHORITATIVE_DEFAULT_POLICY,
@@ -196,7 +196,7 @@ describe('Issue 11: Rate Limiting, Server-Clamped Crawl Settings, and Caching', 
       process.env.ENABLE_GEMINI_NARRATION = 'true';
       process.env.GEMINI_API_KEY = 'fake-key-for-test';
 
-      const scan = runVeilPayFirewallTraversal({
+      const scan = runVeinPayFirewallTraversal({
         targetWallet: '0x4F2a9c117034e8B1200499A1c3f88200000188E1',
         merchantWallet: '0x1111111111111111111111111111111111111111',
         policy: AUTHORITATIVE_DEFAULT_POLICY,

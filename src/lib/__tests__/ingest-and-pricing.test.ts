@@ -2,8 +2,8 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { computeTransferPricing, NATIVE_SYMBOL_BY_CHAIN } from '@/lib/ingest/pricing';
 import { fetchEtherscanTransfers, clearEtherscanIngestCacheForTests } from '@/lib/ingest/providers/etherscan';
 import { crawlLiveAddressAndScan } from '@/lib/graph/live-crawler';
-import { runVeilPayFirewallTraversal } from '@/lib/graph/engine';
-import type { FirewallPolicyConfig } from '@/types/veilpay';
+import { runVeinPayFirewallTraversal } from '@/lib/graph/engine';
+import type { FirewallPolicyConfig } from '@/types/veinpay';
 
 const DEFAULT_POLICY: FirewallPolicyConfig = {
   firewallEnabled: true,
@@ -279,7 +279,7 @@ describe('P0-1 & P1-3 Live Ingest, Normalization & Pricing Suite', () => {
   });
 
   it('8. Incomplete / truncated coverage fails closed with INCONCLUSIVE', () => {
-    const scan = runVeilPayFirewallTraversal({
+    const scan = runVeinPayFirewallTraversal({
       targetWallet: '0x1234567890123456789012345678901234567890',
       merchantWallet: '0x2222222222222222222222222222222222222222',
       policy: DEFAULT_POLICY,

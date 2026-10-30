@@ -17,7 +17,7 @@ import {
   verifySignedPaymentLink,
 } from '@/lib/links/verify';
 import { DEMO_CAKE_VAULT_ADDRESSES } from '@/lib/demo-fixtures';
-import type { FirewallPolicyConfig, SignedPaymentLinkPayload } from '@/types/veilpay';
+import type { FirewallPolicyConfig, SignedPaymentLinkPayload } from '@/types/veinpay';
 
 const RECEIVER_ACCOUNT = privateKeyToAccount(
   '0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d'

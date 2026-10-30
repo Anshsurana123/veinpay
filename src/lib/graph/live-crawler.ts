@@ -5,14 +5,14 @@ import type {
   GraphVertex,
   LiveCrawlSettings,
   RiskCategory,
-} from '@/types/veilpay';
+} from '@/types/veinpay';
 import threatSnapshot from '@/data/threat-intel-snapshot.json';
 import { toEip55Address } from '@/lib/validators/address';
 import {
   buildSeededGraphDataset,
   type SeedGraphDataset,
 } from '@/lib/graph/seed-topologies';
-import { runVeilPayFirewallTraversal } from '@/lib/graph/engine';
+import { runVeinPayFirewallTraversal } from '@/lib/graph/engine';
 import { checkGoPlusAddress } from '@/lib/security/goplus';
 import { getLiveSpotRates } from '@/lib/rates';
 import { upsertGraphToTigerGraph } from '@/lib/graph/tigergraph-client';
@@ -114,7 +114,7 @@ export async function crawlLiveAddressAndScan(params: {
 
   // If the wallet is already in the seeded TigerGraph dataset, run immediately in <2ms
   if (seededDataset.vertices.has(targetLower)) {
-    return runVeilPayFirewallTraversal({
+    return runVeinPayFirewallTraversal({
       targetWallet: params.targetWallet,
       merchantWallet: params.merchantWallet,
       policy: params.policy,
@@ -129,7 +129,7 @@ export async function crawlLiveAddressAndScan(params: {
   if (!etherscanKey && !alchemyKey) {
     const reason =
       'Custom address not found in seeded graph and ETHERSCAN_API_KEY is unset; unable to index upstream funding lineage.';
-    return runVeilPayFirewallTraversal({
+    return runVeinPayFirewallTraversal({
       targetWallet: params.targetWallet,
       merchantWallet: params.merchantWallet,
       policy: params.policy,
@@ -385,7 +385,7 @@ export async function crawlLiveAddressAndScan(params: {
 
   const isInconclusive = crawlTruncated || crawlFailed;
 
-  return runVeilPayFirewallTraversal({
+  return runVeinPayFirewallTraversal({
     targetWallet: canonicalTarget,
     merchantWallet: params.merchantWallet,
     policy: params.policy,

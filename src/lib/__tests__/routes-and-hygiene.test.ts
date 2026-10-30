@@ -7,7 +7,7 @@ import { GET as getAigiVerdict, POST as postAigiVerdict } from '@/app/api/aigi/v
 import { POST as postAigiVerify } from '@/app/api/aigi/verify/route';
 import { GET as getHealth } from '@/app/api/health/route';
 import { GET as getRates } from '@/app/api/rates/route';
-import { GET as getReceiptKey } from '@/app/.well-known/veilpay-receipt-key/route';
+import { GET as getReceiptKey } from '@/app/.well-known/veinpay-receipt-key/route';
 import { GET as getGoPlusSecurity, POST as postGoPlusSecurity } from '@/app/api/goplus/security/route';
 import { GET as getTigerGraphMcp, POST as postTigerGraphMcp } from '@/app/api/mcp/tigergraph/route';
 import {
@@ -116,7 +116,7 @@ describe('Issue 14: API Route Handlers & Zod Validation Hygiene', () => {
       expect(json.rates).toBeDefined();
     });
 
-    it('GET /.well-known/veilpay-receipt-key serves Ed25519 public key', async () => {
+    it('GET /.well-known/veinpay-receipt-key serves Ed25519 public key', async () => {
       const res = await getReceiptKey();
       expect(res.status).toBe(200);
       const json = await res.json();
@@ -133,7 +133,7 @@ describe('Issue 14: API Route Handlers & Zod Validation Hygiene', () => {
       const res = await getTigerGraphMcp();
       expect(res.status).toBe(200);
       const json = await res.json();
-      expect(json.server).toBe('TigerGraph-MCP-VeilPay');
+      expect(json.server).toBe('TigerGraph-MCP-VeinPay');
       expect(json.tools.length).toBeGreaterThan(0);
     });
 

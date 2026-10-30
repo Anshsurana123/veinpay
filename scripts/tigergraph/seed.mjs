@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * VeilPay — TigerGraph 4.x Database Seeding Script
+ * VeinPay — TigerGraph 4.x Database Seeding Script
  * File: scripts/tigergraph/seed.mjs
  *
  * Ingests threat intel snapshot entities, institutional whitelists,
@@ -15,7 +15,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const HOST = process.env.TIGERGRAPH_HOST?.trim() || 'http://127.0.0.1:9000';
-const GRAPH = process.env.TIGERGRAPH_GRAPH?.trim() || 'VeilPayGraph';
+const GRAPH = process.env.TIGERGRAPH_GRAPH?.trim() || 'VeinPayGraph';
 const SECRET = process.env.TIGERGRAPH_SECRET?.trim();
 const TOKEN = process.env.TIGERGRAPH_TOKEN?.trim();
 

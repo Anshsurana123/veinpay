@@ -15,7 +15,7 @@ import {
   ArrowRight,
   Wallet,
 } from 'lucide-react';
-import { useVeilPayStore } from '@/store/veilpay-store';
+import { useVeinPayStore } from '@/store/veinpay-store';
 import {
   buildBip321SilentPaymentUri,
   buildLegacySilentPaymentUri,
@@ -34,7 +34,7 @@ import {
 } from '@/lib/session/proof-of-control';
 import { useCctpTransfer } from '@/hooks/useCctpTransfer';
 import { useSettlementFlow } from '@/hooks/useSettlementFlow';
-import type { VaultSettlementMode } from '@/types/veilpay';
+import type { VaultSettlementMode } from '@/types/veinpay';
 
 export function CakeWalletSettlementModal() {
   const {
@@ -55,7 +55,7 @@ export function CakeWalletSettlementModal() {
     spotRates,
     ratesError,
     fetchRates,
-  } = useVeilPayStore();
+  } = useVeinPayStore();
 
   const { address: connectedWallet, isConnected } = useAccount();
 
@@ -164,8 +164,8 @@ export function CakeWalletSettlementModal() {
       ? buildBip321SilentPaymentUri({
           spAddress,
           amountBtc,
-          label: `VeilPay:${linkConfig.handle}`,
-          message: `VeilPay Clean Settlement ($${linkConfig.amount} USD @ $${btcRate?.toLocaleString()} BTC/USD, expires ${rateExpiryTimeFormatted})`,
+          label: `VeinPay:${linkConfig.handle}`,
+          message: `VeinPay Clean Settlement ($${linkConfig.amount} USD @ $${btcRate?.toLocaleString()} BTC/USD, expires ${rateExpiryTimeFormatted})`,
         })
       : '';
 
@@ -174,7 +174,7 @@ export function CakeWalletSettlementModal() {
       ? buildLegacySilentPaymentUri({
           spAddress,
           amountBtc,
-          label: `VeilPay:${linkConfig.handle}`,
+          label: `VeinPay:${linkConfig.handle}`,
         })
       : '';
 
@@ -183,8 +183,8 @@ export function CakeWalletSettlementModal() {
       ? buildMoneroPaymentUri({
           subaddress: xmrSubaddress,
           amountXmr,
-          recipientName: `VeilPay:${linkConfig.handle}`,
-          description: `VeilPay Clean Settlement ($${linkConfig.amount} USD @ $${xmrRate?.toLocaleString()} XMR/USD, expires ${rateExpiryTimeFormatted})`,
+          recipientName: `VeinPay:${linkConfig.handle}`,
+          description: `VeinPay Clean Settlement ($${linkConfig.amount} USD @ $${xmrRate?.toLocaleString()} XMR/USD, expires ${rateExpiryTimeFormatted})`,
         })
       : '';
 

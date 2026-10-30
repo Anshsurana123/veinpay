@@ -3,14 +3,14 @@
   "sources": [
     "ScamSniffer Web3 Blacklist (github.com/scamsniffer/scam-database)",
     "US OFAC SDN Digital Currency List (github.com/0xB10C/ofac-sanctioned-digital-currency-addresses)",
-    "VeilPay Curated Exploit & Drainer Intelligence"
+    "VeinPay Curated Exploit & Drainer Intelligence"
   ],
   "entities": [
     {
       "address": "0xdead000000000000000000000000000000000001",
       "label": "PinkDrainer Exploit Contract",
       "riskCategory": "APPROVAL_DRAINER",
-      "source": "ScamSniffer / VeilPay Threat Intel"
+      "source": "ScamSniffer / VeinPay Threat Intel"
     },
     {
       "address": "0x098B716B8Aaf21512996dC57EB0615e2383E2f96",

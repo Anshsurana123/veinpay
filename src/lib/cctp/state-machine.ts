@@ -1,4 +1,4 @@
-import { CctpRoute, CctpTransferRecord, CctpTransferStatus } from '@/types/veilpay';
+import { CctpRoute, CctpTransferRecord, CctpTransferStatus } from '@/types/veinpay';
 
 export const ALLOWED_CCTP_TRANSITIONS: Record<CctpTransferStatus, CctpTransferStatus[]> = {
   QUOTED: ['APPROVING', 'BURN_PENDING', 'FAILED'],
@@ -101,7 +101,7 @@ export function transitionCctpTransfer(
   };
 }
 
-const STORAGE_KEY = 'veilpay_cctp_transfers_v2';
+const STORAGE_KEY = 'veinpay_cctp_transfers_v2';
 const ZERO_TX_HASH =
   '0x0000000000000000000000000000000000000000000000000000000000000000';
 const memoryByBurnHash = new Map<string, CctpTransferRecord>();

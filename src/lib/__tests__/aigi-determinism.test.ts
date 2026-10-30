@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { runVeilPayFirewallTraversal } from '@/lib/graph/engine';
+import { runVeinPayFirewallTraversal } from '@/lib/graph/engine';
 import { generateAigiForensicReceipt } from '@/lib/aigi/verdict';
 
 describe('AIGI Forensic Verdict & SHA-256 Cryptographic Commitment Determinism', () => {
@@ -13,11 +13,11 @@ describe('AIGI Forensic Verdict & SHA-256 Cryptographic Commitment Determinism',
       sybilBlockThreshold: 10,
     };
 
-    const scanA = runVeilPayFirewallTraversal({
+    const scanA = runVeinPayFirewallTraversal({
       targetWallet: '0x99B1c402881a77e3d90123456789aB00000FDead',
       policy,
     });
-    const scanB = runVeilPayFirewallTraversal({
+    const scanB = runVeinPayFirewallTraversal({
       targetWallet: '0x99B1c402881a77e3d90123456789aB00000FDead',
       policy,
     });

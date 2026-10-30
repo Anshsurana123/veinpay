@@ -1,4 +1,4 @@
-import type { GraphEdge, GraphVertex } from '@/types/veilpay';
+import type { GraphEdge, GraphVertex } from '@/types/veinpay';
 import { DEMO_CAKE_VAULT_ADDRESSES } from '@/lib/demo-fixtures';
 import { toEip55Address } from '@/lib/validators/address';
 

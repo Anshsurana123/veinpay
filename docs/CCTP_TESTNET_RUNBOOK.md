@@ -38,7 +38,7 @@ All contract addresses and domain identifiers are sourced from Circle's official
 ## 3. Step-by-Step End-to-End Verification
 
 ### Step 1: Create a Signed Receiver Payment Link on Arbitrum Sepolia
-1. Start the local VeilPay server (`npm run dev`) and open `http://localhost:3000`.
+1. Start the local VeinPay server (`npm run dev`) and open `http://localhost:3000`.
 2. Connect the **Receiver Wallet** via Reown AppKit.
 3. In the **Receiver Command Center**:
    - Set **Destination Chain** to `Arbitrum Sepolia (421614)`.
@@ -76,7 +76,7 @@ All contract addresses and domain identifiers are sourced from Circle's official
 4. Copy the Base Sepolia `burnTxHash` (`0x...`) and verify on `https://sepolia.basescan.org/tx/<burnTxHash>`.
 
 ### Step 5: Poll Circle Iris Sandbox Attestation (`GET /api/cctp/attestation`)
-1. **State `ATTESTATION_PENDING` → `ATTESTED`:** VeilPay automatically polls `/api/cctp/attestation?sourceDomain=6&transactionHash=<burnTxHash>`, which queries:
+1. **State `ATTESTATION_PENDING` → `ATTESTED`:** VeinPay automatically polls `/api/cctp/attestation?sourceDomain=6&transactionHash=<burnTxHash>`, which queries:
    ```text
    GET https://iris-api-sandbox.circle.com/v2/messages/6?transactionHash=<burnTxHash>
    ```
@@ -86,7 +86,7 @@ All contract addresses and domain identifiers are sourced from Circle's official
 ### Step 6: Complete Transfer (`MessageTransmitterV2.receiveMessage`) & Verify Mint on Arbitrum Sepolia
 1. Click **Complete Transfer (Mint USDC)** using either the Payer or Receiver wallet.
 2. Your wallet switches to **Arbitrum Sepolia (`421614`)** and submits `MessageTransmitterV2.receiveMessage(message, attestation)` to `0xE737e5cEBEEBa77EFE34D4aa090756590b1CE275`.
-3. **State `MINT_PENDING` → `MINTED`:** After the Arbitrum Sepolia transaction confirms, VeilPay calls `POST /api/cctp/verify-mint` to verify:
+3. **State `MINT_PENDING` → `MINTED`:** After the Arbitrum Sepolia transaction confirms, VeinPay calls `POST /api/cctp/verify-mint` to verify:
    - Transaction receipt `status === "success"`
    - Target contract `to === 0xE737e5cEBEEBa77EFE34D4aa090756590b1CE275`
    - Emitted `MessageReceived` log from `MessageTransmitterV2`

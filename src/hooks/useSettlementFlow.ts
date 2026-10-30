@@ -14,7 +14,7 @@ import {
 import type {
   NormalizedSocketRoute,
   SupportedEvmChainId,
-} from '@/types/veilpay';
+} from '@/types/veinpay';
 import {
   createInitialSettlementState,
   evaluateApprovalRequirement,

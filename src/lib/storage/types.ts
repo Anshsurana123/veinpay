@@ -1,5 +1,5 @@
 /**
- * VeilPay — Unified Storage Layer Types
+ * VeinPay — Unified Storage Layer Types
  * File: src/lib/storage/types.ts
  */
 

@@ -8,9 +8,9 @@ import {
   AlertTriangle,
   ArrowRightLeft,
 } from 'lucide-react';
-import { useVeilPayStore } from '@/store/veilpay-store';
+import { useVeinPayStore } from '@/store/veinpay-store';
 import { OUTBOUND_POISON_TEST_PRESETS } from '@/lib/graph/seed-topologies';
-import type { VaultSettlementMode } from '@/types/veilpay';
+import type { VaultSettlementMode } from '@/types/veinpay';
 
 export function SafeSendOutboundGuard() {
   const {
@@ -22,7 +22,7 @@ export function SafeSendOutboundGuard() {
     setOutboundExpectedMode,
     runOutboundPoisonScan,
     swapToVerifiedContactAddress,
-  } = useVeilPayStore();
+  } = useVeinPayStore();
 
   const initialOutboundScanAttemptedRef = React.useRef(false);
   useEffect(() => {

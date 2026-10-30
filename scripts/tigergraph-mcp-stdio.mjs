@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * VeilPay TigerGraph MCP Stdio Server
+ * VeinPay TigerGraph MCP Stdio Server
  * Compatible with Model Context Protocol (MCP) clients (Claude Desktop, Cursor, Antigravity, Inspector).
  * Powered by official @modelcontextprotocol/sdk.
  */
@@ -11,8 +11,8 @@ register('./alias-loader.mjs', import.meta.url);
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 
 async function main() {
-  const { createVeilPayMcpServer } = await import('../src/lib/mcp/server.ts');
-  const server = createVeilPayMcpServer();
+  const { createVeinPayMcpServer } = await import('../src/lib/mcp/server.ts');
+  const server = createVeinPayMcpServer();
   const transport = new StdioServerTransport();
   await server.connect(transport);
 }

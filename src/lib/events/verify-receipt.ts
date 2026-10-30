@@ -12,8 +12,8 @@ import {
   polygonAmoy,
 } from 'viem/chains';
 import type { Chain } from 'viem';
-import type { VaultSettlementMode } from '@/types/veilpay';
-import type { VeilPayEventStatus } from './types';
+import type { VaultSettlementMode } from '@/types/veinpay';
+import type { VeinPayEventStatus } from './types';
 
 export const ALLOWED_SETTLEMENT_CHAINS: Record<number, Chain> = {
   1: mainnet,
@@ -59,14 +59,14 @@ export interface VerifyReceiptParams {
 }
 
 export interface VerifyReceiptResult {
-  status: VeilPayEventStatus;
+  status: VeinPayEventStatus;
   verified: boolean;
   reason: string;
   blockNumber?: number;
 }
 
 /**
- * Authoritative on-chain transaction verification for VeilPay settlements.
+ * Authoritative on-chain transaction verification for VeinPay settlements.
  *
  * Rules:
  * 1. Chain must be in allowlist.

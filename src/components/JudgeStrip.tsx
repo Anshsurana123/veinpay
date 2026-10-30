@@ -1,11 +1,11 @@
 'use client';
 
 import React from 'react';
-import { useVeilPayStore } from '@/store/veilpay-store';
+import { useVeinPayStore } from '@/store/veinpay-store';
 
 export function JudgeStrip() {
   const { judgeMode, activeScan, lastMeasuredLatencyMs, totalThreatsIntercepted } =
-    useVeilPayStore();
+    useVeinPayStore();
 
   if (!judgeMode) return null;
 

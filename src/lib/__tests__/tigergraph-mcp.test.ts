@@ -21,13 +21,13 @@ describe('TigerGraph MCP Implementation Suite', () => {
     expect(names).toContain('graph__number_of_edges');
   });
 
-  it('executes graph__get_schema returning VeilPayGraph schema', async () => {
+  it('executes graph__get_schema returning VeinPayGraph schema', async () => {
     const res = await executeTigerGraphMcpTool('graph__get_schema', {
-      graph_name: 'VeilPayGraph',
+      graph_name: 'VeinPayGraph',
     });
     expect(res.isError).toBeFalsy();
     const payload = JSON.parse(res.content[0].text);
-    expect(payload.graph).toBe('VeilPayGraph');
+    expect(payload.graph).toBe('VeinPayGraph');
     const vertexNames = payload.vertex_types.map((v: { name: string }) => v.name);
     expect(vertexNames).toContain('Wallet');
     expect(vertexNames).toContain('Merchant');
@@ -37,10 +37,10 @@ describe('TigerGraph MCP Implementation Suite', () => {
     expect(edgeNames).toContain('DUSTED');
   });
 
-  it('executes graph__run_query for veilpay_firewall_check on clean wallet', async () => {
+  it('executes graph__run_query for veinpay_firewall_check on clean wallet', async () => {
     const res = await executeTigerGraphMcpTool('graph__run_query', {
-      graph_name: 'VeilPayGraph',
-      query_name: 'veilpay_firewall_check',
+      graph_name: 'VeinPayGraph',
+      query_name: 'veinpay_firewall_check',
       params: {
         target_wallet: '0x1111111111111111111111111111111111111111',
         merchant_wallet: '0x71C84102070853531b783c5D2D563456F9960244',
@@ -50,16 +50,16 @@ describe('TigerGraph MCP Implementation Suite', () => {
     });
     expect(res.isError).toBeFalsy();
     const data = JSON.parse(res.content[0].text);
-    expect(data.query).toBe('veilpay_firewall_check');
+    expect(data.query).toBe('veinpay_firewall_check');
     expect(data.results[0].socketUnlocked).toBe(true);
     expect(data.results[0].verdict).toBe('VERIFIED_CLEAN');
   });
 
-  it('executes graph__run_query for veilpay_firewall_check on drainer wallet', async () => {
+  it('executes graph__run_query for veinpay_firewall_check on drainer wallet', async () => {
     // 0x99B1c402881a77e3d90123456789aB00000FDead is seeded drainer target (Persona 2)
     const res = await executeTigerGraphMcpTool('graph__run_query', {
-      graph_name: 'VeilPayGraph',
-      query_name: 'veilpay_firewall_check',
+      graph_name: 'VeinPayGraph',
+      query_name: 'veinpay_firewall_check',
       params: {
         target_wallet: '0x99B1c402881a77e3d90123456789aB00000FDead',
         merchant_wallet: '0x71C84102070853531b783c5D2D563456F9960244',
@@ -133,7 +133,7 @@ describe('TigerGraph MCP Implementation Suite', () => {
     const json = await res.json();
     expect(json.jsonrpc).toBe('2.0');
     expect(json.id).toBe('init-1');
-    expect(json.result.serverInfo.name).toBe('tigergraph-mcp-veilpay');
+    expect(json.result.serverInfo.name).toBe('tigergraph-mcp-veinpay');
     expect(json.result.capabilities.tools).toBeDefined();
   });
 
@@ -224,10 +224,10 @@ describe('TigerGraph MCP Implementation Suite', () => {
       expect(Array.isArray(json.result.tools)).toBe(true);
 
       const toolNames = json.result.tools.map((t: { name: string }) => t.name);
-      expect(toolNames).toContain('veilpay_scan_wallet');
-      expect(toolNames).toContain('veilpay_check_recipient');
-      expect(toolNames).toContain('veilpay_verify_receipt');
-      expect(toolNames).toContain('tigergraph_run_veilpay_query');
+      expect(toolNames).toContain('veinpay_scan_wallet');
+      expect(toolNames).toContain('veinpay_check_recipient');
+      expect(toolNames).toContain('veinpay_verify_receipt');
+      expect(toolNames).toContain('tigergraph_run_veinpay_query');
       expect(toolNames).toContain('tigergraph_get_neighbors');
       expect(toolNames).toContain('tigergraph_get_schema');
     });
@@ -294,7 +294,7 @@ describe('TigerGraph MCP Implementation Suite', () => {
       expect(json.error.message).toContain('Method not found');
     });
 
-    it('tools/call veilpay_scan_wallet executes and returns spec-compliant content', async () => {
+    it('tools/call veinpay_scan_wallet executes and returns spec-compliant content', async () => {
       const req = new NextRequest('http://localhost:3000/api/mcp/tigergraph', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -303,7 +303,7 @@ describe('TigerGraph MCP Implementation Suite', () => {
           id: 'call-scan',
           method: 'tools/call',
           params: {
-            name: 'veilpay_scan_wallet',
+            name: 'veinpay_scan_wallet',
             arguments: {
               address: '0x1111111111111111111111111111111111111111',
               maxHops: 3,
@@ -321,7 +321,7 @@ describe('TigerGraph MCP Implementation Suite', () => {
       expect(scan.verdict).toBe('VERIFIED_CLEAN');
     });
 
-    it('tools/call veilpay_check_recipient checks outbound poison lookalike', async () => {
+    it('tools/call veinpay_check_recipient checks outbound poison lookalike', async () => {
       const req = new NextRequest('http://localhost:3000/api/mcp/tigergraph', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -330,7 +330,7 @@ describe('TigerGraph MCP Implementation Suite', () => {
           id: 'call-check',
           method: 'tools/call',
           params: {
-            name: 'veilpay_check_recipient',
+            name: 'veinpay_check_recipient',
             arguments: {
               candidateAddress: '0x3333333333333333333333333333333333333333',
             },
@@ -346,7 +346,7 @@ describe('TigerGraph MCP Implementation Suite', () => {
       expect(poison.candidateAddress).toBe('0x3333333333333333333333333333333333333333');
     });
 
-    it('tools/call tigergraph_run_veilpay_query rejects non-allowlisted query', async () => {
+    it('tools/call tigergraph_run_veinpay_query rejects non-allowlisted query', async () => {
       const req = new NextRequest('http://localhost:3000/api/mcp/tigergraph', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -355,7 +355,7 @@ describe('TigerGraph MCP Implementation Suite', () => {
           id: 'call-tg-query-bad',
           method: 'tools/call',
           params: {
-            name: 'tigergraph_run_veilpay_query',
+            name: 'tigergraph_run_veinpay_query',
             arguments: {
               queryName: 'arbitrary_drop_graph_query',
             },

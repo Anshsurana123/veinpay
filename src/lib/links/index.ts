@@ -10,7 +10,7 @@ import type {
   PaymentAssetSymbol,
   SupportedEvmChainId,
   VaultSettlementMode,
-} from '@/types/veilpay';
+} from '@/types/veinpay';
 import { getVerifiedLinkPolicy } from '@/lib/security/attestation';
 import { encodeSignedLinkPayloadToBase64Url } from './canonical';
 import {

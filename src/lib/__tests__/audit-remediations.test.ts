@@ -31,8 +31,8 @@ import {
   validateMoneroAddress,
 } from '@/lib/validators/address';
 import { privateKeyToAccount, generatePrivateKey } from 'viem/accounts';
-import { runVeilPayFirewallTraversal } from '@/lib/graph/engine';
-import type { FirewallPolicyConfig, SignedPaymentLinkPayload } from '@/types/veilpay';
+import { runVeinPayFirewallTraversal } from '@/lib/graph/engine';
+import type { FirewallPolicyConfig, SignedPaymentLinkPayload } from '@/types/veinpay';
 
 const DEFAULT_POLICY: FirewallPolicyConfig = {
   firewallEnabled: true,
@@ -130,7 +130,7 @@ describe('Audit Remediations & PoC Verifications', () => {
   describe('2. AIGI Signing Oracle & Production Secrets Guard', () => {
     it('POST /api/aigi/verdict rejects client scan verdict tampering', async () => {
       const drainerAddress = '0x99B1c402881a77e3d90123456789aB00000FDead';
-      const genuineScan = runVeilPayFirewallTraversal({
+      const genuineScan = runVeinPayFirewallTraversal({
         targetWallet: drainerAddress,
         merchantWallet: '0x1111111111111111111111111111111111111111',
         policy: DEFAULT_POLICY,
@@ -171,39 +171,39 @@ describe('Audit Remediations & PoC Verifications', () => {
 
     it('assertScanAttestationSecretConfigured throws in production when secrets are missing', () => {
       const origEnv = process.env.NODE_ENV;
-      const origAttest = process.env.VEILPAY_ATTESTATION_SECRET;
-      const origSession = process.env.VEILPAY_SESSION_SECRET;
+      const origAttest = process.env.VEINPAY_ATTESTATION_SECRET;
+      const origSession = process.env.VEINPAY_SESSION_SECRET;
       const origReceipt = process.env.RECEIPT_SIGNING_KEY;
       try {
         (process.env as any).NODE_ENV = 'production';
-        delete process.env.VEILPAY_ATTESTATION_SECRET;
-        delete process.env.VEILPAY_SESSION_SECRET;
+        delete process.env.VEINPAY_ATTESTATION_SECRET;
+        delete process.env.VEINPAY_SESSION_SECRET;
         delete process.env.RECEIPT_SIGNING_KEY;
         expect(() => assertScanAttestationSecretConfigured()).toThrow(
-          'VEILPAY_ATTESTATION_SECRET'
+          'VEINPAY_ATTESTATION_SECRET'
         );
       } finally {
         (process.env as any).NODE_ENV = origEnv;
-        if (origAttest !== undefined) process.env.VEILPAY_ATTESTATION_SECRET = origAttest;
-        if (origSession !== undefined) process.env.VEILPAY_SESSION_SECRET = origSession;
+        if (origAttest !== undefined) process.env.VEINPAY_ATTESTATION_SECRET = origAttest;
+        if (origSession !== undefined) process.env.VEINPAY_SESSION_SECRET = origSession;
         if (origReceipt !== undefined) process.env.RECEIPT_SIGNING_KEY = origReceipt;
       }
     });
 
     it('assertSessionSecretConfigured throws in production when secrets are missing', () => {
       const origEnv = process.env.NODE_ENV;
-      const origSession = process.env.VEILPAY_SESSION_SECRET;
+      const origSession = process.env.VEINPAY_SESSION_SECRET;
       const origReceipt = process.env.RECEIPT_SIGNING_KEY;
       try {
         (process.env as any).NODE_ENV = 'production';
-        delete process.env.VEILPAY_SESSION_SECRET;
+        delete process.env.VEINPAY_SESSION_SECRET;
         delete process.env.RECEIPT_SIGNING_KEY;
         expect(() => assertSessionSecretConfigured()).toThrow(
-          'VEILPAY_SESSION_SECRET'
+          'VEINPAY_SESSION_SECRET'
         );
       } finally {
         (process.env as any).NODE_ENV = origEnv;
-        if (origSession !== undefined) process.env.VEILPAY_SESSION_SECRET = origSession;
+        if (origSession !== undefined) process.env.VEINPAY_SESSION_SECRET = origSession;
         if (origReceipt !== undefined) process.env.RECEIPT_SIGNING_KEY = origReceipt;
       }
     });
