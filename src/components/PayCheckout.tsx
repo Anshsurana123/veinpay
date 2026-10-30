@@ -59,9 +59,42 @@ export function PayCheckout() {
   };
 
   // Sync connected wallet when wagmi changes
+  const prevConnectedRef = React.useRef<string | null>(null);
+  const initialSyncDoneRef = React.useRef(false);
+
   useEffect(() => {
-    syncConnectedWallet(isConnected && wagmiAddress ? wagmiAddress : null);
-  }, [isConnected, wagmiAddress, syncConnectedWallet]);
+    const currentAddress = isConnected && wagmiAddress ? wagmiAddress : null;
+    const prevAddress = prevConnectedRef.current;
+    prevConnectedRef.current = currentAddress;
+
+    syncConnectedWallet(currentAddress);
+
+    // Initial mount with an already connected wallet
+    if (!initialSyncDoneRef.current) {
+      initialSyncDoneRef.current = true;
+      if (currentAddress) {
+        selectPersona('reown-connected', currentAddress);
+        return;
+      }
+    }
+
+    // User just connected a wallet
+    if (!prevAddress && currentAddress) {
+      selectPersona('reown-connected', currentAddress);
+      return;
+    }
+
+    // User switched account in their wallet
+    if (prevAddress && currentAddress && prevAddress.toLowerCase() !== currentAddress.toLowerCase()) {
+      selectPersona('reown-connected', currentAddress);
+      return;
+    }
+
+    // User disconnected wallet
+    if (prevAddress && !currentAddress && activePersonaId === 'reown-connected') {
+      selectPersona('persona-1');
+    }
+  }, [isConnected, wagmiAddress, activePersonaId, selectPersona, syncConnectedWallet]);
 
   // Initial trigger to run scan & quote pipeline on mount
   const initialScanAttemptedRef = React.useRef(false);
@@ -110,7 +143,11 @@ export function PayCheckout() {
       showToast('Enter a valid 42-character 0x EVM address');
       return;
     }
-    selectPersona('custom', trimmed);
+    if (isConnected && wagmiAddress && areAddressesMatchingSigner(wagmiAddress, trimmed)) {
+      selectPersona('reown-connected', trimmed);
+    } else {
+      selectPersona('custom', trimmed);
+    }
     void runFirewallAndQuotePipeline();
   };
 
@@ -284,10 +321,40 @@ export function PayCheckout() {
           <b className="font-medium text-[#eaf0f3] font-mono text-sm">
             {shortPayerAddress}
           </b>
-          <span className="text-xs border border-[#27404f] rounded-full px-2.5 py-0.5 text-[#8ea5b4]">
+          <span
+            className={`text-xs border rounded-full px-2.5 py-0.5 flex items-center gap-1.5 ${
+              activePersonaId === 'reown-connected'
+                ? 'border-[#7fd6b0]/50 text-[#7fd6b0] bg-[#7fd6b0]/10 font-medium'
+                : activePersonaId === 'custom'
+                ? 'border-[#e8c06a]/50 text-[#e8c06a] bg-[#e8c06a]/10'
+                : 'border-[#27404f] text-[#8ea5b4]'
+            }`}
+          >
+            {activePersonaId === 'reown-connected' && (
+              <span className="w-1.5 h-1.5 rounded-full bg-[#7fd6b0] animate-pulse" />
+            )}
             {payerSourceLabel}
           </span>
         </div>
+
+        {/* Banner when wallet is connected but user is testing demo personas */}
+        {isConnected && wagmiAddress && activePersonaId !== 'reown-connected' && (
+          <div className="mb-3 p-3 bg-[#e8c06a]/10 border border-[#e8c06a]/30 rounded-xl flex items-center justify-between gap-3 flex-wrap text-xs">
+            <span className="text-[#e8c06a]">
+              Currently simulating a demo wallet.
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                selectPersona('reown-connected', wagmiAddress);
+                void runFirewallAndQuotePipeline();
+              }}
+              className="border border-[#e8c06a] text-[#efe6d2] bg-[#1c2f3b] rounded-lg px-2.5 py-1 text-xs font-semibold cursor-pointer hover:bg-[#27404f] transition-colors"
+            >
+              Use connected wallet ({wagmiAddress.slice(0, 6)}…{wagmiAddress.slice(-4)})
+            </button>
+          </div>
+        )}
 
         {/* Chain and Token Row */}
         <div className="flex gap-2 flex-wrap mb-3">
@@ -348,7 +415,7 @@ export function PayCheckout() {
         {isConnected && wagmiAddress && activePersonaId === 'reown-connected' && !eligibility.canBroadcast && (
           <div className="mt-3 p-3 bg-[#0f1a21] rounded-xl border border-[#27404f] text-xs">
             <div className="text-[#8ea5b4] mb-2">
-              Prove control of this wallet to unlock transaction broadcast:
+              Prove control of this wallet to unlock live quote and broadcast:
             </div>
             {proofError && (
               <div className="text-[#f28b7b] mb-2">{proofError}</div>
@@ -364,12 +431,39 @@ export function PayCheckout() {
           </div>
         )}
 
-        {/* Demo Persona Chips (Always accessible or when Judge Mode is enabled) */}
+        {/* Verified Proof of Control Badge */}
+        {isConnected && wagmiAddress && activePersonaId === 'reown-connected' && eligibility.canBroadcast && (
+          <div className="mt-3 p-2.5 bg-[#7fd6b0]/10 border border-[#7fd6b0]/30 rounded-xl text-xs text-[#7fd6b0] flex items-center justify-between">
+            <span className="flex items-center gap-1.5">
+              <span>✓</span> Wallet ownership verified (Proof of Control signed)
+            </span>
+          </div>
+        )}
+
+        {/* Wallet & Persona Chips */}
         <div className="mt-4 pt-3 border-t border-[#27404f]">
           <div className="text-xs text-[#8ea5b4] mb-2">
-            Try a demo wallet
+            Wallets & demo personas
           </div>
           <div className="flex gap-2 flex-wrap">
+            {isConnected && wagmiAddress && (
+              <button
+                type="button"
+                onClick={() => {
+                  selectPersona('reown-connected', wagmiAddress);
+                  void runFirewallAndQuotePipeline();
+                }}
+                className={`border rounded-full py-1 px-3 text-xs cursor-pointer transition-colors flex items-center gap-1.5 ${
+                  activePersonaId === 'reown-connected'
+                    ? 'border-[#7fd6b0] text-[#7fd6b0] bg-[#1c2f3b] font-medium'
+                    : 'border-[#27404f] text-[#8ea5b4] hover:text-[#eaf0f3]'
+                }`}
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-[#7fd6b0]" />
+                Connected ({wagmiAddress.slice(0, 6)}…{wagmiAddress.slice(-4)})
+              </button>
+            )}
+
             {WALLET_PERSONAS.map((p) => {
               const isActive = activePersonaId === p.id;
               let shortLabel = 'Clean whale';
@@ -442,22 +536,33 @@ export function PayCheckout() {
       <RouteCard />
 
       {/* 9. Primary Action Button */}
-      <button
-        type="button"
-        disabled={!canPay}
-        onClick={() => setSettlementModalOpen(true)}
-        className="w-full py-4 text-[16.5px] rounded-2xl font-semibold cursor-pointer border-0 bg-[#efe6d2] text-[#14212a] hover:opacity-95 transition-opacity disabled:bg-[#1c2f3b] disabled:text-[#8ea5b4] disabled:cursor-not-allowed shadow-lg"
-      >
-        {canPay
-          ? `Pay $${Number(linkConfig.amount || 250).toLocaleString(undefined, {
-              minimumFractionDigits: 2,
-            })}`
-          : isBlocked
-          ? 'Can’t pay with this wallet'
-          : scanError
-          ? 'Check required'
-          : 'Checking wallet…'}
-      </button>
+      {activePersonaId === 'reown-connected' && !eligibility.canBroadcast ? (
+        <button
+          type="button"
+          disabled={isSigningProof || isScanning || isBlocked}
+          onClick={() => void handleSignProofOfControl()}
+          className="w-full py-4 text-[16.5px] rounded-2xl font-semibold cursor-pointer border-0 bg-[#efe6d2] text-[#14212a] hover:opacity-95 transition-opacity disabled:bg-[#1c2f3b] disabled:text-[#8ea5b4] disabled:cursor-not-allowed shadow-lg"
+        >
+          {isSigningProof ? 'Signing challenge in wallet…' : 'Sign proof of control to pay'}
+        </button>
+      ) : (
+        <button
+          type="button"
+          disabled={!canPay}
+          onClick={() => setSettlementModalOpen(true)}
+          className="w-full py-4 text-[16.5px] rounded-2xl font-semibold cursor-pointer border-0 bg-[#efe6d2] text-[#14212a] hover:opacity-95 transition-opacity disabled:bg-[#1c2f3b] disabled:text-[#8ea5b4] disabled:cursor-not-allowed shadow-lg"
+        >
+          {canPay
+            ? `Pay $${Number(linkConfig.amount || 250).toLocaleString(undefined, {
+                minimumFractionDigits: 2,
+              })}`
+            : isBlocked
+            ? 'Can’t pay with this wallet'
+            : scanError
+            ? 'Check required'
+            : 'Checking wallet…'}
+        </button>
+      )}
 
       {/* 10. Secondary Mode Switch */}
       <button

@@ -37,6 +37,8 @@ export function SettlementSheet() {
     ratesError,
     fetchRates,
     networkEnv,
+    activePersonaId,
+    selectPersona,
   } = useVeilPayStore();
 
   const { address: connectedWallet, isConnected } = useAccount();
@@ -405,22 +407,41 @@ export function SettlementSheet() {
 
                 {/* Wallet Action Button */}
                 {isConnected ? (
-                  <button
-                    type="button"
-                    disabled={isExceedingSafetyCap}
-                    onClick={() => {
-                      if (activeQuote?.source === 'CCTP_V2_TESTNET' && activeQuote.cctp) {
-                        void startBurnTransfer(activeQuote.cctp);
-                      } else {
-                        void approveIfNeededAndSend();
-                      }
-                    }}
-                    className="w-full py-4 text-base rounded-xl font-semibold cursor-pointer border-0 bg-[#efe6d2] text-[#14212a] hover:opacity-95 transition-opacity disabled:bg-[#1c2f3b] disabled:text-[#8ea5b4] disabled:cursor-not-allowed shadow-md"
-                  >
-                    {requiresApproval
-                      ? 'Approve & Send in wallet'
-                      : 'Sign and send in wallet'}
-                  </button>
+                  activePersonaId !== 'reown-connected' ? (
+                    <div className="space-y-2">
+                      <div className="rounded-xl border border-[#e8c06a]/40 bg-[#e8c06a]/[0.08] p-3 text-xs text-[#e8c06a] leading-relaxed">
+                        Currently simulating a demo wallet. Switch to your connected wallet ({connectedWallet?.slice(0, 6)}…{connectedWallet?.slice(-4)}) to broadcast real funds.
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (connectedWallet) {
+                            selectPersona('reown-connected', connectedWallet);
+                          }
+                        }}
+                        className="w-full py-3.5 text-sm rounded-xl font-semibold cursor-pointer border-0 bg-[#efe6d2] text-[#14212a] hover:opacity-95 transition-opacity shadow-md"
+                      >
+                        Switch to connected wallet ({connectedWallet?.slice(0, 6)}…{connectedWallet?.slice(-4)})
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled={isExceedingSafetyCap}
+                      onClick={() => {
+                        if (activeQuote?.source === 'CCTP_V2_TESTNET' && activeQuote.cctp) {
+                          void startBurnTransfer(activeQuote.cctp);
+                        } else {
+                          void approveIfNeededAndSend();
+                        }
+                      }}
+                      className="w-full py-4 text-base rounded-xl font-semibold cursor-pointer border-0 bg-[#efe6d2] text-[#14212a] hover:opacity-95 transition-opacity disabled:bg-[#1c2f3b] disabled:text-[#8ea5b4] disabled:cursor-not-allowed shadow-md"
+                    >
+                      {requiresApproval
+                        ? 'Approve & Send in wallet'
+                        : 'Sign and send in wallet'}
+                    </button>
+                  )
                 ) : (
                   <button
                     type="button"

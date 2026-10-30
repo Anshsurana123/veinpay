@@ -12,11 +12,47 @@ export function AppHeader() {
     judgeMode,
     toggleJudgeMode,
     setSettingsDrawerOpen,
+    syncConnectedWallet,
+    selectPersona,
+    activePersonaId,
   } = useVeilPayStore();
 
   const { isConnected, address } = useAccount();
   const { disconnect } = useDisconnect();
   const { open } = useAppKit();
+
+  const prevConnectedAddressRef = React.useRef<string | null>(null);
+  const initialSyncRef = React.useRef(false);
+
+  React.useEffect(() => {
+    const current = isConnected && address ? address : null;
+    const prev = prevConnectedAddressRef.current;
+    prevConnectedAddressRef.current = current;
+
+    syncConnectedWallet(current);
+
+    if (!initialSyncRef.current) {
+      initialSyncRef.current = true;
+      if (current) {
+        selectPersona('reown-connected', current);
+        return;
+      }
+    }
+
+    if (!prev && current) {
+      selectPersona('reown-connected', current);
+      return;
+    }
+
+    if (prev && current && prev.toLowerCase() !== current.toLowerCase()) {
+      selectPersona('reown-connected', current);
+      return;
+    }
+
+    if (prev && !current && activePersonaId === 'reown-connected') {
+      selectPersona('persona-1');
+    }
+  }, [isConnected, address, activePersonaId, selectPersona, syncConnectedWallet]);
 
   const shortAddress = address
     ? `${address.slice(0, 6)}…${address.slice(-4)}`

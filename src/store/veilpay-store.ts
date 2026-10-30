@@ -415,15 +415,19 @@ export const useVeilPayStore = create<VeilPayStoreState>((set, get) => ({
   selectPersona: (personaId, customAddress) => {
     const state = get();
     const isTestnet = state.networkEnv === 'TESTNET';
-    if (personaId === 'reown-connected' && customAddress) {
-      const addr = customAddress.trim();
+    const effectiveTarget = (customAddress || (personaId === 'reown-connected' ? state.connectedWalletAddress : '') || '').trim();
+
+    if (
+      (personaId === 'reown-connected' && effectiveTarget) ||
+      (personaId === 'custom' && effectiveTarget && areAddressesMatchingSigner(state.connectedWalletAddress, effectiveTarget))
+    ) {
       const keepProof = areAddressesMatchingSigner(
         state.proofOfControlVerifiedFor,
-        addr
+        effectiveTarget
       );
       set({
         activePersonaId: 'reown-connected',
-        activePayerAddress: addr,
+        activePayerAddress: effectiveTarget,
         proofOfControlToken: keepProof ? state.proofOfControlToken : null,
         proofOfControlVerifiedFor: keepProof
           ? state.proofOfControlVerifiedFor
@@ -432,10 +436,10 @@ export const useVeilPayStore = create<VeilPayStoreState>((set, get) => ({
         selectedGraphNodeId: null,
         selectedGraphEdgeId: null,
       });
-    } else if (personaId === 'custom' && customAddress) {
+    } else if (personaId === 'custom' && effectiveTarget) {
       set({
         activePersonaId: 'custom',
-        activePayerAddress: customAddress.trim(),
+        activePayerAddress: effectiveTarget,
         proofOfControlToken: null,
         proofOfControlVerifiedFor: null,
         activeQuote: null,
