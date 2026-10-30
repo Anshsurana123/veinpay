@@ -76,6 +76,12 @@ export function generateAigiForensicReceipt(
       blockNumber: edge.attributes.block_number,
       timestamp: edge.attributes.timestamp,
       narrative,
+      taintedUsd:
+        edge.attributes.tainted_usd ??
+        (edge.attributes.is_taint_path ? edge.attributes.amount_usd : 0),
+      taintShare:
+        edge.attributes.taint_share ??
+        (edge.attributes.is_taint_path ? 1.0 : 0.0),
     };
   });
 

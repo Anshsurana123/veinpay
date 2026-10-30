@@ -88,15 +88,69 @@ export function buildCharacterDiffGrid(
   };
 }
 
+export function deriveTrustedContactsFromGraph(
+  senderAddress: string,
+  customDataset?: ReturnType<typeof buildSeededGraphDataset>
+): TrustedContactRecord[] {
+  const dataset = customDataset ?? buildSeededGraphDataset();
+  const senderLower = senderAddress.trim().toLowerCase();
+  const counterpartyStats = new Map<
+    string,
+    { count: number; totalVolumeUsd: number; lastTimestamp: string }
+  >();
+
+  for (const edge of dataset.edges) {
+    if (edge.e_type === 'TRANSFERRED_TO' && edge.from_id.toLowerCase() === senderLower) {
+      const recipientLower = edge.to_id.toLowerCase();
+      const amountUsd = edge.attributes?.amount_usd ?? 0;
+      if (amountUsd > 0.01) {
+        const existing = counterpartyStats.get(recipientLower) || {
+          count: 0,
+          totalVolumeUsd: 0,
+          lastTimestamp: edge.attributes?.timestamp || new Date().toISOString(),
+        };
+        existing.count += 1;
+        existing.totalVolumeUsd += amountUsd;
+        existing.lastTimestamp = edge.attributes?.timestamp || existing.lastTimestamp;
+        counterpartyStats.set(recipientLower, existing);
+      }
+    }
+  }
+
+  const derived: TrustedContactRecord[] = [];
+  for (const [addrLower, stats] of counterpartyStats.entries()) {
+    if (stats.count >= 2) {
+      const vertex = dataset.vertices.get(addrLower);
+      derived.push({
+        address: vertex?.id || addrLower,
+        label: vertex?.label || `Contact (${addrLower.slice(0, 6)}...${addrLower.slice(-4)})`,
+        priorOutboundCount: stats.count,
+        totalVolumeUsd: Number(stats.totalVolumeUsd.toFixed(2)),
+        lastPaidTimestamp: stats.lastTimestamp,
+      });
+    }
+  }
+
+  return derived;
+}
+
 export function evaluateOutboundPoisonRisk(params: {
   candidateInput: string;
+  senderAddress?: string;
   expectedMode?: VaultSettlementMode;
   trustedContacts?: TrustedContactRecord[];
 }): OutboundPoisonScanResult {
   const startPerf = performance.now();
   const raw = params.candidateInput.trim();
   const expectedMode = params.expectedMode ?? 'EVM_SOCKET';
-  const contacts = params.trustedContacts ?? SEEDED_TRUSTED_CONTACTS;
+
+  let contacts = params.trustedContacts;
+  if (!contacts && params.senderAddress) {
+    contacts = deriveTrustedContactsFromGraph(params.senderAddress);
+  }
+  if (!contacts) {
+    contacts = SEEDED_TRUSTED_CONTACTS;
+  }
 
   // Check if user pasted a known demo shorthand alias
   const aliasResolved = DEMO_ADDRESS_ALIASES[raw.toLowerCase()];
@@ -227,7 +281,7 @@ export function evaluateOutboundPoisonRisk(params: {
     };
   }
 
-  // Sub-Case 4B: First-Time Recipient (no mimicry match against provided contacts)
+  // Sub-Case 4B: No lookalike match found against contacts
   if (contacts.length === 0) {
     return {
       verdict: 'VERIFIED_FIRST_TIME_RECIPIENT',
@@ -250,7 +304,7 @@ export function evaluateOutboundPoisonRisk(params: {
   }
 
   return {
-    verdict: 'VERIFIED_FIRST_TIME_RECIPIENT',
+    verdict: 'NO_LOOKALIKE_FOUND',
     candidateAddress: raw,
     normalizedCandidateAddress: normalizedCandidate,
     detectedProtocol: validation.detectedProtocol,
@@ -264,6 +318,6 @@ export function evaluateOutboundPoisonRisk(params: {
     dustSampleTransfers: [],
     charDiffGrid: bestDiff.grid,
     executionTimeMs: Number((performance.now() - startPerf).toFixed(2)),
-    summaryNarrative: `First-Time Recipient — Checked against ${contacts.length} saved contact(s). No lookalike prefix/suffix mimicry detected. Always verify the recipient address out-of-band.`,
+    summaryNarrative: `Recipient Checked — Scanned against ${contacts.length} counterparty contact(s). No lookalike prefix/suffix mimicry detected. Always verify the recipient address out-of-band.`,
   };
 }

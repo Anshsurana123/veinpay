@@ -269,6 +269,8 @@ export function runVeilPayFirewallTraversal(
 
           // Back-propagate taint path flag from this threat entity down to targetWallet
           edgeCopy.attributes.is_taint_path = true;
+          edgeCopy.attributes.tainted_usd = edgeCopy.attributes.amount_usd;
+          edgeCopy.attributes.taint_share = 1.0;
           let traceCursor = toLower;
           let safety = 0;
           while (traceCursor !== targetLower && safety < 10) {
@@ -280,6 +282,8 @@ export function runVeilPayFirewallTraversal(
             const downEdge = parentEdgeByVertex.get(traceCursor);
             if (!downEdge) break;
             downEdge.attributes.is_taint_path = true;
+            downEdge.attributes.tainted_usd = downEdge.attributes.amount_usd;
+            downEdge.attributes.taint_share = 1.0;
             traceCursor = downEdge.to_id.toLowerCase();
           }
         }

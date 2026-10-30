@@ -75,6 +75,8 @@ export interface GraphEdgeAttributes {
   is_sybil_fanout?: boolean;
   is_cyclic_edge?: boolean;
   is_dust?: boolean;
+  tainted_usd?: number;
+  taint_share?: number;
 }
 
 export interface GraphEdge {
@@ -211,6 +213,8 @@ export interface HopEvidenceStep {
   blockNumber: number;
   timestamp: string;
   narrative: string;
+  taintedUsd?: number;
+  taintShare?: number;
 }
 
 export interface AigiForensicReceipt {
@@ -267,6 +271,7 @@ export interface OutboundPoisonScanResult {
   verdict:
     | 'INTERCEPTED_POISONING'
     | 'VERIFIED_TRUSTED_CONTACT'
+    | 'NO_LOOKALIKE_FOUND'
     | 'VERIFIED_FIRST_TIME_RECIPIENT'
     | 'INVALID_ADDRESS_OR_NETWORK_MISMATCH';
   candidateAddress: string;

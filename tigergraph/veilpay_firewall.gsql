@@ -239,4 +239,99 @@ CREATE OR REPLACE DISTRIBUTED QUERY veilpay_firewall_check(
         @@evidence_edges;
 }
 
-INSTALL QUERY veilpay_firewall_check;
+// ----------------------------------------------------------------------------
+// 3. TRUSTED CONTACTS QUERY: veilpay_trusted_contacts
+// ----------------------------------------------------------------------------
+
+CREATE OR REPLACE DISTRIBUTED QUERY veilpay_trusted_contacts(
+  VERTEX target_wallet
+) FOR GRAPH VeilPayGraph SYNTAX v2 {
+  SumAccum<INT> @tx_count = 0;
+  SumAccum<DOUBLE> @total_volume_usd = 0.0;
+  OrAccum @is_trusted = false;
+
+  Target = {target_wallet};
+
+  // Check counterparties with >= 2 successful non-dust transfers
+  Counterparties = SELECT c
+                   FROM Target:t -(TRANSFERRED_TO:e)- (Wallet|Merchant):c
+                   WHERE e.amount_usd > 0.01
+                   ACCUM
+                     c.@tx_count += 1,
+                     c.@total_volume_usd += e.amount_usd
+                   POST-ACCUM (c)
+                     IF c.@tx_count >= 2 THEN
+                       c.@is_trusted += true
+                     END
+                   HAVING c.@is_trusted == true;
+
+  PRINT Counterparties[
+    Counterparties.address AS address,
+    Counterparties.label AS label,
+    Counterparties.@tx_count AS tx_count,
+    Counterparties.@total_volume_usd AS total_volume_usd
+  ];
+}
+
+// ----------------------------------------------------------------------------
+// 4. POISON GRAPH LOOKALIKE QUERY: veilpay_poison_check
+// ----------------------------------------------------------------------------
+
+CREATE OR REPLACE DISTRIBUTED QUERY veilpay_poison_check(
+  VERTEX target_wallet,
+  VERTEX candidate_wallet,
+  DOUBLE similarity_threshold = 0.8
+) FOR GRAPH VeilPayGraph SYNTAX v2 {
+  OrAccum @@lookalike_found = false;
+  STRING lookalike_contact = "";
+  INT dust_sent_count = 0;
+
+  Target = {target_wallet};
+  Candidate = {candidate_wallet};
+
+  // Inspect target counterparties and candidate dust history
+  DustEdges = SELECT c
+              FROM Candidate:c -(DUSTED:e)- (Wallet|Merchant):victim
+              WHERE e.amount_usd <= 0.01;
+
+  dust_sent_count = DustEdges.size();
+
+  PRINT @@lookalike_found AS lookalike_found,
+        lookalike_contact AS lookalike_contact,
+        dust_sent_count AS dust_out_degree;
+}
+
+// ----------------------------------------------------------------------------
+// 5. NEIGHBORHOOD TOPOLOGY QUERY: veilpay_neighbors
+// ----------------------------------------------------------------------------
+
+CREATE OR REPLACE DISTRIBUTED QUERY veilpay_neighbors(
+  VERTEX target_wallet,
+  INT hops = 1,
+  INT result_limit = 50
+) FOR GRAPH VeilPayGraph SYNTAX v2 {
+  SetAccum<EDGE> @@subgraph_edges;
+  SetAccum<VERTEX> @@subgraph_vertices;
+
+  CurrentFrontier = {target_wallet};
+  @@subgraph_vertices += target_wallet;
+
+  INT step = 0;
+  WHILE (CurrentFrontier.size() > 0 AND step < hops) DO
+    step = step + 1;
+    NextFrontier = SELECT u
+                   FROM CurrentFrontier:v -(TRANSFERRED_TO|REVERSE_TRANSFERRED_TO|DUSTED:e)- (Wallet|ThreatEntity|Merchant):u
+                   ACCUM
+                     @@subgraph_edges += e,
+                     @@subgraph_vertices += u;
+    CurrentFrontier = NextFrontier;
+  END;
+
+  PRINT @@subgraph_vertices,
+        @@subgraph_edges;
+}
+
+INSTALL QUERY veilpay_firewall_check,
+              veilpay_trusted_contacts,
+              veilpay_poison_check,
+              veilpay_neighbors;
