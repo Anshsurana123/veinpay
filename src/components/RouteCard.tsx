@@ -94,7 +94,7 @@ export function RouteCard() {
 
       {isEstimate && (
         <div className="text-xs text-[#e8c06a] mb-2 leading-relaxed">
-          Live routing timed out (3.5 s). Showing an estimate; the final amount may differ.
+          Live routing timed out or unavailable. Showing an estimate; the final amount may differ.
         </div>
       )}
 

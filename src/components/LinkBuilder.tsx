@@ -47,12 +47,14 @@ export function LinkBuilder() {
   const { open: openAppKit } = useAppKit();
 
   const [toastMessage, setToastMessage] = useState<string | null>(null);
-  const [origin, setOrigin] = useState('https://veilpay.xyz');
+  const [origin, setOrigin] = useState(
+    process.env.NEXT_PUBLIC_APP_URL || 'https://veinpay.vercel.app'
+  );
   const [linkActionError, setLinkActionError] = useState<string | null>(null);
   const [revokedNotice, setRevokedNotice] = useState<string | null>(null);
 
   useEffect(() => {
-    if (typeof window !== 'undefined') {
+    if (typeof window !== 'undefined' && window.location.origin) {
       setOrigin(window.location.origin);
     }
   }, []);
@@ -631,7 +633,7 @@ export function LinkBuilder() {
         <div className="min-w-0 flex-1">
           <small className="block text-[11px] opacity-70">Your link</small>
           <b className="block font-medium truncate text-sm">
-            veilpay.xyz/pay/{linkConfig.handle || 'goa.eth'}
+            {origin.replace(/^https?:\/\//, '')}/pay/{linkConfig.handle || 'goa.eth'}
           </b>
         </div>
         <div className="flex gap-2 shrink-0">

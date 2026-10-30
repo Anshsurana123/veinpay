@@ -53,6 +53,6 @@ export const appKitMetadata = {
   name: 'VeilPay — Pre-Sign Graph Firewall & Zero-Doxx Checkout',
   description:
     'Sub-50ms TigerGraph 3-in-1 Pre-Sign Firewall, AIGI Deterministic Forensics, SOCKET V3 Cross-Chain Routing & Cake Wallet Vault Settlement (Mainnet & Testnet).',
-  url: 'https://veilpay.xyz',
-  icons: ['https://veilpay.xyz/icon.png'],
+  url: process.env.NEXT_PUBLIC_APP_URL || 'https://veinpay.vercel.app',
+  icons: [`${process.env.NEXT_PUBLIC_APP_URL || 'https://veinpay.vercel.app'}/icon.png`],
 };

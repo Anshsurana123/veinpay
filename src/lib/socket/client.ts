@@ -508,11 +508,15 @@ export async function fetchSocketCrossChainQuote(
   }
 
   try {
-    // Enforce strict 3500ms stage-demo timeout (Case 5C)
+    // Configurable timeout (defaults to 6000ms for resilient public API & serverless cold-starts)
+    const timeoutMs =
+      Number(process.env.SOCKET_TIMEOUT_MS) > 0
+        ? Number(process.env.SOCKET_TIMEOUT_MS)
+        : 6000;
     const response = await fetch(`${baseUrl}/v3/swap/quote?${query.toString()}`, {
       method: 'GET',
       headers,
-      signal: AbortSignal.timeout(3500),
+      signal: AbortSignal.timeout(timeoutMs),
     });
 
     const elapsedMs = Number((performance.now() - startPerf).toFixed(2));

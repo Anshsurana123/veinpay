@@ -58,6 +58,15 @@ export function PayerCheckoutPanel() {
   const { address: wagmiAddress, isConnected } = useAccount();
   const { signMessageAsync, isPending: isSigningProof } = useSignMessage();
   const [proofError, setProofError] = useState<string | null>(null);
+  const [origin, setOrigin] = useState(
+    process.env.NEXT_PUBLIC_APP_URL || 'https://veinpay.vercel.app'
+  );
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.location.origin) {
+      setOrigin(window.location.origin);
+    }
+  }, []);
 
   useEffect(() => {
     syncConnectedWallet(isConnected && wagmiAddress ? wagmiAddress : null);
@@ -157,7 +166,7 @@ export function PayerCheckoutPanel() {
                 MODULE B // LIVE PAYER CHECKOUT &amp; PRE-SIGN FIREWALL
               </span>
               <span className="border border-[#D97736]/50 bg-[#261810] px-2 py-0.5 font-mono text-[10px] font-semibold text-[#E5A93C]">
-                veilpay.xyz/pay/{linkConfig.handle || 'goa.eth'}
+                {origin.replace(/^https?:\/\//, '')}/pay/{linkConfig.handle || 'goa.eth'}
               </span>
             </div>
             <p className="mt-0.5 text-xs text-[#9499A3]">

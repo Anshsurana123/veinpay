@@ -57,12 +57,16 @@ export function ReceiverSetupForm() {
   const { signTypedDataAsync, isPending: isSigningLink } = useSignTypedData();
 
   const [copied, setCopied] = useState(false);
-  const [origin, setOrigin] = useState('https://veilpay.xyz');
+  const [origin, setOrigin] = useState(
+    process.env.NEXT_PUBLIC_APP_URL || 'https://veinpay.vercel.app'
+  );
   const [linkActionError, setLinkActionError] = useState<string | null>(null);
   const [revokedNotice, setRevokedNotice] = useState<string | null>(null);
 
   useEffect(() => {
-    setOrigin(window.location.origin);
+    if (typeof window !== 'undefined' && window.location.origin) {
+      setOrigin(window.location.origin);
+    }
   }, []);
 
   const activeVaultAddress =
@@ -220,7 +224,7 @@ export function ReceiverSetupForm() {
             </label>
             <div className="flex items-center border border-[#262A33] bg-[#1A1D23] px-2.5 py-2 focus-within:border-[#D97736]">
               <span className="font-mono text-xs text-[#646973]">
-                veilpay.xyz/pay/
+                {origin.replace(/^https?:\/\//, '')}/pay/
               </span>
               <input
                 type="text"
@@ -746,7 +750,7 @@ export function ReceiverSetupForm() {
           <div className="flex-1 overflow-hidden border border-[#262A33] bg-[#0B0C0E] px-3 py-2">
             <div className="flex items-center justify-between gap-2">
               <span className="font-mono text-xs font-bold text-[#F3F1EC]">
-                veilpay.xyz/pay/{linkConfig.handle || 'goa.eth'}
+                {origin.replace(/^https?:\/\//, '')}/pay/{linkConfig.handle || 'goa.eth'}
               </span>
               <span className="truncate font-mono text-[10px] text-[#646973]">
                 {shareableUrl ||
