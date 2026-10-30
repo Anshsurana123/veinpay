@@ -197,10 +197,9 @@ CREATE OR REPLACE DISTRIBUTED QUERY veilpay_firewall_check(
 
   // Check for return edges forming wash cycles (Ancestor -> Target or Descendant)
   Ancestors = {@@visited_vertices};
-  TargetSet = {target_wallet};
   CycleCheck = SELECT s
-               FROM Ancestors:s -((TRANSFERRED_TO|FUNDED):e)- TargetSet:t
-               WHERE s != t
+               FROM Ancestors:s -((TRANSFERRED_TO|FUNDED):e)- (Wallet|Merchant|ThreatEntity|Address):t
+               WHERE s != t AND t == target_wallet
                ACCUM
                  @@cyclic_loop_detected += true,
                  @@evidence_edges += e;
@@ -224,17 +223,18 @@ CREATE OR REPLACE DISTRIBUTED QUERY veilpay_firewall_check(
   // ==========================================================================
   // MODULE 3: PoisonGraph Outbound Dust-Factory & Merchant History (Case 4)
   // ==========================================================================
+  TargetSet = {target_wallet};
   DustCheck = SELECT s
               FROM TargetSet:s -(DUSTED:e)- (Wallet|Merchant|Address):victim
-              WHERE e.amount_usd <= 0.01
+              WHERE e.amount_usd < 0.010001
               ACCUM
                 @@dust_out_degree += 1,
                 @@evidence_edges += e;
 
   MerchantSet = {merchant_wallet};
   MerchantHistory = SELECT m
-                    FROM MerchantSet:m -((TRANSFERRED_TO|FUNDED):e)- TargetSet:t
-                    WHERE e.amount_usd > 0.01
+                    FROM MerchantSet:m -((TRANSFERRED_TO|FUNDED):e)- (Wallet|Merchant|ThreatEntity|Address):t
+                    WHERE t == target_wallet AND e.amount_usd > 0.009999
                     ACCUM
                       @@prior_merchant_transfers += 1;
 
@@ -287,7 +287,7 @@ CREATE OR REPLACE DISTRIBUTED QUERY veilpay_trusted_contacts(
   // Check counterparties with >= 2 successful non-dust transfers
   Counterparties = SELECT c
                    FROM TargetSet:t -((TRANSFERRED_TO|FUNDED):e)- (Wallet|Merchant|Address):c
-                   WHERE e.amount_usd > 0.01
+                   WHERE e.amount_usd > 0.009999
                    ACCUM
                      c.@tx_count += 1,
                      c.@total_volume_usd += e.amount_usd
@@ -324,7 +324,7 @@ CREATE OR REPLACE DISTRIBUTED QUERY veilpay_poison_check(
   // Inspect target counterparties and candidate dust history
   DustEdges = SELECT victim
               FROM CandidateSet:c -(DUSTED:e)- (Wallet|Merchant|Address):victim
-              WHERE e.amount_usd <= 0.01;
+              WHERE e.amount_usd < 0.010001;
 
   dust_sent_count = DustEdges.size();
 
