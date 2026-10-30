@@ -11,6 +11,7 @@ import { getTigerGraphConfig } from './config';
 import { executeTigerGraphQuery, formatVertexParam } from './client';
 import { batchUpsertToTigerGraph } from './ingest';
 import { crawlLiveAddressAndScan } from '@/lib/graph/live-crawler';
+import { buildSeededGraphDataset } from '@/lib/graph/seed-topologies';
 
 export interface ScanWithTigerGraphParams {
   targetWallet: string;
@@ -106,7 +107,7 @@ export async function scanWithTigerGraph(
 
   const startPerf = performance.now();
   const targetWallet = params.targetWallet;
-  const merchantWallet = params.merchantWallet || '';
+  const merchantWallet = params.merchantWallet || targetWallet;
   const maxHops = params.policy.maxHops;
 
   const queryParams = {
@@ -119,10 +120,61 @@ export async function scanWithTigerGraph(
     firewall_enabled: params.policy.firewallEnabled,
   };
 
-  const envelope = await executeTigerGraphQuery({
+  let envelope = await executeTigerGraphQuery({
     queryName: 'veilpay_firewall_check',
     params: queryParams,
   });
+
+  // If vertex was not found in TigerGraph, automatically seed or upsert and retry
+  if (
+    envelope.error &&
+    (envelope.message?.includes('Failed to convert user vertex id') ||
+      envelope.message?.includes('invalid vertex id') ||
+      envelope.message?.includes('REST-30000'))
+  ) {
+    try {
+      const seedData = buildSeededGraphDataset();
+      if (seedData.vertices.has(targetWallet.toLowerCase())) {
+        await batchUpsertToTigerGraph({
+          vertices: seedData.vertices,
+          edges: seedData.edges,
+        });
+      } else {
+        await batchUpsertToTigerGraph({
+          vertices: [
+            {
+              id: targetWallet,
+              v_type: 'Wallet' as const,
+              label: `Wallet (${targetWallet.slice(0, 6)}...${targetWallet.slice(-4)})`,
+              riskTag: 'PAYER_TARGET' as const,
+              hopDistance: 0,
+              isTainted: false,
+            },
+            ...(merchantWallet && merchantWallet !== targetWallet
+              ? [
+                  {
+                    id: merchantWallet,
+                    v_type: 'Merchant' as const,
+                    label: `Merchant (${merchantWallet.slice(0, 6)}...${merchantWallet.slice(-4)})`,
+                    riskTag: 'CLEAN' as const,
+                    hopDistance: 0,
+                    isTainted: false,
+                  },
+                ]
+              : []),
+          ],
+          edges: [],
+        });
+      }
+
+      envelope = await executeTigerGraphQuery({
+        queryName: 'veilpay_firewall_check',
+        params: queryParams,
+      });
+    } catch {
+      // Ignore upsert error, will fall through to fail-closed scan
+    }
+  }
 
   const elapsedMs = performance.now() - startPerf;
 
