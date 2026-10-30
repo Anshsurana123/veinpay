@@ -38,9 +38,19 @@ export async function checkIntegrationsHealth(
   };
   if (!skipPing) {
     try {
+      const socketPingParams = new URLSearchParams({
+        userOps: 'tx',
+        originChainId: '42161',
+        destinationChainId: '8453',
+        inputToken: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831',
+        outputToken: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
+        inputAmount: '1000000',
+        userAddress: '0x4F2a9c117034e8B1200499A1c3f88200000188E1',
+        receiverAddress: '0x4F2a9c117034e8B1200499A1c3f88200000188E1',
+      });
       const res = await fetch(
-        'https://public-backend.socket.tech/v3/swap/quote?userOps=tx&fromChainId=42161&toChainId=8453&fromTokenAddress=0xaf88d065e77c8cC2239327C5EDb3A432268e5831&toTokenAddress=0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913&fromAmount=1000000&userAddress=0x4F2a9c117034e8B1200499A1c3f88200000188E1&recipient=0x4F2a9c117034e8B1200499A1c3f88200000188E1',
-        { signal: AbortSignal.timeout(1500) }
+        `https://public-backend.socket.tech/v3/swap/quote?${socketPingParams.toString()}`,
+        { signal: AbortSignal.timeout(3500) }
       );
       if (!res.ok) {
         socketHealth = {

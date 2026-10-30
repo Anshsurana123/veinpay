@@ -193,7 +193,7 @@ export function AigiForensicReceiptCard() {
           <div className="mt-2.5 border-t border-[#262A33] pt-2.5">
             <div className="mb-1 font-mono text-[10px] font-semibold text-[#D97736]">
               GEMINI EXECUTIVE COMPLIANCE SUMMARY (
-              {activeReceipt.geminiModelUsed ?? 'gemini-2.5-flash'}):
+              {activeReceipt.geminiModelUsed ?? 'gemini-3.8-flash'}):
             </div>
             <p className="text-xs leading-relaxed text-[#9499A3]">
               {activeReceipt.geminiExecutiveSummary}

@@ -70,7 +70,7 @@ Implemented both as a production GSQL query ([`/tigergraph/veilpay_firewall.gsql
 ### Pillar 2: AIGI Forensic Agent & Compliance Receipt
 - Consumes the raw subgraph telemetry (`hop_distance`, `taint_hits`, `sybil_cluster_size`, `evidence_edges`) and produces a **100% deterministic Forensic Security Verdict** (`VERIFIED_CLEAN`, `INTERCEPTED_TAINT`, `INTERCEPTED_SYBIL`, `WARNING_SYBIL`, `INTERCEPTED_POISONING`, or `ADVISORY_BYPASSED`).
 - Computes a tamper-evident **SHA-256 Cryptographic Audit Hash** over the canonical receipt payload using the Web Crypto API (`crypto.subtle.digest`).
-- Optionally pairs with **Google Gemini (`gemini-2.5-flash`)** to generate a concise human-readable executive summary strictly constrained to the cited graph edges—without ever altering the deterministic verdict or SHA-256 hash.
+- Optionally pairs with **Google Gemini (`gemini-3.8-flash`)** to generate a concise human-readable executive summary strictly constrained to the cited graph edges—without ever altering the deterministic verdict or SHA-256 hash.
 
 ### Pillar 3: SOCKET (Bungee Swap V3) Cross-Chain Routing
 - Strictly gated behind firewall clearance (`socketUnlocked === true`).

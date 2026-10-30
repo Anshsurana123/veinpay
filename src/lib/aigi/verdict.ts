@@ -303,7 +303,7 @@ export async function maybeEnrichReceiptWithGemini(
     };
   }
 
-  const modelName = process.env.GEMINI_MODEL?.trim() || 'gemini-2.5-flash';
+  const modelName = process.env.GEMINI_MODEL?.trim() || 'gemini-3.8-flash';
 
   try {
     const { GoogleGenAI } = await import('@google/genai');
