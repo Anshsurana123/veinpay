@@ -188,8 +188,10 @@ export function CakeWalletSettlementModal() {
         })
       : '';
 
+  const isVaultUnlocked = Boolean(activeScan?.vaultUriUnlocked);
+
   const activeUri =
-    !hasVaultConfigured || !isRateAvailable
+    !hasVaultConfigured || !isRateAvailable || !isVaultUnlocked
       ? ''
       : isBtcMode
         ? btcLegacyFormat
@@ -201,7 +203,7 @@ export function CakeWalletSettlementModal() {
             linkConfig.vaultAddresses.EVM_SOCKET;
 
   useEffect(() => {
-    if (!settlementModalOpen || !activeScan?.socketUnlocked || !activeUri) {
+    if (!settlementModalOpen || !isVaultUnlocked || !activeUri) {
       setQrDataUrl('');
       return;
     }

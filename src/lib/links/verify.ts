@@ -391,6 +391,8 @@ export async function verifySignedPaymentLink(
 export async function verifyRevokeLinkSignature(params: {
   revokeMessage: RevokeLinkMessage;
   signature: `0x${string}`;
+  originalLinkPayload?: string | null;
+  originalLinkSignature?: string | null;
   publicClient?: Pick<PublicClient, 'verifyTypedData'>;
 }): Promise<{
   valid: boolean;
@@ -401,14 +403,52 @@ export async function verifyRevokeLinkSignature(params: {
   }
 
   const stored = getStoredLinkRecord(params.revokeMessage.linkId);
-  if (
-    stored &&
-    stored.payload.signer.toLowerCase() !==
+  if (stored) {
+    if (
+      stored.payload.signer.toLowerCase() !==
       params.revokeMessage.signer.trim().toLowerCase()
-  ) {
+    ) {
+      return {
+        valid: false,
+        reason: `Revoke signer (${params.revokeMessage.signer}) does not match the original link signer (${stored.payload.signer}).`,
+      };
+    }
+  } else if (params.originalLinkPayload && params.originalLinkSignature) {
+    // If not stored in memory (e.g. server restart or stateless URL link), verify the original link
+    const origCheck = await verifySignedPaymentLink({
+      encodedPayload: params.originalLinkPayload,
+      signature: params.originalLinkSignature,
+      publicClient: params.publicClient,
+    });
+    if (!origCheck.valid || !origCheck.payload) {
+      return {
+        valid: false,
+        reason: `Original payment link proof is invalid: ${origCheck.reason ?? 'verification failed'}.`,
+      };
+    }
+    if (
+      origCheck.payload.linkId.toLowerCase() !==
+      params.revokeMessage.linkId.toLowerCase()
+    ) {
+      return {
+        valid: false,
+        reason: `Original linkId (${origCheck.payload.linkId}) does not match revocation linkId (${params.revokeMessage.linkId}).`,
+      };
+    }
+    if (
+      origCheck.payload.signer.toLowerCase() !==
+      params.revokeMessage.signer.trim().toLowerCase()
+    ) {
+      return {
+        valid: false,
+        reason: `Revoke signer (${params.revokeMessage.signer}) does not match original link signer (${origCheck.payload.signer}).`,
+      };
+    }
+  } else {
     return {
       valid: false,
-      reason: `Revoke signer (${params.revokeMessage.signer}) does not match the original link signer (${stored.payload.signer}).`,
+      reason:
+        'Payment link is not in server memory registry. To revoke an unindexed or stateless link, supply the original signed link payload (c) and signature (sig) to prove authorship.',
     };
   }
 

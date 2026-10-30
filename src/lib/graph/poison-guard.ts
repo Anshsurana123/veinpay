@@ -197,12 +197,17 @@ export function evaluateOutboundPoisonRisk(params: {
   const hexPrefixCount = Math.max(0, bestDiff.matchingPrefixChars - 2);
   const hexSuffixCount = bestDiff.matchingSuffixChars;
   const isLookalikeVanity = hexPrefixCount >= 3 && hexSuffixCount >= 3;
+  const addrLen = Math.max(1, normalizedCandidate.length);
+  const similarityScore = Number(
+    ((bestDiff.matchingPrefixChars + bestDiff.matchingSuffixChars) / addrLen).toFixed(3)
+  );
 
   // Sub-Case 4A: Poisoned Vanity Clone or High-Out-Degree Dust Factory
-  if ((isLookalikeVanity || dustOutDegree >= 50) && bestContact) {
-    const similarityScore = Number(
-      ((bestDiff.matchingPrefixChars + bestDiff.matchingSuffixChars) / 42).toFixed(3)
-    );
+  if ((isLookalikeVanity && bestContact) || dustOutDegree >= 50) {
+    const summaryNarrative = bestContact
+      ? `POISONGRAPH INTERCEPT: Candidate ${normalizedCandidate.slice(0, 10)}...${normalizedCandidate.slice(-4)} mimics the first ${bestDiff.matchingPrefixChars} chars (${normalizedCandidate.slice(0, bestDiff.matchingPrefixChars)}) and last ${bestDiff.matchingSuffixChars} chars (${normalizedCandidate.slice(-bestDiff.matchingSuffixChars)}) of trusted contact "${bestContact.label}" (${bestContact.address.slice(0, 10)}...${bestContact.address.slice(-4)}), has ${bestDiff.forgedMiddleChars} forged middle hex characters, 0 prior legitimate outbound transfers, and ${dustOutDegree.toLocaleString()} outbound zero/micro-value dust transfers (<= $0.01).`
+      : `POISONGRAPH INTERCEPT: Candidate ${normalizedCandidate.slice(0, 10)}...${normalizedCandidate.slice(-4)} has high automated dusting out-degree (${dustOutDegree.toLocaleString()} outbound zero/micro-value dust transfers <= $0.01) with 0 prior legitimate outbound transfers.`;
+
     return {
       verdict: 'INTERCEPTED_POISONING',
       candidateAddress: raw,
@@ -214,15 +219,36 @@ export function evaluateOutboundPoisonRisk(params: {
       forgedMiddleChars: bestDiff.forgedMiddleChars,
       similarityScore,
       priorLegitimateInteractions: 0,
-      dustOutDegree: Math.max(dustOutDegree, 4210),
+      dustOutDegree,
       dustSampleTransfers,
       charDiffGrid: bestDiff.grid,
       executionTimeMs: Number((performance.now() - startPerf).toFixed(2)),
-      summaryNarrative: `POISONGRAPH INTERCEPT: Candidate ${normalizedCandidate.slice(0, 10)}...${normalizedCandidate.slice(-4)} mimics the first ${bestDiff.matchingPrefixChars} chars (${normalizedCandidate.slice(0, bestDiff.matchingPrefixChars)}) and last ${bestDiff.matchingSuffixChars} chars (${normalizedCandidate.slice(-bestDiff.matchingSuffixChars)}) of trusted contact "${bestContact.label}" (${bestContact.address.slice(0, 10)}...${bestContact.address.slice(-4)}), has ${bestDiff.forgedMiddleChars} forged middle hex characters, 0 prior legitimate outbound transfers, and ${Math.max(dustOutDegree, 4210).toLocaleString()} outbound zero/micro-value dust transfers (<= $0.01).`,
+      summaryNarrative,
     };
   }
 
-  // Sub-Case 4B: Brand-New Legitimate Unrelated Recipient
+  // Sub-Case 4B: First-Time Recipient (no mimicry match against provided contacts)
+  if (contacts.length === 0) {
+    return {
+      verdict: 'VERIFIED_FIRST_TIME_RECIPIENT',
+      candidateAddress: raw,
+      normalizedCandidateAddress: normalizedCandidate,
+      detectedProtocol: validation.detectedProtocol,
+      matchedTrustedContact: null,
+      matchingPrefixChars: 0,
+      matchingSuffixChars: 0,
+      forgedMiddleChars: 0,
+      similarityScore: 0,
+      priorLegitimateInteractions: 0,
+      dustOutDegree,
+      dustSampleTransfers: [],
+      charDiffGrid: [],
+      executionTimeMs: Number((performance.now() - startPerf).toFixed(2)),
+      summaryNarrative:
+        'First-Time Recipient — No Prior History. No trusted contacts provided to compare against. Always verify the recipient address out-of-band.',
+    };
+  }
+
   return {
     verdict: 'VERIFIED_FIRST_TIME_RECIPIENT',
     candidateAddress: raw,
@@ -232,15 +258,12 @@ export function evaluateOutboundPoisonRisk(params: {
     matchingPrefixChars: bestDiff.matchingPrefixChars,
     matchingSuffixChars: bestDiff.matchingSuffixChars,
     forgedMiddleChars: bestDiff.forgedMiddleChars,
-    similarityScore: Number(
-      ((bestDiff.matchingPrefixChars + bestDiff.matchingSuffixChars) / 42).toFixed(3)
-    ),
+    similarityScore,
     priorLegitimateInteractions: 0,
-    dustOutDegree: 0,
+    dustOutDegree,
     dustSampleTransfers: [],
     charDiffGrid: bestDiff.grid,
     executionTimeMs: Number((performance.now() - startPerf).toFixed(2)),
-    summaryNarrative:
-      'First-Time Recipient — Verified Zero Dust-Factory Activity. Address does not mimic any historical contact prefix/suffix and has 0 outbound dusting edges.',
+    summaryNarrative: `First-Time Recipient — Checked against ${contacts.length} saved contact(s). No lookalike prefix/suffix mimicry detected. Always verify the recipient address out-of-band.`,
   };
 }

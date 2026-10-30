@@ -28,12 +28,30 @@ const nonceStore = new Map<
   ProofOfControlChallenge & { consumed: boolean }
 >();
 
-function getSessionSecret(): string {
-  return (
+export function assertSessionSecretConfigured(): void {
+  const secret =
     process.env.VEILPAY_SESSION_SECRET?.trim() ||
-    process.env.RECEIPT_SIGNING_KEY?.trim() ||
-    'veilpay-dev-ephemeral-session-hmac-secret-2026'
-  );
+    process.env.RECEIPT_SIGNING_KEY?.trim();
+  if (!secret && process.env.NODE_ENV === 'production') {
+    throw new Error(
+      'FATAL: VEILPAY_SESSION_SECRET (or RECEIPT_SIGNING_KEY) is required in production.'
+    );
+  }
+}
+
+function getSessionSecret(): string {
+  const secret =
+    process.env.VEILPAY_SESSION_SECRET?.trim() ||
+    process.env.RECEIPT_SIGNING_KEY?.trim();
+  if (!secret) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error(
+        'FATAL: VEILPAY_SESSION_SECRET (or RECEIPT_SIGNING_KEY) is required in production.'
+      );
+    }
+    return 'veilpay-dev-ephemeral-session-hmac-secret-2026';
+  }
+  return secret;
 }
 
 export function buildProofOfControlMessage(params: {

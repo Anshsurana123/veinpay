@@ -33,7 +33,24 @@ export async function POST(request: NextRequest) {
   try {
     const body = (await request.json()) as Record<string, unknown>;
 
-    // Support JSON-RPC 2.0 (method: 'tools/list' or 'tools/call')
+    // Support JSON-RPC 2.0 (method: 'initialize', 'tools/list', or 'tools/call')
+    if (body.method === 'initialize') {
+      return NextResponse.json({
+        jsonrpc: '2.0',
+        id: body.id ?? 1,
+        result: {
+          protocolVersion: '2024-11-05',
+          serverInfo: {
+            name: 'tigergraph-mcp-veilpay',
+            version: '1.0.0',
+          },
+          capabilities: {
+            tools: {},
+          },
+        },
+      });
+    }
+
     if (body.method === 'tools/list') {
       return NextResponse.json({
         jsonrpc: '2.0',

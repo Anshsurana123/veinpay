@@ -163,17 +163,21 @@ export function SettlementSheet() {
         })
       : '';
 
-  const activeUri = isBtcMode
-    ? btcLegacyFormat
-      ? legacyBtcUri
-      : bip321Uri
-    : isXmrMode
-    ? xmrUri
-    : '';
+  const isVaultUnlocked = Boolean(activeScan?.vaultUriUnlocked);
+
+  const activeUri = !isVaultUnlocked
+    ? ''
+    : isBtcMode
+      ? btcLegacyFormat
+        ? legacyBtcUri
+        : bip321Uri
+      : isXmrMode
+        ? xmrUri
+        : '';
 
   // Generate QR code for BTC / XMR
   useEffect(() => {
-    if (!settlementModalOpen || !activeUri) {
+    if (!settlementModalOpen || !isVaultUnlocked || !activeUri) {
       setQrDataUrl('');
       return;
     }

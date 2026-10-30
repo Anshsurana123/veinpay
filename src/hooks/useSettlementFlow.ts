@@ -219,11 +219,27 @@ export function useSettlementFlow({
   const approveIfNeededAndSend = useCallback(async (): Promise<
     `0x${string}` | null
   > => {
-    if (!route?.txData?.object) {
+    if (
+      !route?.txData?.object ||
+      route.routeTags?.includes('FALLBACK_DETERMINISTIC') ||
+      route.routeTags?.includes('ESTIMATE_ONLY')
+    ) {
       setMachine((prev) =>
         transitionSettlementStep(prev, {
           type: 'FAIL',
-          reason: 'No executable route transaction data available.',
+          reason:
+            'Estimated fallback route has no executable transaction. Signing disabled to prevent gas waste or contract reversion.',
+        })
+      );
+      return null;
+    }
+
+    const txObj = route.txData.object;
+    if (!txObj.to || !/^0x[0-9a-fA-F]{40}$/.test(txObj.to)) {
+      setMachine((prev) =>
+        transitionSettlementStep(prev, {
+          type: 'FAIL',
+          reason: 'Invalid transaction destination address in route object.',
         })
       );
       return null;

@@ -14,6 +14,8 @@ import {
 } from '@/lib/graph/seed-topologies';
 import { runVeilPayFirewallTraversal } from '@/lib/graph/engine';
 import { checkGoPlusAddress } from '@/lib/security/goplus';
+import { getLiveSpotRates } from '@/lib/rates';
+import { upsertGraphToTigerGraph } from '@/lib/graph/tigergraph-client';
 
 export const DEFAULT_LIVE_CRAWL_SETTINGS: LiveCrawlSettings = {
   topFundersPerVertex: 5,
@@ -154,10 +156,15 @@ async function fetchEtherscanInboundTransactions(params: {
     };
   }
 
-  const url = `https://api.etherscan.io/v2/api?chainid=${targetChainId}&module=account&action=txlist&address=${address}&startblock=0&endblock=99999999&page=1&offset=25&sort=desc&apikey=${apiKey}`;
+  const url = `https://api.etherscan.io/v2/api?chainid=${targetChainId}&module=account&action=txlist&address=${address}&startblock=0&endblock=99999999&page=1&offset=100&sort=desc&apikey=${apiKey}`;
+  const tokenUrl = `https://api.etherscan.io/v2/api?chainid=${targetChainId}&module=account&action=tokentx&address=${address}&startblock=0&endblock=99999999&page=1&offset=50&sort=desc&apikey=${apiKey}`;
 
   try {
-    const res = await fetch(url, { signal: AbortSignal.timeout(4000) });
+    const [res, tokenRes] = await Promise.all([
+      fetch(url, { signal: AbortSignal.timeout(4000) }),
+      fetch(tokenUrl, { signal: AbortSignal.timeout(4000) }).catch(() => null),
+    ]);
+
     if (!res.ok) {
       return {
         txs: [],
@@ -173,10 +180,26 @@ async function fetchEtherscanInboundTransactions(params: {
       result?: EtherscanTxItem[] | string;
     };
 
+    let tokenItems: EtherscanTxItem[] = [];
+    if (tokenRes && tokenRes.ok) {
+      try {
+        const tokenData = (await tokenRes.json()) as {
+          status?: string;
+          result?: EtherscanTxItem[] | string;
+        };
+        if (Array.isArray(tokenData.result)) {
+          tokenItems = tokenData.result;
+        }
+      } catch {
+        // Non-blocking token parsing
+      }
+    }
+
     if (
       data.status === '0' &&
       typeof data.result === 'string' &&
-      !data.result.toLowerCase().includes('no transactions found')
+      !data.result.toLowerCase().includes('no transactions found') &&
+      tokenItems.length === 0
     ) {
       return {
         txs: [],
@@ -187,22 +210,25 @@ async function fetchEtherscanInboundTransactions(params: {
       };
     }
 
-    if (Array.isArray(data.result)) {
+    const nativeItems = Array.isArray(data.result) ? data.result : [];
+    const combined = [...nativeItems, ...tokenItems];
+
+    if (combined.length > 0) {
       if (txListLruCache.size > 200) {
         const oldestKey = txListLruCache.keys().next().value;
         if (oldestKey) txListLruCache.delete(oldestKey);
       }
-      txListLruCache.set(cacheKey, { timestamp: Date.now(), txs: data.result });
+      txListLruCache.set(cacheKey, { timestamp: Date.now(), txs: combined });
       return {
-        txs: data.result,
+        txs: combined,
         usedChainId: targetChainId,
         tierFallbackNote,
       };
     }
 
-    // If Arbitrum had 0 txs, try Ethereum Mainnet (chainId 1)
+    // If target chain (e.g. Arbitrum) had 0 txs, fallback to Ethereum Mainnet (chainId 1)
     if (targetChainId !== 1) {
-      const ethUrl = `https://api.etherscan.io/v2/api?chainid=1&module=account&action=txlist&address=${address}&startblock=0&endblock=99999999&page=1&offset=25&sort=desc&apikey=${apiKey}`;
+      const ethUrl = `https://api.etherscan.io/v2/api?chainid=1&module=account&action=txlist&address=${address}&startblock=0&endblock=99999999&page=1&offset=100&sort=desc&apikey=${apiKey}`;
       const ethRes = await fetch(ethUrl, { signal: AbortSignal.timeout(4000) });
       if (ethRes.ok) {
         const ethData = (await ethRes.json()) as {
@@ -223,7 +249,7 @@ async function fetchEtherscanInboundTransactions(params: {
             failureReason: `Etherscan API error on ETH fallback: ${ethData.result}`,
           };
         }
-        if (Array.isArray(ethData.result)) {
+        if (Array.isArray(ethData.result) && ethData.result.length > 0) {
           txListLruCache.set(`1:${address.toLowerCase()}`, {
             timestamp: Date.now(),
             txs: ethData.result,
@@ -330,9 +356,12 @@ export async function crawlLiveAddressAndScan(params: {
     threatSource: targetSecurity.source || undefined,
   });
 
+  const spotData = await getLiveSpotRates().catch(() => null);
+  const ethSpotPrice = spotData?.rates?.ETH && spotData.rates.ETH > 0 ? spotData.rates.ETH : 2500;
+
   const visitedCrawl = new Set<string>([targetLower]);
   let currentWave: string[] = [canonicalTarget];
-  let apiCallsUsed = 0;
+  let apiCallsUsed = 1; // Count initial target security check
   let crawlTruncated = false;
   let tierNote: string | null = null;
   const minIntervalMs = Math.ceil(1000 / Math.max(1, settings.rateLimitRps));
@@ -414,8 +443,9 @@ export async function crawlLiveAddressAndScan(params: {
 
         const funderCanonical = toEip55Address(tx.from);
         const ethAmount = Number((Number(tx.value) / 1e18).toFixed(6));
-        const usdEstimate = Number((ethAmount * 2500).toFixed(2));
+        const usdEstimate = Number((ethAmount * ethSpotPrice).toFixed(2));
 
+        apiCallsUsed += 1;
         const threatInfo = await checkGoPlusAddressSecurity(
           funderCanonical,
           usedChainId
@@ -491,6 +521,14 @@ export async function crawlLiveAddressAndScan(params: {
     edges,
     poisonDustDegreeByAddress,
   };
+
+  if (process.env.TIGERGRAPH_HOST) {
+    try {
+      await upsertGraphToTigerGraph({ vertices, edges });
+    } catch {
+      // Non-blocking upsert error
+    }
+  }
 
   const isInconclusive = crawlTruncated || crawlFailed;
 

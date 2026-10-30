@@ -61,10 +61,61 @@ async function executeGatedQuoteRequest(params: {
   const authoritativePolicy = authority.policy;
   const authoritativeReceiver = authority.vaultAddress;
 
+  // Enforce authoritative destinationChainId from verified payment link
+  const authoritativeDestinationChainId =
+    authority.destinationChainId ?? params.destinationChainId;
+  if (
+    authority.destinationChainId &&
+    params.destinationChainId !== authority.destinationChainId
+  ) {
+    return NextResponse.json(
+      {
+        success: false,
+        statusCode: 400,
+        error: 'DESTINATION_CHAIN_MISMATCH',
+        message: `Requested quote destinationChainId (${params.destinationChainId}) does not match payment link's authoritative destination chain (${authority.destinationChainId}).`,
+      },
+      { status: 400 }
+    );
+  }
+
+  // Enforce authoritative outputToken if the link specifies an asset (e.g. USDC)
+  let authoritativeOutputToken = params.outputToken;
+  if (authority.asset && authority.asset in EVM_TOKEN_REGISTRY) {
+    const assetRegistry =
+      EVM_TOKEN_REGISTRY[authority.asset as keyof typeof EVM_TOKEN_REGISTRY];
+    if (assetRegistry && 'addressesByChain' in assetRegistry) {
+      const addressesByChain = assetRegistry.addressesByChain as Record<
+        number,
+        string | undefined
+      >;
+      const expectedTokenAddress =
+        addressesByChain[authoritativeDestinationChainId];
+      if (expectedTokenAddress) {
+        if (
+          params.outputToken &&
+          params.outputToken.toLowerCase() !== expectedTokenAddress.toLowerCase()
+        ) {
+          return NextResponse.json(
+            {
+              success: false,
+              statusCode: 400,
+              error: 'OUTPUT_TOKEN_MISMATCH',
+              message: `Requested quote outputToken (${params.outputToken}) does not match payment link's required asset (${authority.asset}: ${expectedTokenAddress}).`,
+            },
+            { status: 400 }
+          );
+        }
+        authoritativeOutputToken = expectedTokenAddress;
+      }
+    }
+  }
+
   // Reject USDT on testnet chains per Issue 10
   if (
     (isTestnetChain(params.originChainId) && isUsdtInput(params.inputToken)) ||
-    (isTestnetChain(params.destinationChainId) && isUsdtInput(params.outputToken))
+    (isTestnetChain(authoritativeDestinationChainId) &&
+      isUsdtInput(authoritativeOutputToken))
   ) {
     return NextResponse.json(
       {
@@ -126,9 +177,9 @@ async function executeGatedQuoteRequest(params: {
 
   const quoteResponse = await fetchSocketCrossChainQuote({
     originChainId: params.originChainId,
-    destinationChainId: params.destinationChainId,
+    destinationChainId: authoritativeDestinationChainId,
     inputToken: params.inputToken,
-    outputToken: params.outputToken,
+    outputToken: authoritativeOutputToken,
     inputAmount: params.inputAmount,
     userAddress: params.userAddress,
     receiverAddress: authoritativeReceiver,

@@ -1,3 +1,4 @@
+import { keccak256 } from 'viem';
 import type { VaultSettlementMode } from '@/types/veilpay';
 
 // ============================================================================
@@ -242,8 +243,23 @@ export function validateBip352SilentPaymentAddress(input: string): {
 // 4. MONERO SUBADDRESS (8...) & STANDARD ADDRESS (4...) VALIDATOR
 // ============================================================================
 
-const MONERO_BASE58_REGEX =
-  /^[48][123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz]{94,105}$/;
+const MONERO_BASE58_ALPHABET =
+  '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+const MONERO_ALPHABET_MAP = new Map(
+  MONERO_BASE58_ALPHABET.split('').map((c, i) => [c, BigInt(i)])
+);
+
+function decodeMoneroBlock(str: string): bigint {
+  let val = 0n;
+  for (let i = 0; i < str.length; i++) {
+    const digit = MONERO_ALPHABET_MAP.get(str[i]);
+    if (digit === undefined) {
+      throw new Error(`Invalid Monero Base58 character: ${str[i]}`);
+    }
+    val = val * 58n + digit;
+  }
+  return val;
+}
 
 export function validateMoneroAddress(input: string): {
   valid: boolean;
@@ -263,21 +279,69 @@ export function validateMoneroAddress(input: string): {
       error: `Invalid Monero address length (${trimmed.length} chars; expected 95 for subaddress/standard or 106 for integrated).`,
     };
   }
-  if (!MONERO_BASE58_REGEX.test(trimmed)) {
+
+  const isIntegrated = trimmed.length === 106;
+  const blockSizes = isIntegrated
+    ? [11, 11, 11, 11, 11, 11, 11, 11, 11, 7]
+    : [11, 11, 11, 11, 11, 11, 11, 11, 7];
+  const byteSizes = isIntegrated
+    ? [8, 8, 8, 8, 8, 8, 8, 8, 8, 5]
+    : [8, 8, 8, 8, 8, 8, 8, 8, 5];
+
+  const totalBytes = byteSizes.reduce((a, b) => a + b, 0);
+
+  try {
+    const decodedBytes = new Uint8Array(totalBytes);
+    let charOffset = 0;
+    let byteOffset = 0;
+
+    for (let i = 0; i < blockSizes.length; i++) {
+      const bStr = trimmed.slice(charOffset, charOffset + blockSizes[i]);
+      charOffset += blockSizes[i];
+      let val = decodeMoneroBlock(bStr);
+      const bLen = byteSizes[i];
+      for (let j = bLen - 1; j >= 0; j--) {
+        decodedBytes[byteOffset + j] = Number(val & 0xffn);
+        val >>= 8n;
+      }
+      byteOffset += bLen;
+    }
+
+    const data = decodedBytes.subarray(0, totalBytes - 4);
+    const expectedChecksum = Buffer.from(
+      decodedBytes.subarray(totalBytes - 4, totalBytes)
+    ).toString('hex');
+    const computedHashHex = keccak256(data).slice(2, 10).toLowerCase();
+
+    if (expectedChecksum.toLowerCase() !== computedHashHex) {
+      return {
+        valid: false,
+        error:
+          'Monero address Keccak-256 checksum verification failed (address is mistyped or corrupted).',
+      };
+    }
+
+    const netByte = decodedBytes[0];
+    let addressType: 'SUBADDRESS' | 'STANDARD' | 'INTEGRATED' = 'STANDARD';
+    if (netByte === 42 || trimmed.startsWith('8')) {
+      addressType = 'SUBADDRESS';
+    } else if (isIntegrated) {
+      addressType = 'INTEGRATED';
+    }
+
+    return {
+      valid: true,
+      addressType,
+    };
+  } catch (err) {
     return {
       valid: false,
-      error: 'Address contains invalid Base58 characters (0, O, I, l are forbidden).',
+      error:
+        err instanceof Error
+          ? err.message
+          : 'Invalid Monero Base58 character encoding.',
     };
   }
-  return {
-    valid: true,
-    addressType:
-      trimmed.startsWith('8')
-        ? 'SUBADDRESS'
-        : trimmed.length === 106
-          ? 'INTEGRATED'
-          : 'STANDARD',
-  };
 }
 
 // ============================================================================

@@ -139,12 +139,12 @@ export const aigiVerdictQuerySchema = z.object({
 });
 
 export const aigiVerdictBodySchema = z.object({
-  scan: z.record(z.string(), z.unknown()).optional(),
   targetWallet: z.string().trim().optional(),
   merchantWallet: z.string().trim().optional(),
   maxHops: hopDepthSchema.optional(),
   policy: firewallPolicySchema.partial().optional(),
   includeGemini: strictBooleanSchema.default(false),
+  scan: z.record(z.string(), z.unknown()).optional(),
 });
 
 // 6. /api/events schemas

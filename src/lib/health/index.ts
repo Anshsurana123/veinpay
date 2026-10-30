@@ -81,7 +81,21 @@ export async function checkIntegrationsHealth(
   };
   if (tgHost && tgToken && !skipPing) {
     try {
-      const pingUrl = `${tgHost.replace(/\/+$/, '')}:14240/restpp/echo`;
+      const normalizedHost = tgHost.startsWith('http')
+        ? tgHost.replace(/\/+$/, '')
+        : `https://${tgHost}`;
+      let pingUrl: string;
+      try {
+        const u = new URL(normalizedHost);
+        if (!u.port) {
+          u.port = '14240';
+        }
+        u.pathname = '/restpp/echo';
+        pingUrl = u.toString();
+      } catch {
+        pingUrl = `${normalizedHost}/restpp/echo`;
+      }
+
       const res = await fetch(pingUrl, {
         signal: AbortSignal.timeout(1500),
       });

@@ -337,7 +337,7 @@ describe('Circle CCTP V2 Testnet Cross-Chain Routing & State Machine (Issue 1 / 
     });
     expect(sameChainQuote.success).toBe(true);
     expect(sameChainQuote.source).toBe('SAME_CHAIN_DIRECT');
-    expect(sameChainQuote.result.routes[0].txData.object.chainId).toBe(
+    expect(sameChainQuote.result.routes[0].txData?.object.chainId).toBe(
       sameChainQuote.result.destinationChainId
     );
 

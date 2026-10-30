@@ -78,10 +78,13 @@ USE GRAPH VeilPayGraph;
 // ----------------------------------------------------------------------------
 
 CREATE OR REPLACE DISTRIBUTED QUERY veilpay_firewall_check(
-  VERTEX<Wallet> target_wallet,
-  VERTEX<Wallet> merchant_wallet,
+  VERTEX target_wallet,
+  VERTEX merchant_wallet,
   INT max_hops = 3,
-  INT sybil_threshold = 10
+  INT sybil_threshold = 10,
+  BOOL clean_link_enabled = true,
+  BOOL unbundle_enabled = true,
+  BOOL firewall_enabled = true
 ) FOR GRAPH VeilPayGraph SYNTAX v2 {
 
   // --- Vertex-Attached & Global Accumulators ---
@@ -137,13 +140,8 @@ CREATE OR REPLACE DISTRIBUTED QUERY veilpay_firewall_check(
                        @@cyclic_loop_detected += true,
                        @@evidence_edges += e
                      END,
-                     // Cyclic wash-ring check (Case 2: A -> B -> C -> A)
-                     IF u.@visited == true AND u != v THEN
-                       @@cyclic_loop_detected += true,
-                       @@evidence_edges += e
-                     END,
                      // CleanLink Threat Detection (Drainers, Sanctions, Exploits)
-                     IF u.type == "ThreatEntity" OR u.is_flagged_threat == true THEN
+                     IF u.type == "ThreatEntity" OR (u.type == "Wallet" AND u.is_flagged_threat == true) THEN
                        u.@is_tainted += true,
                        @@taint_hits += 1,
                        @@min_taint_hop += current_hop,
@@ -166,14 +164,22 @@ CREATE OR REPLACE DISTRIBUTED QUERY veilpay_firewall_check(
     Frontier = NextFrontier;
   END;
 
+  // Check for return edges forming wash cycles (Ancestor -> Target or Descendant)
+  Ancestors = {@@visited_vertices};
+  CycleCheck = SELECT s
+               FROM Ancestors:s -(TRANSFERRED_TO:e)- Frontier:t
+               WHERE s != t AND t == target_wallet
+               ACCUM
+                 @@cyclic_loop_detected += true,
+                 @@evidence_edges += e;
+
   // ==========================================================================
   // MODULE 2: Unbundle Shared Root-Funder & Sybil Fan-Out Collapse (Case 3)
   // ==========================================================================
-  Ancestors = {@@visited_vertices};
   SybilRoots = SELECT r
                FROM Ancestors:r -(TRANSFERRED_TO:e)- Wallet:child
                WHERE r != target_wallet
-                 AND r.risk_tag != "CLEAN_INSTITUTIONAL"
+                 AND (r.type != "Wallet" OR r.risk_tag != "CLEAN_INSTITUTIONAL")
                ACCUM
                  r.@funded_children += child
                POST-ACCUM (r)
@@ -201,15 +207,17 @@ CREATE OR REPLACE DISTRIBUTED QUERY veilpay_firewall_check(
                       @@prior_merchant_transfers += 1;
 
   // ==========================================================================
-  // DETERMINISTIC VERDICT RESOLUTION
+  // DETERMINISTIC VERDICT RESOLUTION WITH POLICY TOGGLES
   // ==========================================================================
-  IF @@taint_hits > 0 THEN
+  IF firewall_enabled == false THEN
+    verdict = "ADVISORY_BYPASSED";
+  ELSE IF clean_link_enabled == true AND @@taint_hits > 0 THEN
     verdict = "INTERCEPTED_TAINT";
   ELSE IF @@dust_out_degree >= 50 AND @@prior_merchant_transfers == 0 THEN
     verdict = "INTERCEPTED_POISONING";
-  ELSE IF @@sybil_cluster_size >= sybil_threshold THEN
+  ELSE IF unbundle_enabled == true AND @@sybil_cluster_size >= sybil_threshold THEN
     verdict = "INTERCEPTED_SYBIL";
-  ELSE IF @@sybil_cluster_size >= 3 OR @@cyclic_loop_detected == true THEN
+  ELSE IF (unbundle_enabled == true AND @@sybil_cluster_size >= 3) OR @@cyclic_loop_detected == true THEN
     verdict = "WARNING_SYBIL";
   ELSE
     verdict = "VERIFIED_CLEAN";

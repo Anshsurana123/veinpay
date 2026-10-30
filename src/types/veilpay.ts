@@ -407,7 +407,7 @@ export interface NormalizedSocketRoute {
     tokenAddress: string;
     userAddress: string;
   } | null;
-  txData: {
+  txData?: {
     kind: string;
     object: {
       chainId: number;
@@ -415,7 +415,7 @@ export interface NormalizedSocketRoute {
       data: string;
       value: string;
     };
-  };
+  } | null;
   gasFee: {
     estimatedFee: string;
     feeInUsd: number;

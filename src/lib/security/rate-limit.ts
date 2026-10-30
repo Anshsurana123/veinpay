@@ -24,16 +24,37 @@ export function clearRateLimitsForTesting(): void {
 }
 
 export function getClientIp(request: Request | NextRequest): string {
+  // 1. Direct NextRequest.ip (provided reliably by Next.js / Vercel Edge Runtime)
+  if ('ip' in request && typeof (request as { ip?: string }).ip === 'string') {
+    const directIp = (request as { ip?: string }).ip?.trim();
+    if (directIp) return directIp;
+  }
+
+  // 2. Vercel Edge Forwarded IP
+  const vercelIp = request.headers.get('x-vercel-forwarded-for');
+  if (vercelIp?.trim()) {
+    const first = vercelIp.split(',')[0].trim();
+    if (first) return first;
+  }
+
+  // 3. Cloudflare Connecting IP
+  const cfIp = request.headers.get('cf-connecting-ip');
+  if (cfIp?.trim()) return cfIp.trim();
+
+  // 4. True-Client-IP (Cloudflare Enterprise / Akamai)
+  const trueClientIp = request.headers.get('true-client-ip');
+  if (trueClientIp?.trim()) return trueClientIp.trim();
+
+  // 5. Standard X-Real-IP
+  const realIp = request.headers.get('x-real-ip');
+  if (realIp?.trim()) return realIp.trim();
+
+  // 6. X-Forwarded-For (take the client-most address)
   const forwarded = request.headers.get('x-forwarded-for');
   if (forwarded) {
     const first = forwarded.split(',')[0].trim();
     if (first) return first;
   }
-  const realIp = request.headers.get('x-real-ip');
-  if (realIp?.trim()) return realIp.trim();
-
-  const cfIp = request.headers.get('cf-connecting-ip');
-  if (cfIp?.trim()) return cfIp.trim();
 
   return '127.0.0.1';
 }

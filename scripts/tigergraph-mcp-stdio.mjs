@@ -70,6 +70,34 @@ const TIGERGRAPH_MCP_TOOLS = [
     },
   },
   {
+    name: 'graph__get_nodes',
+    description: 'Lists vertices in the graph, optionally filtered by vertex type.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        graph_name: { type: 'string', description: 'The graph name.' },
+        vertex_type: {
+          type: 'string',
+          enum: ['Wallet', 'Merchant', 'ThreatEntity', 'All'],
+          description: 'Vertex type to filter by.',
+        },
+        limit: { type: 'number', description: 'Maximum number of nodes to return (default: 50).' },
+      },
+    },
+  },
+  {
+    name: 'graph__degree',
+    description: 'Computes in-degree, out-degree, and total degree of a node.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        graph_name: { type: 'string', description: 'The graph name.' },
+        node_id: { type: 'string', description: 'The vertex address.' },
+      },
+      required: ['node_id'],
+    },
+  },
+  {
     name: 'graph__number_of_nodes',
     description: 'Returns total count of vertices in the graph.',
     inputSchema: {
@@ -93,12 +121,32 @@ const TIGERGRAPH_MCP_TOOLS = [
 
 async function callEndpoint(tool, args) {
   const host = process.env.VEILPAY_API_URL || 'http://localhost:3000';
-  const res = await fetch(`${host}/api/mcp/tigergraph`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ tool, args }),
-  });
-  return res.json();
+  try {
+    const res = await fetch(`${host}/api/mcp/tigergraph`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tool, args }),
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!res.ok) {
+      const errText = await res.text();
+      return {
+        isError: true,
+        content: [{ type: 'text', text: `HTTP ${res.status}: ${errText}` }],
+      };
+    }
+    return await res.json();
+  } catch (err) {
+    return {
+      isError: true,
+      content: [
+        {
+          type: 'text',
+          text: `Failed to connect to VeilPay MCP endpoint at ${host}: ${err.message}`,
+        },
+      ],
+    };
+  }
 }
 
 const rl = readline.createInterface({
@@ -175,5 +223,19 @@ rl.on('line', async (line) => {
     }
   } catch (err) {
     process.stderr.write(`Error processing line: ${err.message}\n`);
+    try {
+      const parsed = JSON.parse(line.trim());
+      if (parsed.id !== undefined && parsed.id !== null) {
+        process.stdout.write(
+          JSON.stringify({
+            jsonrpc: '2.0',
+            id: parsed.id,
+            error: { code: -32603, message: err.message },
+          }) + '\n'
+        );
+      }
+    } catch {
+      // Input was not valid JSON
+    }
   }
 });

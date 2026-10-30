@@ -311,4 +311,56 @@ describe('EIP-712 Receiver-Signed Payment Links (Issue 4)', () => {
     expect(withFakeSigRes.valid).toBe(false);
     expect(withFakeSigRes.reason).toContain('Unsigned legacy');
   });
+
+  it('Prevents unauthorized revocation of unstored or stateless links without author proof', async () => {
+    // Legitimate link created by RECEIVER_ACCOUNT
+    const link = await createSignedTestLink({ handle: 'legit-unindexed' });
+    const linkId = link.payload.linkId;
+
+    // Attacker tries to revoke linkId by signing a Revoke message with ATTACKER_ACCOUNT
+    const attackerRevokeMsg = {
+      linkId,
+      signer: ATTACKER_ACCOUNT.address,
+      issuedAt: new Date().toISOString(),
+    };
+    const attackerSig = await ATTACKER_ACCOUNT.signTypedData(
+      buildRevokeLinkTypedData(attackerRevokeMsg)
+    );
+
+    // Should FAIL because link is not in memory and attacker provided no proof of authorship
+    const unprovenRes = await verifyRevokeLinkSignature({
+      revokeMessage: attackerRevokeMsg,
+      signature: attackerSig,
+    });
+    expect(unprovenRes.valid).toBe(false);
+    expect(unprovenRes.reason).toContain('not in server memory registry');
+
+    // If attacker attempts to supply the legit link's `c` and `sig` but signs the revoke message with attacker key:
+    const mismatchRes = await verifyRevokeLinkSignature({
+      revokeMessage: attackerRevokeMsg,
+      signature: attackerSig,
+      originalLinkPayload: link.c,
+      originalLinkSignature: link.sig,
+    });
+    expect(mismatchRes.valid).toBe(false);
+    expect(mismatchRes.reason).toContain('does not match original link signer');
+
+    // Author signs revocation and provides original link proof
+    const authorRevokeMsg = {
+      linkId,
+      signer: RECEIVER_ACCOUNT.address,
+      issuedAt: new Date().toISOString(),
+    };
+    const authorSig = await RECEIVER_ACCOUNT.signTypedData(
+      buildRevokeLinkTypedData(authorRevokeMsg)
+    );
+
+    const authorRes = await verifyRevokeLinkSignature({
+      revokeMessage: authorRevokeMsg,
+      signature: authorSig,
+      originalLinkPayload: link.c,
+      originalLinkSignature: link.sig,
+    });
+    expect(authorRes.valid).toBe(true);
+  });
 });

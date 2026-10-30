@@ -4,7 +4,13 @@ export * from './store';
 export * from './verify';
 export * from './read-activity';
 
-import type { FirewallPolicyConfig, LinkTrustLevel } from '@/types/veilpay';
+import type {
+  FirewallPolicyConfig,
+  LinkTrustLevel,
+  PaymentAssetSymbol,
+  SupportedEvmChainId,
+  VaultSettlementMode,
+} from '@/types/veilpay';
 import { getVerifiedLinkPolicy } from '@/lib/security/attestation';
 import { encodeSignedLinkPayloadToBase64Url } from './canonical';
 import { getStoredLinkRecord, isLinkRevoked, storeSignedLinkRecord } from './store';
@@ -20,6 +26,11 @@ export interface ResolvedLinkAuthority {
   policy: FirewallPolicyConfig;
   trustLevel?: LinkTrustLevel;
   signer?: `0x${string}`;
+  destinationChainId?: SupportedEvmChainId;
+  amount?: string;
+  openAmount?: boolean;
+  asset?: PaymentAssetSymbol;
+  settlementMode?: VaultSettlementMode;
 }
 
 /**
@@ -71,6 +82,11 @@ export async function resolveVerifiedLinkAuthority(params: {
       policy: verification.payload.policy,
       trustLevel: verification.trustLevel,
       signer: verification.payload.signer,
+      destinationChainId: verification.payload.destinationChainId,
+      amount: verification.payload.amount,
+      openAmount: verification.payload.openAmount,
+      asset: verification.payload.asset,
+      settlementMode: verification.payload.settlementMode,
     };
   }
 
@@ -110,6 +126,11 @@ export async function resolveVerifiedLinkAuthority(params: {
       policy: stored.payload.policy,
       trustLevel: stored.trustLevel,
       signer: stored.payload.signer,
+      destinationChainId: stored.payload.destinationChainId,
+      amount: stored.payload.amount,
+      openAmount: stored.payload.openAmount,
+      asset: stored.payload.asset,
+      settlementMode: stored.payload.settlementMode,
     };
   }
 

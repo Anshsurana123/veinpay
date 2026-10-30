@@ -10,6 +10,14 @@ export const DEFAULT_RECEIPT_KEY_ID = 'veilpay-ed25519-v1';
 let activeSigningKey: crypto.KeyObject | null = null;
 let activePublicKey: crypto.KeyObject | null = null;
 
+export function assertReceiptSigningKeyConfigured(): void {
+  if (process.env.NODE_ENV === 'production' && !process.env.RECEIPT_SIGNING_KEY?.trim()) {
+    throw new Error(
+      'FATAL: RECEIPT_SIGNING_KEY environment variable is required in production. Refusing to run with insecure default dev key.'
+    );
+  }
+}
+
 function resolveSigningKeys(): {
   privateKey: crypto.KeyObject;
   publicKey: crypto.KeyObject;
@@ -43,6 +51,11 @@ function resolveSigningKeys(): {
       });
     }
   } else {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error(
+        'FATAL: RECEIPT_SIGNING_KEY environment variable is required in production. Refusing to run with insecure default dev key.'
+      );
+    }
     // Deterministic dev/test seed
     const devSeed = crypto
       .createHash('sha256')

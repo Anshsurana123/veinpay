@@ -16,9 +16,23 @@ export interface StoredPaymentLinkRecord {
   createdAt: string;
 }
 
+const MAX_STORED_LINKS = 5000;
 const linkRecordById = new Map<string, StoredPaymentLinkRecord>();
 const linkRecordByHandle = new Map<string, StoredPaymentLinkRecord>();
 const revokedLinkSet = new Map<string, { revokedAt: string; signer: string }>();
+
+function pruneStoreIfNeeded(): void {
+  if (linkRecordById.size > MAX_STORED_LINKS) {
+    const oldestKey = linkRecordById.keys().next().value;
+    if (oldestKey) {
+      const rec = linkRecordById.get(oldestKey);
+      linkRecordById.delete(oldestKey);
+      if (rec) {
+        linkRecordByHandle.delete(rec.handle.toLowerCase());
+      }
+    }
+  }
+}
 
 export function storeSignedLinkRecord(params: {
   payload: SignedPaymentLinkPayload;
@@ -30,6 +44,30 @@ export function storeSignedLinkRecord(params: {
 } {
   const key = params.payload.linkId.trim().toLowerCase();
   const handleKey = params.payload.handle.trim().toLowerCase();
+  const incomingSigner = params.payload.signer.trim().toLowerCase();
+
+  // Prevent linkId and handle hijacking: First-write-wins per signer
+  const existingById = linkRecordById.get(key);
+  if (
+    existingById &&
+    existingById.payload.signer.trim().toLowerCase() !== incomingSigner
+  ) {
+    throw new Error(
+      `LINK_ID_COLLISION_DIFFERENT_SIGNER: Link ID "${key}" is already registered by a different signer wallet (${existingById.payload.signer}).`
+    );
+  }
+
+  const existingByHandle = linkRecordByHandle.get(handleKey);
+  if (
+    existingByHandle &&
+    existingByHandle.payload.signer.trim().toLowerCase() !== incomingSigner
+  ) {
+    throw new Error(
+      `HANDLE_COLLISION_DIFFERENT_SIGNER: Handle "${handleKey}" is already owned by a different signer wallet (${existingByHandle.payload.signer}).`
+    );
+  }
+
+  pruneStoreIfNeeded();
 
   const existingRevocation = revokedLinkSet.get(key);
 

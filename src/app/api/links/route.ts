@@ -6,6 +6,11 @@ import {
   storeSignedLinkRecord,
   verifySignedPaymentLink,
 } from '@/lib/links';
+import {
+  buildRateLimitExceededResponse,
+  checkRateLimit,
+  getClientIp,
+} from '@/lib/security/rate-limit';
 import type { SignedPaymentLinkPayload } from '@/types/veilpay';
 
 export async function GET(request: NextRequest) {
@@ -72,6 +77,15 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const ip = getClientIp(request);
+  const rateLimit = await checkRateLimit('create-link', ip, {
+    limit: 30,
+    windowSeconds: 60,
+  });
+  if (!rateLimit.allowed) {
+    return buildRateLimitExceededResponse(rateLimit);
+  }
+
   try {
     const body = (await request.json()) as {
       payload?: SignedPaymentLinkPayload;
@@ -137,16 +151,19 @@ export async function POST(request: NextRequest) {
       { status: 201 }
     );
   } catch (err) {
+    const msg = err instanceof Error ? err.message : '';
+    const isCollision =
+      msg.includes('LINK_ID_COLLISION') || msg.includes('HANDLE_COLLISION');
     return NextResponse.json(
       {
         ok: false,
-        errorCode: 'MALFORMED_LINK_PAYLOAD',
+        errorCode: isCollision ? 'LINK_COLLISION' : 'MALFORMED_LINK_PAYLOAD',
         reason:
           err instanceof Error
             ? err.message
             : 'Failed to create signed payment link.',
       },
-      { status: 400 }
+      { status: isCollision ? 409 : 400 }
     );
   }
 }

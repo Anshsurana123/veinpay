@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual } from 'crypto';
+import { createHmac, randomBytes, timingSafeEqual } from 'crypto';
 import type { FirewallPolicyConfig, VerdictStatus } from '@/types/veilpay';
 import { AUTHORITATIVE_DEFAULT_POLICY } from '@/lib/graph/full-scan';
 
@@ -16,13 +16,32 @@ export interface ScanAttestationPayload {
 
 const DEFAULT_ATTESTATION_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
-function getAttestationSecret(): string {
-  return (
+export function assertScanAttestationSecretConfigured(): void {
+  const secret =
     process.env.VEILPAY_ATTESTATION_SECRET?.trim() ||
     process.env.VEILPAY_SESSION_SECRET?.trim() ||
-    process.env.RECEIPT_SIGNING_KEY?.trim() ||
-    'veilpay-dev-ephemeral-attestation-hmac-secret-2026'
-  );
+    process.env.RECEIPT_SIGNING_KEY?.trim();
+  if (!secret && process.env.NODE_ENV === 'production') {
+    throw new Error(
+      'FATAL: VEILPAY_ATTESTATION_SECRET (or VEILPAY_SESSION_SECRET / RECEIPT_SIGNING_KEY) is required in production.'
+    );
+  }
+}
+
+function getAttestationSecret(): string {
+  const secret =
+    process.env.VEILPAY_ATTESTATION_SECRET?.trim() ||
+    process.env.VEILPAY_SESSION_SECRET?.trim() ||
+    process.env.RECEIPT_SIGNING_KEY?.trim();
+  if (!secret) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error(
+        'FATAL: VEILPAY_ATTESTATION_SECRET (or VEILPAY_SESSION_SECRET / RECEIPT_SIGNING_KEY) is required in production.'
+      );
+    }
+    return 'veilpay-dev-ephemeral-attestation-hmac-secret-2026';
+  }
+  return secret;
 }
 
 export function computeCanonicalPolicyHash(policy: FirewallPolicyConfig): string {
@@ -47,7 +66,8 @@ export function isVerdictAllowedForQuote(
   return (
     verdict === 'VERIFIED_CLEAN' ||
     verdict === 'WARNING_SYBIL' ||
-    verdict === 'ADVISORY_BYPASSED'
+    verdict === 'ADVISORY_BYPASSED' ||
+    verdict === 'INCONCLUSIVE'
   );
 }
 

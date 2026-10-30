@@ -772,7 +772,10 @@ export const useVeilPayStore = create<VeilPayStoreState>((set, get) => ({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          scan: activeScan,
+          targetWallet: activeScan.targetWallet,
+          merchantWallet: activeScan.merchantWallet,
+          maxHops: activeScan.maxHopsQueried,
+          policy: activeScan.policyApplied,
           includeGemini: true,
         }),
       });

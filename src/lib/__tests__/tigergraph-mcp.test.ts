@@ -1,8 +1,11 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
   TIGERGRAPH_MCP_TOOLS,
   executeTigerGraphMcpTool,
 } from '@/lib/graph/tigergraph-mcp';
+import { POST as postMcp } from '@/app/api/mcp/tigergraph/route';
+import { tryExecuteLiveTigerGraphQuery } from '@/lib/graph/tigergraph-client';
+import { NextRequest } from 'next/server';
 
 describe('TigerGraph MCP Implementation Suite', () => {
   it('exposes standard TigerGraph MCP tool definitions', () => {
@@ -113,5 +116,87 @@ describe('TigerGraph MCP Implementation Suite', () => {
     const res = await executeTigerGraphMcpTool('graph__unknown_tool_xyz');
     expect(res.isError).toBe(true);
     expect(res.content[0].text).toContain("Unknown TigerGraph MCP tool");
+  });
+
+  it('handles JSON-RPC initialize method on /api/mcp/tigergraph', async () => {
+    const req = new NextRequest('http://localhost:3000/api/mcp/tigergraph', {
+      method: 'POST',
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 'init-1',
+        method: 'initialize',
+        params: { protocolVersion: '2024-11-05' },
+      }),
+    });
+    const res = await postMcp(req);
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.jsonrpc).toBe('2.0');
+    expect(json.id).toBe('init-1');
+    expect(json.result.serverInfo.name).toBe('tigergraph-mcp-veilpay');
+    expect(json.result.capabilities.tools).toBeDefined();
+  });
+
+  it('tryExecuteLiveTigerGraphQuery maps live GSQL envelope verdict and metrics correctly', async () => {
+    process.env.TIGERGRAPH_HOST = 'http://test-tigergraph-cluster.local:9000';
+    process.env.TIGERGRAPH_TOKEN = 'test-token-xyz';
+
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        version: { edition: 'enterprise', api: 'v2', schema: 1 },
+        error: false,
+        message: '',
+        results: [
+          {
+            verdict: 'INTERCEPTED_TAINT',
+            target_wallet: '0x1111111111111111111111111111111111111111',
+            merchant_wallet: '0x71C84102070853531b783c5D2D563456F9960244',
+            max_hops_queried: 3,
+            min_taint_hop: 1,
+            taint_hits: 2,
+            sybil_cluster_size: 1,
+            sybil_root_funders: [],
+            cyclic_loop_detected: false,
+            self_transfer_detected: false,
+            dust_out_degree: 0,
+            nodes_scanned: 15,
+            edges_traversed: 22,
+            '@@evidence_edges': [],
+          },
+        ],
+      }),
+    });
+
+    const origFetch = global.fetch;
+    global.fetch = mockFetch as unknown as typeof fetch;
+
+    try {
+      const res = await tryExecuteLiveTigerGraphQuery({
+        targetWallet: '0x1111111111111111111111111111111111111111',
+        merchantWallet: '0x71C84102070853531b783c5D2D563456F9960244',
+        policy: {
+          firewallEnabled: true,
+          maxHops: 3,
+          cleanLinkEnabled: true,
+          unbundleEnabled: true,
+          socketAutoBridgeEnabled: true,
+          sybilBlockThreshold: 10,
+        },
+      });
+
+      expect(res).not.toBeNull();
+      expect(res?.verdict).toBe('INTERCEPTED_TAINT');
+      expect(res?.taintHits).toBe(2);
+      expect(res?.minTaintHop).toBe(1);
+      expect(res?.nodesScanned).toBe(15);
+      expect(res?.edgesTraversed).toBe(22);
+      expect(res?.executionSource).toBe('TIGERGRAPH_RESTPP_LIVE');
+      expect(res?.socketUnlocked).toBe(false);
+    } finally {
+      global.fetch = origFetch;
+      delete process.env.TIGERGRAPH_HOST;
+      delete process.env.TIGERGRAPH_TOKEN;
+    }
   });
 });

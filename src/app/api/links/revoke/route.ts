@@ -13,12 +13,16 @@ export async function POST(request: NextRequest) {
       signer?: string;
       issuedAt?: string;
       signature?: string;
+      c?: string;
+      sig?: string;
     };
 
     const linkId = (body.linkId ?? '').trim().toLowerCase();
     const signer = (body.signer ?? '').trim();
     const issuedAt = (body.issuedAt ?? '').trim();
     const signature = (body.signature ?? '').trim();
+    const originalLinkPayload = (body.c ?? '').trim() || null;
+    const originalLinkSignature = (body.sig ?? '').trim() || null;
 
     if (!linkId || !signer || !issuedAt || !signature.startsWith('0x')) {
       return NextResponse.json(
@@ -40,6 +44,8 @@ export async function POST(request: NextRequest) {
     const check = await verifyRevokeLinkSignature({
       revokeMessage,
       signature: signature as `0x${string}`,
+      originalLinkPayload,
+      originalLinkSignature,
     });
 
     if (!check.valid) {

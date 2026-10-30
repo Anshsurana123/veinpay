@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import type { VaultSettlementMode } from '@/types/veilpay';
+import type { TrustedContactRecord } from '@/lib/graph/seed-topologies';
 import { evaluateOutboundPoisonRisk } from '@/lib/graph/poison-guard';
 
 export async function GET(request: NextRequest) {
@@ -10,9 +11,20 @@ export async function GET(request: NextRequest) {
     '0x71C894a1B2c3D4e5F6A7b8C9d0e1F2a30000489B';
   const expectedMode = (sp.get('expectedMode') || 'EVM_SOCKET') as VaultSettlementMode;
 
+  let trustedContacts: TrustedContactRecord[] | undefined;
+  const contactsParam = sp.get('contacts') || sp.get('trustedContacts');
+  if (contactsParam) {
+    try {
+      trustedContacts = JSON.parse(contactsParam) as TrustedContactRecord[];
+    } catch {
+      // Ignore malformed JSON query param
+    }
+  }
+
   const result = evaluateOutboundPoisonRisk({
     candidateInput,
     expectedMode,
+    trustedContacts,
   });
 
   return NextResponse.json({
@@ -28,6 +40,7 @@ export async function POST(request: NextRequest) {
       candidateInput?: string;
       address?: string;
       expectedMode?: VaultSettlementMode;
+      trustedContacts?: TrustedContactRecord[];
     };
     const candidateInput =
       body.candidateInput ??
@@ -38,6 +51,7 @@ export async function POST(request: NextRequest) {
     const result = evaluateOutboundPoisonRisk({
       candidateInput,
       expectedMode,
+      trustedContacts: body.trustedContacts,
     });
 
     return NextResponse.json({

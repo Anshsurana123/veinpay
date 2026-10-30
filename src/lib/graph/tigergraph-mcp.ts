@@ -182,7 +182,11 @@ export async function executeTigerGraphMcpTool(
   const dataset: SeedGraphDataset = buildSeededGraphDataset();
   const graphName = typeof args.graph_name === 'string' ? args.graph_name : 'VeilPayGraph';
 
-  switch (name) {
+  const normalizedName = name
+    .replace(/^tigergraph__/, 'graph__')
+    .replace('graph__run_installed_query', 'graph__run_query');
+
+  switch (normalizedName) {
     case 'graph__run_query': {
       const queryName = String(args.query_name || '');
       const params = (args.params || {}) as Record<string, unknown>;

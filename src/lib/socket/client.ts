@@ -218,34 +218,11 @@ export function buildDeterministicFallbackQuote(
     inputValueInUsd: inputUsd,
     estimatedTime: 3,
     slippage: 1,
-    routeTags: ['FASTEST', 'MAX_OUTPUT', 'SUGGESTED', 'FALLBACK_DETERMINISTIC'],
-    bridgeProtocolName: 'rfq-vault-executor',
-    bridgeDisplayName: 'Socket Intents (Bungee RFQ)',
+    routeTags: ['ESTIMATE_ONLY', 'FALLBACK_DETERMINISTIC'],
+    bridgeProtocolName: 'estimate-fallback',
+    bridgeDisplayName: 'Socket Intents (Estimate Only)',
     bridgeIcon: 'https://media.socket.tech/bridges/socket-icon.png',
-    approval:
-      inMeta.address.toLowerCase() === NATIVE_TOKEN_ADDRESS.toLowerCase()
-        ? null
-        : {
-            spenderAddress: '0x50c4E75a512F2A14A7b304787Adf79C4531A5909',
-            amount: params.inputAmount,
-            tokenAddress: inMeta.address,
-            userAddress: params.userAddress,
-          },
-    txData: {
-      kind: 'evm_tx',
-      object: {
-        chainId: params.originChainId,
-        to: '0x50c4E75a512F2A14A7b304787Adf79C4531A5909',
-        data: encodeErc20TransferCalldata(
-          params.receiverAddress,
-          params.inputAmount
-        ),
-        value:
-          inMeta.address.toLowerCase() === NATIVE_TOKEN_ADDRESS.toLowerCase()
-            ? params.inputAmount
-            : '0',
-      },
-    },
+    approval: null,
     gasFee: {
       estimatedFee: '10028000000000',
       feeInUsd: 0.003,
@@ -254,8 +231,8 @@ export function buildDeterministicFallbackQuote(
   };
 
   return {
-    success: true,
-    statusCode: 200,
+    success: false,
+    statusCode: 503,
     source: 'FALLBACK_DETERMINISTIC',
     fallbackReason,
     executionTimeMs: elapsedMs,
@@ -549,6 +526,28 @@ export async function fetchSocketCrossChainQuote(
         'Socket V3 returned 0 available routes for pair',
         elapsedMs
       );
+    }
+
+    // Verify Socket didn't divert the destination receiver vault address
+    if (
+      payload.result?.receiverAddress &&
+      payload.result.receiverAddress.toLowerCase() !==
+        params.receiverAddress.toLowerCase()
+    ) {
+      return {
+        success: false,
+        statusCode: 502,
+        source: 'SOCKET_V3_LIVE',
+        fallbackReason: `Security Intercept: Socket API returned receiverAddress (${payload.result.receiverAddress}) which diverges from authoritative verified receiver vault (${params.receiverAddress}).`,
+        executionTimeMs: elapsedMs,
+        result: {
+          originChainId: params.originChainId,
+          destinationChainId: params.destinationChainId,
+          userAddress: params.userAddress,
+          receiverAddress: params.receiverAddress,
+          routes: [],
+        },
+      };
     }
 
     const inDecimals = payload.result?.input?.token?.decimals ?? inMeta.decimals;

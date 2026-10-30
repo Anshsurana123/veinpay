@@ -25,7 +25,11 @@ export async function GET(request: NextRequest) {
 
   const store = getEventStore();
 
-  if (linkId) {
+  if (!linkId) {
+    const signer =
+      request.headers.get('x-signer-address') ||
+      request.headers.get('x-auth-signer') ||
+      sp.get('signer');
     const sig =
       request.headers.get('x-read-auth-signature') ||
       request.headers.get('x-auth-signature') ||
@@ -38,58 +42,119 @@ export async function GET(request: NextRequest) {
       request.headers.get('x-read-auth-expires-at') ||
       request.headers.get('x-auth-expires-at') ||
       sp.get('expiresAt');
-    const c = sp.get('c');
 
-    const authority = await resolveVerifiedLinkAuthority({ linkId, c });
-    const expectedSigner = authority.signer;
-
-    if (!expectedSigner) {
+    if (!signer || !sig || !nonce || !expiresAt) {
       return NextResponse.json(
         {
           ok: false,
-          errorCode: 'UNAUTHORIZED_RECEIVER_ACCESS',
-          reason: `No registered or verified signer found for payment link "${linkId}".`,
-        },
-        { status: 401 }
-      );
-    }
-
-    if (!sig || !nonce || !expiresAt) {
-      return NextResponse.json(
-        {
-          ok: false,
-          errorCode: 'UNAUTHORIZED_RECEIVER_ACCESS',
+          errorCode: 'UNAUTHORIZED_ACCESS',
           reason:
-            'Receiver wallet authentication required: sign an EIP-712 ReadActivity challenge with the link signer wallet.',
+            'Authentication required to read event logs: specify linkId with its ReadActivity signature, or authenticate the receiver signer wallet to read events.',
         },
         { status: 401 }
       );
     }
 
     const authResult = await verifyReadActivitySignature({
-      linkId,
+      linkId: 'ALL',
       nonce,
       expiresAt,
       signature: sig as `0x${string}`,
-      expectedSigner,
+      expectedSigner: signer,
     });
 
     if (!authResult.valid) {
       return NextResponse.json(
         {
           ok: false,
-          errorCode: 'UNAUTHORIZED_RECEIVER_ACCESS',
-          reason:
-            authResult.reason ??
-            'Invalid EIP-712 ReadActivity signature from link signer.',
+          errorCode: 'UNAUTHORIZED_ACCESS',
+          reason: authResult.reason ?? 'Invalid ReadActivity signature for signer.',
         },
         { status: 401 }
       );
     }
+
+    const allEvents = await store.getEvents({});
+    const signerLower = signer.toLowerCase();
+    const filteredEvents = allEvents.filter(
+      (e) =>
+        e.receiverVault?.toLowerCase() === signerLower ||
+        e.payerAddress?.toLowerCase() === signerLower
+    );
+    const metrics = await store.getThreatMetrics();
+
+    return NextResponse.json({
+      ok: true,
+      isPersistent: store.isPersistent,
+      metrics,
+      events: filteredEvents,
+    });
   }
 
-  const events = await store.getEvents({ linkId: linkId ?? undefined });
-  const metrics = await store.getThreatMetrics(linkId ?? undefined);
+  // When linkId is provided, authenticate against the link signer
+  const sig =
+    request.headers.get('x-read-auth-signature') ||
+    request.headers.get('x-auth-signature') ||
+    sp.get('sig');
+  const nonce =
+    request.headers.get('x-read-auth-nonce') ||
+    request.headers.get('x-auth-nonce') ||
+    sp.get('nonce');
+  const expiresAt =
+    request.headers.get('x-read-auth-expires-at') ||
+    request.headers.get('x-auth-expires-at') ||
+    sp.get('expiresAt');
+  const c = sp.get('c');
+
+  const authority = await resolveVerifiedLinkAuthority({ linkId, c });
+  const expectedSigner = authority.signer;
+
+  if (!expectedSigner) {
+    return NextResponse.json(
+      {
+        ok: false,
+        errorCode: 'UNAUTHORIZED_RECEIVER_ACCESS',
+        reason: `No registered or verified signer found for payment link "${linkId}".`,
+      },
+      { status: 401 }
+    );
+  }
+
+  if (!sig || !nonce || !expiresAt) {
+    return NextResponse.json(
+      {
+        ok: false,
+        errorCode: 'UNAUTHORIZED_RECEIVER_ACCESS',
+        reason:
+          'Receiver wallet authentication required: sign an EIP-712 ReadActivity challenge with the link signer wallet.',
+      },
+      { status: 401 }
+    );
+  }
+
+  const authResult = await verifyReadActivitySignature({
+    linkId,
+    nonce,
+    expiresAt,
+    signature: sig as `0x${string}`,
+    expectedSigner,
+  });
+
+  if (!authResult.valid) {
+    return NextResponse.json(
+      {
+        ok: false,
+        errorCode: 'UNAUTHORIZED_RECEIVER_ACCESS',
+        reason:
+          authResult.reason ??
+          'Invalid EIP-712 ReadActivity signature from link signer.',
+      },
+      { status: 401 }
+    );
+  }
+
+  const events = await store.getEvents({ linkId });
+  const metrics = await store.getThreatMetrics(linkId);
 
   return NextResponse.json({
     ok: true,

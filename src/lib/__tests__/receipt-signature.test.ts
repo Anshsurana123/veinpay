@@ -11,6 +11,7 @@ import {
   verifyReceiptSignature,
 } from '@/lib/aigi/receipt-signer';
 import { POST } from '@/app/api/aigi/verify/route';
+import { POST as postVerdict } from '@/app/api/aigi/verdict/route';
 import { GET as getWellKnownKey } from '@/app/.well-known/veilpay-receipt-key/route';
 import { NextRequest } from 'next/server';
 
@@ -130,5 +131,26 @@ describe('Issue 13: Ed25519 Signed Forensic Receipts & Verification', () => {
     const jsonTampered = await resTampered.json();
     expect(jsonTampered.valid).toBe(false);
     expect(jsonTampered.error).toBe('COMMITMENT_HASH_MISMATCH');
+  });
+
+  it('POST /api/aigi/verdict rejects client scan verdict tampering', async () => {
+    // 0x99B1c402881a77e3d90123456789aB00000FDead is a confirmed drainer (INTERCEPTED_TAINT)
+    const forgedClientScan = {
+      ...sampleScan,
+      verdict: 'VERIFIED_CLEAN', // Attacker claims drainer is VERIFIED_CLEAN
+    };
+
+    const req = new NextRequest('http://localhost:3000/api/aigi/verdict', {
+      method: 'POST',
+      body: JSON.stringify({
+        scan: forgedClientScan,
+      }),
+    });
+
+    const res = await postVerdict(req);
+    expect(res.status).toBe(400);
+    const json = await res.json();
+    expect(json.success).toBe(false);
+    expect(json.error).toBe('TAMPERED_SCAN_VERDICT');
   });
 });

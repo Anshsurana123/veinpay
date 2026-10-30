@@ -110,30 +110,69 @@ export async function POST(request: NextRequest) {
     }
     const body = validation.data;
 
-    let scanResult: FirewallScanResult;
+    const scanRecord = (body.scan || {}) as Record<string, unknown>;
+    const scanPolicy = (scanRecord.policyApplied || {}) as Record<string, unknown>;
 
-    if (
-      body.scan &&
-      typeof body.scan.verdict === 'string' &&
-      Array.isArray(body.scan.evidenceEdges)
-    ) {
-      scanResult = body.scan as unknown as FirewallScanResult;
-    } else {
-      const maxHops = (body.policy?.maxHops ?? body.maxHops ?? 3) as HopDepth;
+    const targetWallet =
+      body.targetWallet ||
+      (typeof scanRecord.targetWallet === 'string' ? scanRecord.targetWallet : '') ||
+      '0x99B1c402881a77e3d90123456789aB00000FDead';
+    const merchantWallet =
+      body.merchantWallet ||
+      (typeof scanRecord.merchantWallet === 'string' ? scanRecord.merchantWallet : '') ||
+      '';
+    const maxHops = (body.policy?.maxHops ??
+      scanPolicy.maxHops ??
+      body.maxHops ??
+      3) as HopDepth;
 
-      scanResult = runVeilPayFirewallTraversal({
-        targetWallet:
-          body.targetWallet || '0x99B1c402881a77e3d90123456789aB00000FDead',
-        merchantWallet: body.merchantWallet || '',
-        policy: {
-          firewallEnabled: body.policy?.firewallEnabled ?? true,
-          maxHops,
-          cleanLinkEnabled: body.policy?.cleanLinkEnabled ?? true,
-          unbundleEnabled: body.policy?.unbundleEnabled ?? true,
-          socketAutoBridgeEnabled: body.policy?.socketAutoBridgeEnabled ?? true,
-          sybilBlockThreshold: body.policy?.sybilBlockThreshold ?? 10,
-        },
-      });
+    const authoritativePolicy: FirewallPolicyConfig = {
+      firewallEnabled:
+        body.policy?.firewallEnabled ??
+        (typeof scanPolicy.firewallEnabled === 'boolean'
+          ? scanPolicy.firewallEnabled
+          : true),
+      maxHops,
+      cleanLinkEnabled:
+        body.policy?.cleanLinkEnabled ??
+        (typeof scanPolicy.cleanLinkEnabled === 'boolean'
+          ? scanPolicy.cleanLinkEnabled
+          : true),
+      unbundleEnabled:
+        body.policy?.unbundleEnabled ??
+        (typeof scanPolicy.unbundleEnabled === 'boolean'
+          ? scanPolicy.unbundleEnabled
+          : true),
+      socketAutoBridgeEnabled:
+        body.policy?.socketAutoBridgeEnabled ??
+        (typeof scanPolicy.socketAutoBridgeEnabled === 'boolean'
+          ? scanPolicy.socketAutoBridgeEnabled
+          : true),
+      sybilBlockThreshold:
+        body.policy?.sybilBlockThreshold ??
+        (typeof scanPolicy.sybilBlockThreshold === 'number'
+          ? scanPolicy.sybilBlockThreshold
+          : 10),
+    };
+
+    const scanResult: FirewallScanResult = runVeilPayFirewallTraversal({
+      targetWallet,
+      merchantWallet,
+      policy: authoritativePolicy,
+    });
+
+    // Guard against client-side scan verdict forgery
+    if (body.scan && typeof body.scan.verdict === 'string') {
+      if (body.scan.verdict !== scanResult.verdict) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: 'TAMPERED_SCAN_VERDICT',
+            message: `Submitted scan verdict "${body.scan.verdict}" does not match authoritative server traversal verdict "${scanResult.verdict}".`,
+          },
+          { status: 400 }
+        );
+      }
     }
 
     let receipt = generateAigiForensicReceipt(scanResult);

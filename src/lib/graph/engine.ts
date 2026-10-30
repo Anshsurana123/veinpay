@@ -40,7 +40,7 @@ const INSTITUTIONAL_WHITELIST = new Set<string>([
   '0x55fe002aeff02f77364de339a1292923a15844b8', // Circle Treasury
   '0x794a61358d6845594f94dc1db02a252b5b4814ad', // Aave V3 Pool
   '0x8315177ab297ba92a06054ce80a67ed4dbd7ed3a', // Arbitrum Bridge
-  '0x61f4b2001122334455667788990011223344b209', // Camelot DEX Router
+  '0xc873fEcbd354f5A56E00E710B90EF4201db2448d'.toLowerCase(), // Camelot DEX Router
 ]);
 
 export function resolveCanonicalWalletInput(rawAddress: string): string {

@@ -55,4 +55,16 @@ describe('Case 4: PoisonGraph Outbound Lookalike & Dust-Factory Guard', () => {
       '0x742d35Cc6634C0532925a3b844Bc454e4438f44e'
     );
   });
+
+  it('Intercepts high dust-degree address even when trusted contacts list is empty', () => {
+    // 0x71C894a1B2c3D4e5F6A7b8C9d0e1F2a30000489B has recorded dust degree = 4210
+    const res = evaluateOutboundPoisonRisk({
+      candidateInput: '0x71C894a1B2c3D4e5F6A7b8C9d0e1F2a30000489B',
+      trustedContacts: [],
+    });
+    expect(res.verdict).toBe('INTERCEPTED_POISONING');
+    expect(res.dustOutDegree).toBe(4210);
+    expect(res.matchedTrustedContact).toBeNull();
+    expect(res.summaryNarrative).toContain('high automated dusting out-degree');
+  });
 });
