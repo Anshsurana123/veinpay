@@ -16,6 +16,12 @@ import { runVeilPayFirewallTraversal } from '@/lib/graph/engine';
 import { checkGoPlusAddress } from '@/lib/security/goplus';
 import { getLiveSpotRates } from '@/lib/rates';
 import { upsertGraphToTigerGraph } from '@/lib/graph/tigergraph-client';
+import {
+  fetchEtherscanTransfers,
+  fetchAlchemyTransfers,
+  ETHERSCAN_FREE_TIER_CHAINS,
+} from '@/lib/ingest';
+import type { NormalizedTransfer, IngestCoverage } from '@/lib/ingest';
 
 export const DEFAULT_LIVE_CRAWL_SETTINGS: LiveCrawlSettings = {
   topFundersPerVertex: 5,
@@ -25,42 +31,8 @@ export const DEFAULT_LIVE_CRAWL_SETTINGS: LiveCrawlSettings = {
   maxMainnetUsdCap: Number(process.env.NEXT_PUBLIC_MAX_MAINNET_USD || 5),
 };
 
-// Etherscan V2 Free Tier supports ~90% of chains (1, 42161, 137, 59144, 5000, etc.)
-// Base (8453) and Optimism (10) require Etherscan Lite+.
-export const ETHERSCAN_FREE_TIER_CHAINS = new Set<number>([
-  1, // Ethereum Mainnet
-  42161, // Arbitrum One
-  137, // Polygon
-  59144, // Linea
-  5000, // Mantle
-  81457, // Blast
-  42220, // Celo
-  252, // Fraxtal
-  167000, // Taiko
-  146, // Sonic
-  130, // Unichain
-  80094, // Berachain
-  143, // Monad
-  11155111, // Ethereum Sepolia Testnet
-  84532, // Base Sepolia Testnet
-  421614, // Arbitrum Sepolia Testnet
-  11155420, // OP Sepolia Testnet
-  80002, // Polygon Amoy Testnet
-]);
+export { ETHERSCAN_FREE_TIER_CHAINS };
 
-interface EtherscanTxItem {
-  hash: string;
-  blockNumber: string;
-  timeStamp: string;
-  from: string;
-  to: string;
-  value: string;
-  tokenSymbol?: string;
-  tokenDecimal?: string;
-  isError?: string;
-}
-
-const txListLruCache = new Map<string, { timestamp: number; txs: EtherscanTxItem[] }>();
 const goPlusLruCache = new Map<
   string,
   {
@@ -129,155 +101,6 @@ async function checkGoPlusAddressSecurity(
   return res;
 }
 
-async function fetchEtherscanInboundTransactions(params: {
-  address: string;
-  chainId: number;
-  apiKey: string;
-}): Promise<{
-  txs: EtherscanTxItem[];
-  usedChainId: number;
-  tierFallbackNote: string | null;
-  failed?: boolean;
-  failureReason?: string;
-}> {
-  const { address, chainId, apiKey } = params;
-  const targetChainId = ETHERSCAN_FREE_TIER_CHAINS.has(chainId) ? chainId : 42161;
-  const tierFallbackNote = !ETHERSCAN_FREE_TIER_CHAINS.has(chainId)
-    ? `Chain ${chainId} (${chainId === 8453 ? 'Base' : 'Optimism'}) requires an Etherscan Paid Plan; automatically scanned cross-chain history on Arbitrum (42161) & Ethereum (1) via Etherscan V2 Free Tier.`
-    : null;
-
-  const cacheKey = `${targetChainId}:${address.toLowerCase()}`;
-  const cached = txListLruCache.get(cacheKey);
-  if (cached && Date.now() - cached.timestamp < 5 * 60 * 1000) {
-    return {
-      txs: cached.txs,
-      usedChainId: targetChainId,
-      tierFallbackNote,
-    };
-  }
-
-  const url = `https://api.etherscan.io/v2/api?chainid=${targetChainId}&module=account&action=txlist&address=${address}&startblock=0&endblock=99999999&page=1&offset=100&sort=desc&apikey=${apiKey}`;
-  const tokenUrl = `https://api.etherscan.io/v2/api?chainid=${targetChainId}&module=account&action=tokentx&address=${address}&startblock=0&endblock=99999999&page=1&offset=50&sort=desc&apikey=${apiKey}`;
-
-  try {
-    const [res, tokenRes] = await Promise.all([
-      fetch(url, { signal: AbortSignal.timeout(4000) }),
-      fetch(tokenUrl, { signal: AbortSignal.timeout(4000) }).catch(() => null),
-    ]);
-
-    if (!res.ok) {
-      return {
-        txs: [],
-        usedChainId: targetChainId,
-        tierFallbackNote,
-        failed: true,
-        failureReason: `Etherscan API HTTP status ${res.status}`,
-      };
-    }
-    const data = (await res.json()) as {
-      status?: string;
-      message?: string;
-      result?: EtherscanTxItem[] | string;
-    };
-
-    let tokenItems: EtherscanTxItem[] = [];
-    if (tokenRes && tokenRes.ok) {
-      try {
-        const tokenData = (await tokenRes.json()) as {
-          status?: string;
-          result?: EtherscanTxItem[] | string;
-        };
-        if (Array.isArray(tokenData.result)) {
-          tokenItems = tokenData.result;
-        }
-      } catch {
-        // Non-blocking token parsing
-      }
-    }
-
-    if (
-      data.status === '0' &&
-      typeof data.result === 'string' &&
-      !data.result.toLowerCase().includes('no transactions found') &&
-      tokenItems.length === 0
-    ) {
-      return {
-        txs: [],
-        usedChainId: targetChainId,
-        tierFallbackNote,
-        failed: true,
-        failureReason: `Etherscan API error: ${data.result}`,
-      };
-    }
-
-    const nativeItems = Array.isArray(data.result) ? data.result : [];
-    const combined = [...nativeItems, ...tokenItems];
-
-    if (combined.length > 0) {
-      if (txListLruCache.size > 200) {
-        const oldestKey = txListLruCache.keys().next().value;
-        if (oldestKey) txListLruCache.delete(oldestKey);
-      }
-      txListLruCache.set(cacheKey, { timestamp: Date.now(), txs: combined });
-      return {
-        txs: combined,
-        usedChainId: targetChainId,
-        tierFallbackNote,
-      };
-    }
-
-    // If target chain (e.g. Arbitrum) had 0 txs, fallback to Ethereum Mainnet (chainId 1)
-    if (targetChainId !== 1) {
-      const ethUrl = `https://api.etherscan.io/v2/api?chainid=1&module=account&action=txlist&address=${address}&startblock=0&endblock=99999999&page=1&offset=100&sort=desc&apikey=${apiKey}`;
-      const ethRes = await fetch(ethUrl, { signal: AbortSignal.timeout(4000) });
-      if (ethRes.ok) {
-        const ethData = (await ethRes.json()) as {
-          status?: string;
-          message?: string;
-          result?: EtherscanTxItem[] | string;
-        };
-        if (
-          ethData.status === '0' &&
-          typeof ethData.result === 'string' &&
-          !ethData.result.toLowerCase().includes('no transactions found')
-        ) {
-          return {
-            txs: [],
-            usedChainId: 1,
-            tierFallbackNote,
-            failed: true,
-            failureReason: `Etherscan API error on ETH fallback: ${ethData.result}`,
-          };
-        }
-        if (Array.isArray(ethData.result) && ethData.result.length > 0) {
-          txListLruCache.set(`1:${address.toLowerCase()}`, {
-            timestamp: Date.now(),
-            txs: ethData.result,
-          });
-          return {
-            txs: ethData.result,
-            usedChainId: 1,
-            tierFallbackNote,
-          };
-        }
-      }
-    }
-
-    return { txs: [], usedChainId: targetChainId, tierFallbackNote };
-  } catch (err) {
-    return {
-      txs: [],
-      usedChainId: targetChainId,
-      tierFallbackNote,
-      failed: true,
-      failureReason:
-        err instanceof Error
-          ? err.message
-          : 'Etherscan API request timed out or failed',
-    };
-  }
-}
-
 export async function crawlLiveAddressAndScan(params: {
   targetWallet: string;
   merchantWallet: string;
@@ -300,8 +123,10 @@ export async function crawlLiveAddressAndScan(params: {
     });
   }
 
-  const apiKey = process.env.ETHERSCAN_API_KEY?.trim();
-  if (!apiKey) {
+  const etherscanKey = process.env.ETHERSCAN_API_KEY?.trim();
+  const alchemyKey = process.env.ALCHEMY_API_KEY?.trim();
+
+  if (!etherscanKey && !alchemyKey) {
     const reason =
       'Custom address not found in seeded graph and ETHERSCAN_API_KEY is unset; unable to index upstream funding lineage.';
     return runVeilPayFirewallTraversal({
@@ -357,11 +182,10 @@ export async function crawlLiveAddressAndScan(params: {
   });
 
   const spotData = await getLiveSpotRates().catch(() => null);
-  const ethSpotPrice = spotData?.rates?.ETH && spotData.rates.ETH > 0 ? spotData.rates.ETH : 2500;
 
   const visitedCrawl = new Set<string>([targetLower]);
   let currentWave: string[] = [canonicalTarget];
-  let apiCallsUsed = 1; // Count initial target security check
+  let apiCallsUsed = 1; // Initial target security check
   let crawlTruncated = false;
   let tierNote: string | null = null;
   const minIntervalMs = Math.ceil(1000 / Math.max(1, settings.rateLimitRps));
@@ -390,65 +214,94 @@ export async function crawlLiveAddressAndScan(params: {
       if (apiCallsUsed > 0) {
         await sleep(minIntervalMs);
       }
-      apiCallsUsed += 1;
 
-      const { txs, usedChainId, tierFallbackNote, failed, failureReason } =
-        await fetchEtherscanInboundTransactions({
-          address: addr,
-          chainId: params.chainId,
-          apiKey,
-        });
+      let fetchRes: {
+        transfers: NormalizedTransfer[];
+        coverage: IngestCoverage;
+        failed?: boolean;
+        failureReason?: string;
+      };
 
-      if (failed && !crawlFailed) {
-        crawlFailed = true;
-        crawlFailureReason = `Etherscan API query failed or timed out: ${failureReason}`;
+      if (etherscanKey) {
+        fetchRes = await fetchEtherscanTransfers(
+          {
+            address: addr,
+            chainId: params.chainId,
+            apiKey: etherscanKey,
+            timeoutMs: 4000,
+          },
+          spotData?.rates
+        );
+      } else {
+        fetchRes = await fetchAlchemyTransfers(
+          {
+            address: addr,
+            chainId: params.chainId,
+            apiKey: alchemyKey!,
+            timeoutMs: 4000,
+          },
+          spotData?.rates
+        );
       }
 
-      if (tierFallbackNote && !tierNote) {
-        tierNote = tierFallbackNote;
+      apiCallsUsed += fetchRes.coverage.totalApiCalls;
+
+      if (fetchRes.failed && !crawlFailed) {
+        crawlFailed = true;
+        crawlFailureReason = `Ingest API query failed or timed out: ${fetchRes.failureReason}`;
+      }
+
+      if (fetchRes.coverage.tierFallbackNote && !tierNote) {
+        tierNote = fetchRes.coverage.tierFallbackNote;
       }
 
       const addrLower = addr.toLowerCase();
+      const transfers = fetchRes.transfers;
 
-      // Count outbound dust transfers on the target wallet (Hop 1 check)
+      // 1. Detect outbound dust/spam transfers on target wallet (Hop 1 check)
       if (hop === 1) {
-        const outboundMicroTxs = txs.filter(
+        const outboundDustTxs = transfers.filter(
           (tx) =>
             tx.from.toLowerCase() === addrLower &&
-            Number(tx.value) / 1e18 <= 0.000005
+            (tx.isSpam || (tx.amountUsd !== null && tx.amountUsd <= 0.005))
         );
-        if (outboundMicroTxs.length > 0) {
-          poisonDustDegreeByAddress.set(addrLower, outboundMicroTxs.length);
+        if (outboundDustTxs.length > 0) {
+          poisonDustDegreeByAddress.set(addrLower, outboundDustTxs.length);
         }
       }
 
-      // Filter inbound non-error funding transactions (excluding zero-value dust <= 0.0001 ETH)
-      const inboundTxs = txs
-        .filter(
-          (tx) =>
-            tx.to?.toLowerCase() === addrLower &&
-            tx.from &&
-            tx.isError !== '1' &&
-            Number(tx.value) / 1e18 > 0.0001
-        )
-        .sort((a, b) => Number(b.value) - Number(a.value));
+      // 2. Filter inbound funding transactions
+      const inboundTransfers = transfers
+        .filter((tx) => {
+          if (tx.to.toLowerCase() !== addrLower) return false;
+          if (tx.isError) return false;
+          // Zero-value spam goes to dust, not funding lineage
+          if (tx.isSpam) return false;
+          // Unpriced transfers are NOT treated as dust - taint propagates conservatively
+          if (!tx.usdKnown) return true;
+          // Priced transfers: exclude micro-dust <= 0.0001 amount or <= $0.005
+          if (tx.amountUsd !== null && tx.amountUsd < 0.005 && tx.amount <= 0.0001) return false;
+          return true;
+        })
+        .sort((a, b) => {
+          const valA = a.amountUsd ?? a.amount;
+          const valB = b.amountUsd ?? b.amount;
+          return valB - valA;
+        });
 
       // Keep top K distinct funders per vertex
       const seenFundersForVertex = new Set<string>();
-      for (const tx of inboundTxs) {
+      for (const tx of inboundTransfers) {
         if (seenFundersForVertex.size >= settings.topFundersPerVertex) break;
         const funderLower = tx.from.toLowerCase();
         if (!/^0x[0-9a-f]{40}$/.test(funderLower)) continue;
         seenFundersForVertex.add(funderLower);
 
         const funderCanonical = toEip55Address(tx.from);
-        const ethAmount = Number((Number(tx.value) / 1e18).toFixed(6));
-        const usdEstimate = Number((ethAmount * ethSpotPrice).toFixed(2));
-
         apiCallsUsed += 1;
         const threatInfo = await checkGoPlusAddressSecurity(
           funderCanonical,
-          usedChainId
+          fetchRes.coverage.usedChainId
         );
 
         if (threatInfo.failed && !crawlFailed) {
@@ -467,26 +320,26 @@ export async function crawlLiveAddressAndScan(params: {
               ? threatInfo.riskCategory
               : 'INTERMEDIATE_MULE',
             hopDistance: hop,
-            chainId: usedChainId,
+            chainId: fetchRes.coverage.usedChainId,
             isTainted: threatInfo.isThreat,
             threatSource: threatInfo.source || 'Etherscan V2 + GoPlus Verified',
           });
         }
 
         edges.push({
-          id: `live-${tx.hash.slice(0, 18)}-${hop}`,
+          id: `live-${tx.txHash.slice(0, 18)}-${tx.logIndex}-${hop}`,
           e_type: 'TRANSFERRED_TO',
           from_id: funderCanonical,
           from_type: threatInfo.isThreat ? 'ThreatEntity' : 'Wallet',
           to_id: addr,
           to_type: 'Wallet',
           attributes: {
-            amount: ethAmount,
-            amount_usd: usdEstimate,
-            token: 'ETH',
-            tx_hash: tx.hash,
-            block_number: Number(tx.blockNumber) || 0,
-            timestamp: new Date(Number(tx.timeStamp) * 1000).toISOString(),
+            amount: tx.amount,
+            amount_usd: tx.amountUsd ?? 0,
+            token: tx.symbol,
+            tx_hash: tx.txHash,
+            block_number: tx.blockNumber,
+            timestamp: tx.timestamp,
             hop_distance: hop,
             is_taint_path: threatInfo.isThreat,
           },
@@ -504,7 +357,7 @@ export async function crawlLiveAddressAndScan(params: {
 
   const crawlElapsedMs = Number((performance.now() - startPerf).toFixed(2));
   const summaryNoteParts: string[] = [
-    `Live Etherscan V2 + GoPlus crawl completed in ${crawlElapsedMs}ms (${apiCallsUsed} Etherscan API calls).`,
+    `Live Etherscan V2 + GoPlus crawl completed in ${crawlElapsedMs}ms (${apiCallsUsed} API calls).`,
   ];
   if (tierNote) summaryNoteParts.push(tierNote);
   if (crawlTruncated) {
@@ -543,5 +396,12 @@ export async function crawlLiveAddressAndScan(params: {
     isInconclusive,
     inconclusiveReason: crawlFailureReason,
     precomputedElapsedMs: crawlElapsedMs,
+    coverage: {
+      etherscanQueried: Boolean(etherscanKey),
+      etherscanInboundComplete: !crawlTruncated && !crawlFailed,
+      goplusQueried: true,
+      snapshotQueried: true,
+      truncatedReason: crawlFailureReason ?? undefined,
+    },
   });
 }

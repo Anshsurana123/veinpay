@@ -68,6 +68,15 @@ INTERPRET QUERY veilpay_firewall_check(
 ) FOR GRAPH VeilPayGraph;`;
 }
 
+export interface TraversalCoverage {
+  etherscanQueried?: boolean;
+  etherscanInboundComplete?: boolean;
+  inboundComplete?: boolean;
+  goplusQueried?: boolean;
+  snapshotQueried?: boolean;
+  truncatedReason?: string;
+}
+
 export interface RunTraversalOptions {
   targetWallet: string;
   merchantWallet?: string;
@@ -79,6 +88,7 @@ export interface RunTraversalOptions {
   isInconclusive?: boolean;
   inconclusiveReason?: string | null;
   precomputedElapsedMs?: number;
+  coverage?: TraversalCoverage;
 }
 
 export function runVeilPayFirewallTraversal(
@@ -423,7 +433,11 @@ export function runVeilPayFirewallTraversal(
     verdict = 'INTERCEPTED_SYBIL';
     socketUnlocked = false;
     vaultUriUnlocked = false;
-  } else if (options.isInconclusive || options.crawlTruncated) {
+  } else if (
+    options.isInconclusive ||
+    options.crawlTruncated ||
+    (options.coverage && (!options.coverage.inboundComplete || Boolean(options.coverage.truncatedReason)))
+  ) {
     verdict = 'INCONCLUSIVE';
     const isBlock = (policy.inconclusivePolicy ?? 'BLOCK') === 'BLOCK';
     socketUnlocked = !isBlock;
